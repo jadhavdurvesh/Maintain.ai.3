@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import api from '../api/client.js'
+import api, { getToken } from '../api/client.js'
 import { GenericBarChart } from '../components/Charts.jsx'
 import { Loading, ErrorState } from './Dashboard.jsx'
 import { usePageHeader } from '../PageHeaderContext.jsx'
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_BASE = import.meta.env.VITE_API_URL || ''
 
 export default function Reports() {
   const [reliability, setReliability] = useState(null)
@@ -14,11 +14,54 @@ export default function Reports() {
   const [trainResult, setTrainResult] = useState(null)
   const [error, setError] = useState(null)
 
+  const downloadExport = async (format) => {
+    try {
+      const token = getToken()
+      const headers = token
+        ? { Authorization: `Bearer ${token}` }
+        : {}
+
+      const response = await fetch(
+        `${API_BASE}/api/reports/export/${format}`,
+        { headers }
+      )
+
+      if (!response.ok) {
+        const body = await response.text()
+        throw new Error(`${response.status} ${response.statusText}: ${body}`)
+      }
+
+      const blob = await response.blob()
+      const disposition = response.headers.get('content-disposition') || ''
+      const match = disposition.match(/filename="?([^\"]+)"?/i)
+
+      const extension =
+        format === 'pdf' ? 'pdf' :
+        format === 'excel' ? 'xlsx' :
+        'csv'
+
+      const filename =
+        match?.[1] || `maintain_ai_report.${extension}`
+
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Export failed:', error)
+      alert(`Export failed: ${error.message}`)
+    }
+  }
+
   usePageHeader('Reports & Analytics', (
     <div className="chip-row">
-      <a className="btn secondary" href={`${API_BASE}/api/reports/export/csv`}>CSV</a>
-      <a className="btn secondary" href={`${API_BASE}/api/reports/export/excel`}>Excel</a>
-      <a className="btn" href={`${API_BASE}/api/reports/export/pdf`}>PDF Report</a>
+      <button className="btn secondary" onClick={() => downloadExport('csv')}>CSV</button>
+      <button className="btn secondary" onClick={() => downloadExport('excel')}>Excel</button>
+      <button className="btn" onClick={() => downloadExport('pdf')}>PDF Report</button>
     </div>
   ))
 
