@@ -8,8 +8,8 @@ router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
 
 @router.get("/model-status")
-def get_model_status():
-    return risk_model.model_status()
+def get_model_status(db: Session = Depends(get_db)):
+    return risk_model.model_status(db)
 
 
 @router.post("/train")
