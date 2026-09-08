@@ -4,12 +4,11 @@ RandomForestRegressor with 40 shallow trees. It predicts in milliseconds on
 CPU and now uses compact rolling sensor summaries alongside the existing
 maintenance/fault features.
 
-The model is intentionally separate from the transparent live-health
-adjustment in devices.py. The live adjustment keeps the visible machine
-health responsive immediately; this RandomForest adds learned predictive
-risk when its training data is retrained.
+The serialized model is stored in the application's database so training and
+predictions persist across Vercel serverless instances and restarts.
 """
-import os
+import io
+import json
 from datetime import datetime
 
 import joblib
@@ -19,7 +18,6 @@ from sqlalchemy.orm import Session
 from .. import models
 from .features import build_training_data, machine_features, FEATURE_NAMES
 
-MODEL_PATH = os.getenv("MODEL_PATH", "./risk_model.joblib")
 MIN_TRAINING_SAMPLES = 4
 MODEL_VERSION = 2
 
@@ -45,18 +43,30 @@ def train(db: Session) -> dict:
     )
     model.fit(X, y)
 
-    # With a small machine-level dataset this is a sanity check, not a real
-    # generalization metric.
     in_sample_r2 = model.score(X, y)
 
-    bundle = {
-        "model": model,
-        "trained_at": datetime.utcnow().isoformat(),
-        "n_samples": len(X),
-        "model_version": MODEL_VERSION,
-        "feature_names": FEATURE_NAMES,
-    }
-    joblib.dump(bundle, MODEL_PATH)
+    # joblib's serialized artifact is small (typically tens of KB) and is
+    # persisted in Neon rather than relying on a serverless filesystem.
+    buffer = io.BytesIO()
+    joblib.dump(model, buffer)
+    artifact = buffer.getvalue()
+
+    existing = db.query(models.MLModelArtifact).order_by(models.MLModelArtifact.id.desc()).first()
+    if existing:
+        existing.model_version = MODEL_VERSION
+        existing.feature_names = json.dumps(FEATURE_NAMES)
+        existing.trained_at = datetime.utcnow()
+        existing.n_samples = len(X)
+        existing.artifact = artifact
+    else:
+        db.add(models.MLModelArtifact(
+            model_version=MODEL_VERSION,
+            feature_names=json.dumps(FEATURE_NAMES),
+            trained_at=datetime.utcnow(),
+            n_samples=len(X),
+            artifact=artifact,
+        ))
+    db.commit()
 
     importances = sorted(
         zip(FEATURE_NAMES, model.feature_importances_.tolist()),
@@ -75,11 +85,19 @@ def train(db: Session) -> dict:
     }
 
 
-def _load():
-    if not os.path.exists(MODEL_PATH):
+def _load(db: Session):
+    saved = db.query(models.MLModelArtifact).order_by(models.MLModelArtifact.id.desc()).first()
+    if not saved:
         return None
     try:
-        return joblib.load(MODEL_PATH)
+        model = joblib.load(io.BytesIO(saved.artifact))
+        return {
+            "model": model,
+            "trained_at": saved.trained_at.isoformat(),
+            "n_samples": saved.n_samples,
+            "model_version": saved.model_version,
+            "feature_names": json.loads(saved.feature_names),
+        }
     except Exception:
         return None
 
@@ -92,8 +110,8 @@ def _is_compatible(saved: dict) -> bool:
     )
 
 
-def model_status() -> dict:
-    saved = _load()
+def model_status(db: Session) -> dict:
+    saved = _load(db)
     if not saved:
         return {"trained": False, "reason": "Model hasn't been trained yet."}
     if not _is_compatible(saved):
@@ -112,19 +130,18 @@ def model_status() -> dict:
 
 
 def predict_risk(db: Session) -> dict:
-    saved = _load()
-
-    # A model created before sensor-aware features cannot accept the new
-    # feature vector. Retrain once automatically so the live system does not
-    # fail just because an older local model file is still present.
-    if saved and not _is_compatible(saved):
-        result = train(db)
-        if not result.get("trained"):
-            return {"available": False, **result}
-        saved = _load()
+    saved = _load(db)
 
     if not saved:
         return {"available": False, "reason": "Model hasn't been trained yet — use the Retrain button."}
+
+    if not _is_compatible(saved):
+        result = train(db)
+        if not result.get("trained"):
+            return {"available": False, **result}
+        saved = _load(db)
+        if not saved:
+            return {"available": False, "reason": "Model was trained but could not be loaded from the database."}
 
     model = saved["model"]
     machines = db.query(models.Machine).filter_by(archived=False).all()
@@ -135,7 +152,7 @@ def predict_risk(db: Session) -> dict:
     for m in machines:
         features = machine_features(db, m)
         predicted = float(model.predict([features])[0])
-        residual = m.health_score - predicted  # negative = doing worse than expected
+        residual = m.health_score - predicted
 
         if m.health_score < 40 or residual < -20:
             risk = "high"
