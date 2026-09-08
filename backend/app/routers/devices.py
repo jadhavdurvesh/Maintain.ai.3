@@ -23,11 +23,7 @@ router = APIRouter(prefix="/api/devices", tags=["devices"])
 
 
 def _check_sensor_anomaly(db: Session, machine: models.Machine, reading: models.SensorReading):
-    """No per-machine thresholds to configure — instead, compares this
-    reading to the machine's own recent baseline for the same sensor type.
-    Needs a small amount of history before it says anything, same
-    philosophy as the offline diagnostic engine: no confident claim
-    without enough signal to back it up."""
+    """Compare this reading with the machine's own recent baseline."""
     recent = (
         db.query(models.SensorReading)
         .filter_by(machine_id=machine.id, reading_type=reading.reading_type)
@@ -56,6 +52,83 @@ def _check_sensor_anomaly(db: Session, machine: models.Machine, reading: models.
                 ),
             ))
             db.commit()
+
+
+def _reading_condition_score(db: Session, machine: models.Machine, reading_type: str, value: float) -> float:
+    """Turn a live sensor into a simple 0-100 condition score.
+
+    This is a transparent engineering heuristic, not the ML model. It is
+    deliberately conservative so the UI health score visibly reacts to live
+    sensor stress while the learned RandomForest remains responsible for
+    predictive-risk analysis elsewhere in the application.
+    """
+    kind = (reading_type or "").lower()
+
+    if kind == "temperature":
+        if value <= 45:
+            return 100.0
+        if value <= 60:
+            return 100.0 - (value - 45.0) * 2.0
+        return max(10.0, 70.0 - (value - 60.0) * 3.0)
+
+    if kind == "vibration":
+        if value <= 3:
+            return 100.0
+        if value <= 5:
+            return 100.0 - (value - 3.0) * 12.5
+        return max(10.0, 75.0 - (value - 5.0) * 13.0)
+
+    if kind in {"current", "load"}:
+        recent = (
+            db.query(models.SensorReading)
+            .filter_by(machine_id=machine.id, reading_type=reading_type)
+            .order_by(models.SensorReading.recorded_at.desc())
+            .limit(10)
+            .all()
+        )
+        prior = [r.value for r in recent if r.value != value]
+        if len(prior) >= 3:
+            baseline = sum(prior) / len(prior)
+            if baseline > 0:
+                ratio = value / baseline
+                if ratio <= 1.20:
+                    return 100.0
+                if ratio <= 1.50:
+                    return max(60.0, 100.0 - (ratio - 1.20) * 133.0)
+                return max(10.0, 60.0 - (ratio - 1.50) * 60.0)
+        return 100.0
+
+    # Humidity and other informational sensors do not directly penalize
+    # machine health without a machine-specific engineering threshold.
+    return 100.0
+
+
+def _apply_live_sensor_health(db: Session, machine: models.Machine, reading: models.SensorReading):
+    """Gradually move the stored health score according to live sensor stress."""
+    condition = _reading_condition_score(db, machine, reading.reading_type, reading.value)
+
+    if condition < 40:
+        delta = -5
+    elif condition < 70:
+        delta = -2
+    elif condition < 90:
+        delta = -1
+    else:
+        # Normal readings do not instantly restore health. A small recovery
+        # models stabilization after the machine returns to normal operation.
+        delta = 1
+
+    old_score = int(machine.health_score or 0)
+    new_score = max(0, min(100, old_score + delta))
+
+    if new_score != old_score:
+        machine.health_score = new_score
+        machine.status = (
+            models.HealthStatus.healthy if new_score >= 70
+            else models.HealthStatus.attention if new_score >= 40
+            else models.HealthStatus.critical
+        )
+        db.commit()
 
 
 class DeviceStatusOut(BaseModel):
@@ -115,7 +188,6 @@ def ingest_reading(
     """What an ESP32 (or any device) actually calls — see firmware/esp32_example.ino."""
     machine = db.query(models.Machine).filter_by(device_key=x_device_key).first()
     if not machine or not machine.iot_enabled:
-        # Same error either way — doesn't reveal whether the key almost matched something
         raise HTTPException(401, "invalid or disabled device key")
 
     reading = models.SensorReading(
@@ -129,9 +201,10 @@ def ingest_reading(
     db.commit()
     db.refresh(reading)
 
-    # Live data can move fast — recompute alerts right away instead of
-    # waiting for the next manual check, same engine manual entries use,
-    # plus a baseline check specific to this live reading.
+    # Live data now has two effects:
+    # 1) the existing alert engine evaluates machine conditions;
+    # 2) this transparent sensor-health layer adjusts the stored health score.
+    _apply_live_sensor_health(db, machine, reading)
     evaluate_machine(db, machine)
     _check_sensor_anomaly(db, machine, reading)
 
