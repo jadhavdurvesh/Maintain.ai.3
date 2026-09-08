@@ -1,0 +1,23 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+sqlalchemy==2.0.35
+pydantic==2.9.2
+python-multipart==0.0.9
+python-dotenv==1.0.1
+reportlab==4.2.5
+openpyxl==3.1.5
+scikit-learn==1.5.2
+joblib==1.4.2
+pyjwt==2.9.0
+email-validator==2.2.0
+
+# Optional — only needed if you point DATABASE_URL at a hosted Postgres
+# instance instead of the default local SQLite file (see README's
+# "Hosted / multi-tenant deployment" section). SQLAlchemy already
+# abstracts the SQL dialect, so no application code changes are needed —
+# just install this and change the URL.
+psycopg2-binary==2.9.9
+
+# Optional — only needed if you use the online Gemini diagnostic path.
+# Safe to leave uninstalled: the app falls back to the offline engine automatically.
+google-generativeai==0.8.3
