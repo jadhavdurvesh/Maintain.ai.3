@@ -1,3 +1,5 @@
+import os
+
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -11,6 +13,14 @@ from .routers import machines, maintenance, work_orders, alerts, spare_parts, ai
 
 Base.metadata.create_all(bind=engine)
 ensure_bootstrap_organization()
+
+# Optional demo initialization for prototype deployments. This runs only when
+# explicitly enabled through an environment variable, and the seed function
+# itself skips when machine data already exists, so normal deployments are
+# unaffected.
+if os.getenv("SEED_DEMO_DATA", "").lower() == "true":
+    from .seed_data import seed
+    seed()
 
 app = FastAPI(
     title="MAINTAIN AI",
