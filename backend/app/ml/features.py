@@ -1,8 +1,7 @@
 """
-Turns the database's own accumulated history into training features. This is
-what makes the model 'trained on your data' rather than a fixed formula:
-every fault logged and every maintenance job completed changes these numbers
-for next time you retrain.
+Turns the database's accumulated machine history into model features.
+Sensor features are compact rolling summaries, not raw high-frequency data,
+so the local RandomForest stays small and fast.
 """
 from sqlalchemy.orm import Session
 
@@ -16,9 +15,42 @@ FEATURE_NAMES = [
     "fault_count_total",
     "unresolved_fault_count",
     "completed_maintenance_count",
+    "temperature_avg",
+    "temperature_max",
+    "vibration_avg",
+    "vibration_max",
+    "current_avg",
+    "current_max",
+    "load_avg",
+    "load_max",
 ]
 
 _CRITICALITY_SCORE = {"low": 0, "medium": 1, "high": 2}
+
+
+def _sensor_features(db: Session, machine_id: int) -> list[float]:
+    """Return compact summaries of the latest 30 sensor readings."""
+    readings = (
+        db.query(models.SensorReading)
+        .filter_by(machine_id=machine_id)
+        .order_by(models.SensorReading.recorded_at.desc())
+        .limit(30)
+        .all()
+    )
+    values = {"temperature": [], "vibration": [], "current": [], "load": []}
+    for reading in readings:
+        kind = (reading.reading_type or "").lower()
+        if kind in values:
+            values[kind].append(float(reading.value))
+
+    features = []
+    for kind in ("temperature", "vibration", "current", "load"):
+        sample = values[kind]
+        features.extend([
+            sum(sample) / len(sample) if sample else 0.0,
+            max(sample) if sample else 0.0,
+        ])
+    return features
 
 
 def machine_features(db: Session, machine: models.Machine) -> list:
@@ -46,14 +78,15 @@ def machine_features(db: Session, machine: models.Machine) -> list:
         fault_count,
         unresolved,
         completed_maint,
+        *_sensor_features(db, machine.id),
     ]
 
 
 def build_training_data(db: Session):
     """One training row per active machine: features -> current health_score.
-    Small dataset by nature (one row per machine you own) — it grows in
-    richness (fault counts, completed-maintenance counts) as you use the
-    app, even before you add more machines."""
+    Sensor columns use compact rolling summaries, keeping the model cheap to
+    train and predict while allowing live sensor history to influence results.
+    """
     machines = db.query(models.Machine).filter_by(archived=False).all()
     X, y, machine_ids = [], [], []
     for m in machines:
