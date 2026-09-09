@@ -1,4 +1,5 @@
 # MAINTAIN AI
+[![Ask DeepWiki](https://devin.ai/assets/askdeepwiki.png)](https://deepwiki.com/jadhavdurvesh/Maintain.ai.3)
 
 *(temporary name — rename anytime, it's just a folder name and a page title)*
 
@@ -129,8 +130,8 @@ blocked the same way.
 **Scoped so far**: machines, work orders, maintenance, alerts, and the
 main dashboard/reliability reports.
 **Not yet scoped** (still global, not filtered by company, if you turn
-auth on): spare parts, AI diagnostic sessions, the predictive model, audit
-log, failure-analysis/export reports, and device/IoT pairing. Same
+auth on): spare parts, AI diagnostic sessions, the predictive model,
+audit log, failure-analysis/export reports, and device/IoT pairing. Same
 pattern as the ones already done — join to `Machine` and filter by
 `organization_id` — just not done yet.
 **Not enforced yet**: roles (admin/technician/viewer) are stored per user
@@ -152,8 +153,8 @@ directly verified end to end the way the SQLite path is.
 - Windows/Mac installers specifically — the pipeline is built and
   tested on Linux; producing the actual `.exe`/`.dmg` needs a build run on
   those OSes (see the cross-compilation note in `DESKTOP.md`)
-- Android app — noted for later, not started: a separate, notifications
-  + dashboard-only companion app, distinct from the main desktop/web app
+- Android app — noted for later, not started: a separate, notifications +
+  dashboard-only companion app, distinct from the main desktop/web app
 
 ## Repo layout
 
