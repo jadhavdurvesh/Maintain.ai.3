@@ -219,6 +219,7 @@ class AIDiagnosticSession(Base):
     __tablename__ = "ai_diagnostic_sessions"
 
     id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(Integer, ForeignKey("ai_conversations.id"), nullable=True, index=True)
     machine_id = Column(Integer, ForeignKey("machines.id"), nullable=True)
     problem_description = Column(Text)
     questions_asked = Column(Text)
@@ -230,6 +231,7 @@ class AIDiagnosticSession(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     machine = relationship("Machine", back_populates="ai_sessions")
+    conversation = relationship("AIConversation", back_populates="diagnostic_sessions")
 
 
 class AIConversation(Base):
@@ -245,6 +247,7 @@ class AIConversation(Base):
 
     machine = relationship("Machine", back_populates="ai_conversations")
     messages = relationship("AIConversationMessage", back_populates="conversation", cascade="all, delete-orphan")
+    diagnostic_sessions = relationship("AIDiagnosticSession", back_populates="conversation")
 
 
 class AIConversationMessage(Base):
