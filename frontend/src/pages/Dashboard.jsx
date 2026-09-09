@@ -90,7 +90,7 @@ export default function Dashboard() {
             <tbody>
               {machines.map((m) => (
                 <tr key={m.id} className="clickable" onClick={() => navigate(`/machines/${m.id}`)}>
-                  <td>{m.name}</td>
+                  <td title={m.name}>{m.name}</td>
                   <td className="mono">{m.health_score}/100</td>
                   <td><StatusBadge status={m.status} /></td>
                 </tr>
@@ -129,7 +129,7 @@ export default function Dashboard() {
               <tbody>
                 {riskPredictions.predictions.map((p) => (
                   <tr key={p.machine_id}>
-                    <td>{p.machine_name}</td>
+                    <td title={p.machine_name}>{p.machine_name}</td>
                     <td className="mono">{p.actual_health_score}</td>
                     <td className="mono">{p.predicted_health_score}</td>
                     <td><StatusBadge status={p.risk_level === 'high' ? 'critical' : p.risk_level === 'medium' ? 'warning' : 'healthy'} /></td>
@@ -159,7 +159,7 @@ export default function Dashboard() {
             <tbody>
               {recentFaults.map((f) => (
                 <tr key={f.id}>
-                  <td>{f.machine_name}</td>
+                  <td title={f.machine_name}>{f.machine_name}</td>
                   <td>{f.description}</td>
                   <td>{f.cause || '—'}</td>
                   <td>{f.resolved ? <StatusBadge status="healthy" /> : <StatusBadge status={f.severity} />}</td>
@@ -197,7 +197,7 @@ export default function Dashboard() {
             <tbody>
               {upcoming.slice(0, 6).map((u) => (
                 <tr key={u.machine_id}>
-                  <td>{u.name}</td>
+                  <td title={u.name}>{u.name}</td>
                   <td className="mono">{u.hours_remaining}h</td>
                   <td>{u.overdue ? <StatusBadge status="critical" /> : u.due_soon ? <StatusBadge status="warning" /> : <StatusBadge status="healthy" />}</td>
                 </tr>
@@ -213,7 +213,7 @@ export default function Dashboard() {
             <tbody>
               {reliability.slice(0, 6).map((r) => (
                 <tr key={r.machine_id}>
-                  <td>{r.name}</td>
+                  <td title={r.name}>{r.name}</td>
                   <td className="mono">{r.fault_count}</td>
                   <td className="mono">{r.completion_rate != null ? `${r.completion_rate}%` : '—'}</td>
                 </tr>

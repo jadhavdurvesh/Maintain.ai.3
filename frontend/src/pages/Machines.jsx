@@ -115,7 +115,7 @@ export default function Machines() {
             {machines.map((m) => (
               <tr key={m.id} className="clickable" onClick={() => navigate(`/machines/${m.id}`)}>
                 <td className="mono">{m.machine_code}</td>
-                <td>{m.name}</td>
+                <td title={m.name}>{m.name}</td>
                 <td>{m.location || '—'}</td>
                 <td className="mono">{m.operating_hours}</td>
                 <td className="mono">{m.health_score}/100</td>

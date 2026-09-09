@@ -11,6 +11,27 @@ const tooltipStyle = {
   boxShadow: '0 8px 24px -8px rgba(0,0,0,0.5)',
 }
 
+function MachineHealthTooltip({ active, payload }) {
+  if (!active || !payload || payload.length === 0) return null
+  const item = payload[0]
+  const machineName = item.payload?.fullName || item.payload?.name || 'Machine'
+  return (
+    <div
+      style={{
+        ...tooltipStyle,
+        minWidth: 190,
+        maxWidth: 340,
+        padding: '9px 11px',
+      }}
+    >
+      <div style={{ color: '#eef2f7', fontWeight: 600, lineHeight: 1.35, whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
+        {machineName}
+      </div>
+      <div style={{ color: '#eef2f7', marginTop: 4 }}>health: {item.value}</div>
+    </div>
+  )
+}
+
 const GRADIENT_DEFS = (
   <defs>
     <linearGradient id="gradHealthy" x1="0" y1="0" x2="0" y2="1">
@@ -61,6 +82,7 @@ export function HealthDistributionChart({ healthy, attention, critical }) {
 export function MachineHealthBarChart({ machines }) {
   const data = machines.map((m) => ({
     name: m.name.length > 14 ? m.name.slice(0, 13) + '…' : m.name,
+    fullName: m.name,
     health: m.health_score,
     tone: m.health_score >= 70 ? 'healthy' : m.health_score >= 40 ? 'attention' : 'critical',
   }))
@@ -76,7 +98,7 @@ export function MachineHealthBarChart({ machines }) {
         <CartesianGrid strokeDasharray="3 3" stroke="#232b36" vertical={false} />
         <XAxis dataKey="name" tick={{ fill: '#8a97a8', fontSize: 11 }} axisLine={{ stroke: '#232b36' }} tickLine={false} />
         <YAxis domain={[0, 100]} tick={{ fill: '#8a97a8', fontSize: 11 }} axisLine={false} tickLine={false} />
-        <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+        <Tooltip content={<MachineHealthTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
         <Bar dataKey="health" radius={[3, 3, 0, 0]}>
           {data.map((d, i) => <Cell key={i} fill={FILL_FOR[d.tone]} />)}
         </Bar>
