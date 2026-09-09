@@ -148,6 +148,8 @@ class DiagnoseRequest(BaseModel):
     problem_description: str
     answers: Optional[List[str]] = None
     use_online_ai: bool = False
+    conversation_id: Optional[str] = None
+    user_message: Optional[str] = None
 
 
 class PossibleCause(BaseModel):
@@ -158,6 +160,7 @@ class PossibleCause(BaseModel):
 
 class DiagnoseResponse(BaseModel):
     session_id: Optional[int] = None
+    conversation_id: Optional[str] = None
     safety_notice: str
     clarifying_questions: List[str] = []
     possible_causes: List[PossibleCause] = []
