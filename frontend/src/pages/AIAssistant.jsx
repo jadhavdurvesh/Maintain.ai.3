@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import api from '../api/client.js'
-import { Bot, ShieldAlert } from 'lucide-react'
+import { Bot, ShieldAlert, Plus } from 'lucide-react'
 import { usePageHeader } from '../PageHeaderContext.jsx'
 
 const STORAGE_KEY = 'maintain-ai-diagnostic-session'
@@ -88,6 +88,13 @@ export default function AIAssistant() {
   return (
     <div style={{ maxWidth: 820 }}>
       <div className="panel section-gap">
+        <div className="panel-header">
+          <span className="panel-title">Diagnostic session</span>
+          <button className="btn secondary" onClick={reset} type="button" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Plus size={14} />
+            Start New Diagnosis
+          </button>
+        </div>
         <div className="panel-body" style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div className="field" style={{ flex: 1, minWidth: 240, marginBottom: 0 }}>
             <label>Machine (optional)</label>
@@ -183,8 +190,6 @@ export default function AIAssistant() {
                     <button className="btn secondary" onClick={saveOutcome} disabled={outcomeSaved}>{outcomeSaved ? 'Saved' : 'Save'}</button>
                   </div>
                 </div>
-
-                <button className="btn secondary" onClick={reset} style={{ marginTop: 8 }}>Start New Diagnosis</button>
               </>
             )}
           </div>
