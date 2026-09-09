@@ -21,6 +21,7 @@ export default function AIAssistant() {
   const [answerDraft, setAnswerDraft] = useState('')
   const [result, setResult] = useState(saved?.result || null)
   const [sessionId, setSessionId] = useState(saved?.sessionId || null)
+  const [conversationId, setConversationId] = useState(saved?.conversationId || null)
   const [loading, setLoading] = useState(false)
   const [outcome, setOutcome] = useState(saved?.outcome || '')
   const [outcomeSaved, setOutcomeSaved] = useState(saved?.outcomeSaved || false)
@@ -31,13 +32,13 @@ export default function AIAssistant() {
     if (!problem && !result && answers.length === 0) return
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
       machineId, useOnline, problem, answers, pendingQuestions, result,
-      sessionId, outcome, outcomeSaved,
+      sessionId, conversationId, outcome, outcomeSaved,
     }))
-  }, [machineId, useOnline, problem, answers, pendingQuestions, result, sessionId, outcome, outcomeSaved])
+  }, [machineId, useOnline, problem, answers, pendingQuestions, result, sessionId, conversationId, outcome, outcomeSaved])
 
   const reset = () => {
     setProblem(''); setAnswers([]); setPendingQuestions([]); setAnswerDraft('')
-    setResult(null); setSessionId(null); setOutcome(''); setOutcomeSaved(false)
+    setResult(null); setSessionId(null); setConversationId(null); setOutcome(''); setOutcomeSaved(false)
     sessionStorage.removeItem(STORAGE_KEY)
   }
 
@@ -49,9 +50,12 @@ export default function AIAssistant() {
         problem_description: problem,
         answers: allAnswers,
         use_online_ai: useOnline,
+        conversation_id: conversationId,
+        user_message: allAnswers.length > answers.length ? allAnswers[allAnswers.length - 1] : problem,
       })
       setResult(res)
       setSessionId(res.session_id)
+      setConversationId(res.conversation_id || conversationId)
       setPendingQuestions(res.needs_more_info ? res.clarifying_questions : [])
     } catch (e) {
       alert(e.message)
