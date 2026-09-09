@@ -1,4 +1,6 @@
 import json
+from datetime import datetime
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -113,23 +115,105 @@ def _machine_context(db: Session, machine: models.Machine | None) -> dict | None
     }
 
 
+def _get_or_create_conversation(
+    db: Session,
+    conversation_id: str | None,
+    machine_id: int | None,
+    title: str | None = None,
+) -> models.AIConversation:
+    conversation = None
+    if conversation_id:
+        conversation = (
+            db.query(models.AIConversation)
+            .filter_by(conversation_key=conversation_id)
+            .first()
+        )
+        if conversation and conversation.machine_id != machine_id:
+            raise HTTPException(400, "conversation belongs to a different machine")
+
+    if conversation is None:
+        conversation = models.AIConversation(
+            conversation_key=conversation_id or str(uuid4()),
+            machine_id=machine_id,
+            title=(title or "Maintenance diagnosis")[:200],
+        )
+        db.add(conversation)
+        db.flush()
+
+    return conversation
+
+
+def _conversation_history(db: Session, conversation: models.AIConversation, limit: int = 24) -> list[dict]:
+    messages = (
+        db.query(models.AIConversationMessage)
+        .filter_by(conversation_id=conversation.id)
+        .order_by(models.AIConversationMessage.created_at.desc(), models.AIConversationMessage.id.desc())
+        .limit(limit)
+        .all()
+    )
+    messages.reverse()
+    return [
+        {
+            "role": message.role,
+            "type": message.message_type,
+            "source": message.source,
+            "created_at": message.created_at.isoformat() if message.created_at else None,
+            "content": message.content,
+        }
+        for message in messages
+    ]
+
+
+def _assistant_memory(result: dict) -> str:
+    return json.dumps(
+        {
+            "clarifying_questions": result.get("clarifying_questions", []),
+            "possible_causes": result.get("possible_causes", []),
+            "recommended_procedure": result.get("recommended_procedure", []),
+            "needs_more_info": result.get("needs_more_info", False),
+        },
+        default=str,
+    )
+
+
 @router.post("/diagnose", response_model=schemas.DiagnoseResponse)
 def diagnose(payload: schemas.DiagnoseRequest, db: Session = Depends(get_db)):
     machine = db.get(models.Machine, payload.machine_id) if payload.machine_id else None
     machine_category = machine.category if machine else None
+    conversation = _get_or_create_conversation(
+        db, payload.conversation_id, payload.machine_id, payload.problem_description
+    )
+    history = _conversation_history(db, conversation)
 
+    # Store every technician turn before asking the model. The initial problem is
+    # a problem message; later turns are the technician's answers.
+    user_text = payload.user_message or (
+        payload.problem_description if not history else (payload.answers[-1] if payload.answers else payload.problem_description)
+    )
+    user_type = "problem" if not history else "answer"
+    db.add(models.AIConversationMessage(
+        conversation_id=conversation.id,
+        role="technician",
+        message_type=user_type,
+        content=user_text,
+        source="app",
+    ))
+    db.flush()
+
+    history = _conversation_history(db, conversation)
     result = None
     if payload.use_online_ai:
         result = gemini_client.diagnose_with_gemini(
             payload.problem_description,
             _machine_context(db, machine),
             payload.answers,
+            conversation_history=history,
             db=db,
         )
 
     if result is None:
         result = offline_engine.diagnose(
-            db, machine_category, payload.problem_description, payload.answers
+            db, machine_category, payload.problem_description, payload.answers, machine_id=payload.machine_id
         )
 
     session = models.AIDiagnosticSession(
@@ -142,11 +226,22 @@ def diagnose(payload: schemas.DiagnoseRequest, db: Session = Depends(get_db)):
         source=result.get("source", "offline"),
     )
     db.add(session)
+    db.flush()
+
+    db.add(models.AIConversationMessage(
+        conversation_id=conversation.id,
+        role="assistant",
+        message_type="diagnosis",
+        content=_assistant_memory(result),
+        source=result.get("source", "offline"),
+    ))
+    conversation.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(session)
 
     return schemas.DiagnoseResponse(
         session_id=session.id,
+        conversation_id=conversation.conversation_key,
         safety_notice=result.get("safety_notice", offline_engine.SAFETY_NOTICE),
         clarifying_questions=result.get("clarifying_questions", []),
         possible_causes=result.get("possible_causes", []),
@@ -162,6 +257,30 @@ def record_outcome(session_id: int, final_technician_result: str, db: Session = 
     if not session:
         raise HTTPException(404, "session not found")
     session.final_technician_result = final_technician_result
+
+    # Keep the verified field finding in the persistent conversation memory too.
+    conversation = (
+        db.query(models.AIConversation)
+        .filter_by(machine_id=session.machine_id)
+        .join(models.AIConversationMessage, models.AIConversationMessage.conversation_id == models.AIConversation.id)
+        .filter(models.AIConversationMessage.id == (
+            db.query(models.AIConversationMessage.id)
+            .filter(models.AIConversationMessage.conversation_id == models.AIConversation.id)
+            .order_by(models.AIConversationMessage.created_at.desc(), models.AIConversationMessage.id.desc())
+            .limit(1)
+            .scalar_subquery()
+        ))
+        .first()
+    )
+    if conversation:
+        db.add(models.AIConversationMessage(
+            conversation_id=conversation.id,
+            role="technician",
+            message_type="outcome",
+            content=final_technician_result,
+            source="app",
+        ))
+        conversation.updated_at = datetime.utcnow()
     db.commit()
     return {"updated": True}
 
@@ -185,3 +304,40 @@ def list_sessions(machine_id: int | None = None, db: Session = Depends(get_db)):
         }
         for s in sessions
     ]
+
+
+@router.get("/conversations")
+def list_conversations(machine_id: int | None = None, db: Session = Depends(get_db)):
+    q = db.query(models.AIConversation)
+    if machine_id:
+        q = q.filter_by(machine_id=machine_id)
+    conversations = q.order_by(models.AIConversation.updated_at.desc()).all()
+    return [
+        {
+            "conversation_id": c.conversation_key,
+            "machine_id": c.machine_id,
+            "title": c.title,
+            "created_at": c.created_at,
+            "updated_at": c.updated_at,
+        }
+        for c in conversations
+    ]
+
+
+@router.get("/conversations/{conversation_id}")
+def get_conversation(conversation_id: str, db: Session = Depends(get_db)):
+    conversation = (
+        db.query(models.AIConversation)
+        .filter_by(conversation_key=conversation_id)
+        .first()
+    )
+    if not conversation:
+        raise HTTPException(404, "conversation not found")
+    return {
+        "conversation_id": conversation.conversation_key,
+        "machine_id": conversation.machine_id,
+        "title": conversation.title,
+        "created_at": conversation.created_at,
+        "updated_at": conversation.updated_at,
+        "messages": _conversation_history(db, conversation, limit=200),
+    }
