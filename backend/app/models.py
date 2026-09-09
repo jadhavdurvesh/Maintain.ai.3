@@ -98,6 +98,7 @@ class Machine(Base):
     work_orders = relationship("WorkOrder", back_populates="machine", cascade="all, delete-orphan")
     alerts = relationship("Alert", back_populates="machine", cascade="all, delete-orphan")
     ai_sessions = relationship("AIDiagnosticSession", back_populates="machine", cascade="all, delete-orphan")
+    ai_conversations = relationship("AIConversation", back_populates="machine", cascade="all, delete-orphan")
 
 
 class Component(Base):
@@ -229,6 +230,36 @@ class AIDiagnosticSession(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     machine = relationship("Machine", back_populates="ai_sessions")
+
+
+class AIConversation(Base):
+    """Persistent chat container that survives page navigation and browser refreshes."""
+    __tablename__ = "ai_conversations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_key = Column(String, unique=True, index=True, nullable=False)
+    machine_id = Column(Integer, ForeignKey("machines.id"), nullable=True, index=True)
+    title = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    machine = relationship("Machine", back_populates="ai_conversations")
+    messages = relationship("AIConversationMessage", back_populates="conversation", cascade="all, delete-orphan")
+
+
+class AIConversationMessage(Base):
+    """Every technician/assistant turn in an AI conversation, with a timestamp."""
+    __tablename__ = "ai_conversation_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(Integer, ForeignKey("ai_conversations.id"), nullable=False, index=True)
+    role = Column(String, nullable=False)  # technician | assistant | system
+    message_type = Column(String, nullable=False, default="chat")  # problem | answer | diagnosis | outcome
+    content = Column(Text, nullable=False)
+    source = Column(String, nullable=True)  # gemini | offline | app
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    conversation = relationship("AIConversation", back_populates="messages")
 
 
 class Organization(Base):
