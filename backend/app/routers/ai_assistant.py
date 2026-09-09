@@ -13,7 +13,7 @@ router = APIRouter(prefix="/api/ai", tags=["ai_assistant"])
 
 
 def _machine_context(db: Session, machine: models.Machine | None) -> dict | None:
-    """Build a compact evidence pack for the selected asset."""
+    """Build a compact evidence pack for the selected asset, including AI history."""
     if not machine:
         return None
     readings = db.query(models.SensorReading).filter_by(machine_id=machine.id).order_by(models.SensorReading.recorded_at.desc()).limit(30).all()
@@ -33,6 +33,7 @@ def _machine_context(db: Session, machine: models.Machine | None) -> dict | None
     faults = db.query(models.FaultRecord).filter_by(machine_id=machine.id).order_by(models.FaultRecord.reported_date.desc()).limit(5).all()
     maintenance = db.query(models.MaintenanceRecord).filter_by(machine_id=machine.id).order_by(models.MaintenanceRecord.completed_date.desc().nullslast()).limit(5).all()
     alerts = db.query(models.Alert).filter_by(machine_id=machine.id).order_by(models.Alert.created_at.desc()).limit(5).all()
+    ai_history = db.query(models.AIDiagnosticSession).filter_by(machine_id=machine.id).order_by(models.AIDiagnosticSession.created_at.desc()).limit(10).all()
     return {
         "asset": {
             "id": machine.id, "name": machine.name, "category": machine.category,
@@ -65,6 +66,17 @@ def _machine_context(db: Session, machine: models.Machine | None) -> dict | None
             "message": a.message, "resolved": a.resolved,
             "created_at": a.created_at.isoformat() if a.created_at else None,
         } for a in alerts],
+        "recent_ai_diagnostics": [{
+            "diagnostic_id": s.id,
+            "created_at": s.created_at.isoformat() if s.created_at else None,
+            "problem": s.problem_description,
+            "questions_asked": json.loads(s.questions_asked or "[]"),
+            "technician_answers": json.loads(s.answers or "[]"),
+            "possible_causes": json.loads(s.likely_causes or "[]"),
+            "recommended_action": s.recommended_action,
+            "technician_finding": s.final_technician_result,
+            "source": s.source,
+        } for s in ai_history],
     }
 
 
