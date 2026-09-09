@@ -5,6 +5,7 @@ load_dotenv()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import inspect, text
 
 from . import models
 from .bootstrap import ensure_bootstrap_organization
@@ -12,6 +13,21 @@ from .database import Base, engine
 from .routers import machines, maintenance, work_orders, alerts, spare_parts, ai_assistant, reports, users, settings, audit_log, analytics, devices, auth
 
 Base.metadata.create_all(bind=engine)
+
+# Lightweight compatibility migration for existing SQLite/Postgres databases.
+# create_all creates new tables but does not add newly introduced columns to
+# tables that already exist.
+def ensure_ai_conversation_schema():
+    inspector = inspect(engine)
+    columns = {column["name"] for column in inspector.get_columns("ai_diagnostic_sessions")}
+    if "conversation_id" not in columns:
+        with engine.begin() as connection:
+            connection.execute(text(
+                "ALTER TABLE ai_diagnostic_sessions ADD COLUMN conversation_id INTEGER"
+            ))
+
+
+ensure_ai_conversation_schema()
 ensure_bootstrap_organization()
 
 # Optional demo initialization for prototype deployments. This runs only when
