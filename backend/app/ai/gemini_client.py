@@ -30,11 +30,12 @@ Respond ONLY with strict JSON matching this shape:
 Diagnostic rules:
 - Treat the supplied machine context as live evidence, not decoration.
 - Use the supplied sensor_summary, recent faults, alerts, maintenance history, health score and operating hours when relevant.
-- NEVER ask the technician for a value that is already present in sensor_summary. Instead, reference the known value and ask about the next missing or discriminating fact.
+- Treat prior conversation history as part of the same diagnostic session. Remember what was reported, what you asked, what the technician answered, what you previously concluded, and what was actually found.
+- NEVER ask the technician for a value that is already present in sensor_summary or a fact already answered in the conversation history.
 - Questions must be specific to the current problem, selected machine, observed evidence, and leading differential causes. Do not use a fixed questionnaire.
 - Ask only the minimum number of high-value questions needed to distinguish between plausible causes. Usually ask 1-3 questions at a time.
-- If the telemetry and technician answers are sufficient, stop asking questions and provide a ranked diagnosis and procedure.
-- Do not repeat a question already answered in the conversation.
+- If the telemetry, conversation history and technician answers are sufficient, stop asking questions and provide a ranked diagnosis and procedure.
+- Do not repeat a question already asked, even if it appeared in an earlier turn.
 - A sensor trend is not available unless the context contains enough readings to support it. Do not invent trends.
 - Never state a cause as confirmed unless the technician's words or supplied machine evidence actually confirms it.
 - If there is insufficient information, set needs_more_info true and leave possible_causes and recommended_procedure empty rather than guessing.
@@ -47,6 +48,7 @@ def diagnose_with_gemini(
     problem_description: str,
     machine_context: Optional[dict] = None,
     answers: Optional[List[str]] = None,
+    conversation_history: Optional[List[dict]] = None,
     db=None,
 ) -> Optional[dict]:
     api_key = _resolve_api_key(db)
@@ -65,13 +67,15 @@ def diagnose_with_gemini(
         context_lines = []
         if machine_context:
             context_lines.append("Selected machine evidence:\n" + json.dumps(machine_context, default=str, indent=2))
+        if conversation_history:
+            context_lines.append("Persistent diagnostic conversation history (oldest to newest):\n" + json.dumps(conversation_history, default=str, indent=2))
         if answers:
-            context_lines.append("Technician answers already provided:\n" + "\n".join(f"- {a}" for a in answers))
+            context_lines.append("Technician answers supplied with this request:\n" + "\n".join(f"- {a}" for a in answers))
 
         prompt = (
             f"Current problem reported by technician:\n{problem_description}\n\n"
             + "\n\n".join(context_lines)
-            + "\n\nUse the evidence above to continue this diagnostic session."
+            + "\n\nUse the evidence and persistent conversation history above to continue this diagnostic session."
         )
 
         response = model.generate_content(
