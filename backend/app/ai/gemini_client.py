@@ -1,11 +1,4 @@
-"""
-Optional online AI layer using Google's Gemini API.
-
-AI is an enhancement, never a dependency: if GEMINI_API_KEY is missing, or the
-call fails for any reason (no internet, quota, bad response), the caller
-should fall back to offline_engine.diagnose(). This module never raises out
-to the router — it returns None on failure so the caller can fall back.
-"""
+"""Optional online Gemini diagnostic layer for MAINTAIN AI."""
 import json
 import os
 from typing import List, Optional
@@ -14,8 +7,6 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 
 def _resolve_api_key(db=None) -> Optional[str]:
-    """Local DB setting (entered via the app's Settings page) wins over the
-    .env var, so an installed app never needs its user to touch a text file."""
     if db is not None:
         from .. import settings_store
         stored = settings_store.get_setting(db, "gemini_api_key")
@@ -23,27 +14,32 @@ def _resolve_api_key(db=None) -> Optional[str]:
             return stored
     return os.getenv("GEMINI_API_KEY")
 
-SYSTEM_INSTRUCTION = """You are the diagnostic assistant inside an industrial predictive-maintenance
-system called MAINTAIN AI. A technician describes a machine problem. Respond ONLY with strict JSON
-(no markdown fences, no commentary) matching exactly this shape:
 
+SYSTEM_INSTRUCTION = """You are the diagnostic assistant inside MAINTAIN AI, an industrial predictive-maintenance system.
+Respond ONLY with strict JSON matching this shape:
 {
   "safety_notice": "<one sentence safety reminder appropriate to the problem>",
   "needs_more_info": <true|false>,
-  "clarifying_questions": ["<question>", ...],   // 2-5 questions if needs_more_info is true, else []
+  "clarifying_questions": ["<question>", ...],
   "possible_causes": [
     {"cause": "<short cause name>", "confidence": <0-100 integer>, "certainty": "<confirmed|likely|possible|insufficient_information>"}
   ],
   "recommended_procedure": ["<step 1>", "<step 2>", ...]
 }
 
-Rules:
-- Never state a cause as "confirmed" unless the technician's own words explicitly confirm it.
-- If you don't have enough information, set needs_more_info true and leave possible_causes and
-  recommended_procedure empty rather than guessing.
-- Always start recommended_procedure with an isolation/lockout safety step when physical inspection
-  is implied.
-- Keep it concrete and specific to industrial machinery, not generic advice.
+Diagnostic rules:
+- Treat the supplied machine context as live evidence, not decoration.
+- Use the supplied sensor_summary, recent faults, alerts, maintenance history, health score and operating hours when relevant.
+- NEVER ask the technician for a value that is already present in sensor_summary. Instead, reference the known value and ask about the next missing or discriminating fact.
+- Questions must be specific to the current problem, selected machine, observed evidence, and leading differential causes. Do not use a fixed questionnaire.
+- Ask only the minimum number of high-value questions needed to distinguish between plausible causes. Usually ask 1-3 questions at a time.
+- If the telemetry and technician answers are sufficient, stop asking questions and provide a ranked diagnosis and procedure.
+- Do not repeat a question already answered in the conversation.
+- A sensor trend is not available unless the context contains enough readings to support it. Do not invent trends.
+- Never state a cause as confirmed unless the technician's words or supplied machine evidence actually confirms it.
+- If there is insufficient information, set needs_more_info true and leave possible_causes and recommended_procedure empty rather than guessing.
+- Always start a physical-inspection procedure with an isolation/lockout safety step when appropriate.
+- Keep recommendations concrete and specific to industrial machinery.
 """
 
 
@@ -60,7 +56,6 @@ def diagnose_with_gemini(
     try:
         import google.generativeai as genai
     except ImportError:
-        # google-generativeai not installed -> silently fall back offline
         return None
 
     try:
@@ -69,11 +64,15 @@ def diagnose_with_gemini(
 
         context_lines = []
         if machine_context:
-            context_lines.append(f"Machine: {machine_context}")
+            context_lines.append("Selected machine evidence:\n" + json.dumps(machine_context, default=str, indent=2))
         if answers:
-            context_lines.append("Technician's answers so far: " + "; ".join(answers))
+            context_lines.append("Technician answers already provided:\n" + "\n".join(f"- {a}" for a in answers))
 
-        prompt = f"Problem reported: {problem_description}\n" + "\n".join(context_lines)
+        prompt = (
+            f"Current problem reported by technician:\n{problem_description}\n\n"
+            + "\n\n".join(context_lines)
+            + "\n\nUse the evidence above to continue this diagnostic session."
+        )
 
         response = model.generate_content(
             prompt,
@@ -83,5 +82,4 @@ def diagnose_with_gemini(
         data["source"] = "gemini"
         return data
     except Exception:
-        # Any failure (network, quota, bad JSON, etc.) -> caller falls back to offline engine
         return None
