@@ -10,30 +10,22 @@ from sqlalchemy import inspect, text
 from . import models
 from .bootstrap import ensure_bootstrap_organization
 from .database import Base, engine
-from .routers import machines, maintenance, work_orders, alerts, spare_parts, ai_assistant, reports, users, settings, audit_log, analytics, devices, auth
+from .routers import machines, maintenance, work_orders, alerts, spare_parts, ai_assistant, reports, users, settings, audit_log, analytics, devices, auth, faults
 
 Base.metadata.create_all(bind=engine)
 
 # Lightweight compatibility migration for existing SQLite/Postgres databases.
-# create_all creates new tables but does not add newly introduced columns to
-# tables that already exist.
 def ensure_ai_conversation_schema():
     inspector = inspect(engine)
     columns = {column["name"] for column in inspector.get_columns("ai_diagnostic_sessions")}
     if "conversation_id" not in columns:
         with engine.begin() as connection:
-            connection.execute(text(
-                "ALTER TABLE ai_diagnostic_sessions ADD COLUMN conversation_id INTEGER"
-            ))
+            connection.execute(text("ALTER TABLE ai_diagnostic_sessions ADD COLUMN conversation_id INTEGER"))
 
 
 ensure_ai_conversation_schema()
 ensure_bootstrap_organization()
 
-# Optional demo initialization for prototype deployments. This runs only when
-# explicitly enabled through an environment variable, and the seed function
-# itself skips when machine data already exists, so normal deployments are
-# unaffected.
 if os.getenv("SEED_DEMO_DATA", "").lower() == "true":
     from .seed_data import seed
     seed()
@@ -46,7 +38,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # tighten this before any real deployment
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -56,6 +48,7 @@ app.include_router(machines.router)
 app.include_router(maintenance.router)
 app.include_router(work_orders.router)
 app.include_router(alerts.router)
+app.include_router(faults.router)
 app.include_router(spare_parts.router)
 app.include_router(ai_assistant.router)
 app.include_router(reports.router)
