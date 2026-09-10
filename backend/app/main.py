@@ -14,7 +14,22 @@ from .routers import machines, maintenance, work_orders, alerts, spare_parts, ai
 
 Base.metadata.create_all(bind=engine)
 
-# Lightweight compatibility migration for existing SQLite/Postgres databases.
+# Lightweight compatibility migrations for existing SQLite/Postgres databases.
+def ensure_compatibility_schema():
+    inspector = inspect(engine)
+    work_order_columns = {column["name"] for column in inspector.get_columns("work_orders")}
+    user_columns = {column["name"] for column in inspector.get_columns("users")}
+    with engine.begin() as connection:
+        if "fault_id" not in work_order_columns:
+            connection.execute(text("ALTER TABLE work_orders ADD COLUMN fault_id INTEGER"))
+        if "active" not in user_columns:
+            connection.execute(text("ALTER TABLE users ADD COLUMN active BOOLEAN NOT NULL DEFAULT 1"))
+        # Older seeded/local users predate organization scoping. Keep them in
+        # the bootstrap organization so the new Settings user list and
+        # work-order assignee validation continue to see them.
+        connection.execute(text("UPDATE users SET organization_id = 1 WHERE organization_id IS NULL"))
+
+
 def ensure_ai_conversation_schema():
     inspector = inspect(engine)
     columns = {column["name"] for column in inspector.get_columns("ai_diagnostic_sessions")}
@@ -23,6 +38,7 @@ def ensure_ai_conversation_schema():
             connection.execute(text("ALTER TABLE ai_diagnostic_sessions ADD COLUMN conversation_id INTEGER"))
 
 
+ensure_compatibility_schema()
 ensure_ai_conversation_schema()
 ensure_bootstrap_organization()
 
