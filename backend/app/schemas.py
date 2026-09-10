@@ -89,6 +89,27 @@ class MaintenanceRecordOut(MaintenanceRecordIn):
     completed_date: Optional[datetime]
 
 
+class FaultRecordIn(BaseModel):
+    machine_id: int
+    description: str
+    symptoms: Optional[str] = None
+    cause: Optional[str] = None
+    resolution: Optional[str] = None
+    severity: str = "warning"
+
+
+class FaultRecordOut(FaultRecordIn):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    reported_date: datetime
+    resolved_date: Optional[datetime]
+
+
+class FaultResolveIn(BaseModel):
+    cause: Optional[str] = None
+    resolution: str
+
+
 class WorkOrderIn(BaseModel):
     machine_id: int
     problem: str
