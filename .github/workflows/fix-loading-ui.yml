@@ -116,13 +116,12 @@ jobs:
 .sk-row .medium { width: 105px; }
 .sk-large { width: 100%; height: 190px; border-radius: 12px; }
 .page-skeleton-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
-.page-skeleton-card-panel { min-height: 150px; display: flex; flex-direction: column; gap: 14px; }
+.page-skeleton-card-panel { min-height: 150px; display: flex; flex-direction: column; gap: 14px; padding: 18px; }
 .sk-card-icon { width: 30px; height: 30px; border-radius: 9px; }
 .sk-card-value { width: 72px; height: 30px; border-radius: 7px; }
 .sk-line { width: 85%; }
 .sk-line.short { width: 55%; }
 
-/* Dashboard skeleton uses the real dashboard proportions instead of empty outlines. */
 .dashboard-skeleton { display: flex; flex-direction: column; gap: 14px; padding-bottom: 20px; }
 .dashboard-skeleton-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 8px; }
 .dashboard-skeleton-card { min-height: 112px; padding: 16px 18px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--frost-bg); box-shadow: 7px 7px 16px var(--neu-dark), -5px -5px 14px var(--neu-light), inset 0 1px 0 var(--neu-light); display: flex; flex-direction: column; gap: 12px; }
@@ -139,7 +138,6 @@ jobs:
 .skeleton-chart { width: 78%; height: 150px; border-radius: 50%; }
 .skeleton-table-row { display: grid; grid-template-columns: minmax(0, 1fr) 75px 75px 100px; gap: 12px; align-items: center; }
 
-/* Non-blocking operation feedback */
 .ui-toast-stack { position: fixed; right: 24px; bottom: 24px; z-index: 100; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
 .ui-toast { min-width: 260px; max-width: min(420px, calc(100vw - 48px)); padding: 11px 14px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--panel-raised); color: var(--text); box-shadow: 0 12px 30px rgba(0,0,0,.28); animation: toast-in .2s var(--ease); }
 .ui-toast.success { border-color: rgba(62,224,184,.35); }
@@ -151,15 +149,15 @@ jobs:
   .ui-toast-stack { right: 14px; bottom: 14px; }
 }
 '''
-if marker not in current:
-    css.write_text(current + styles)
-          elif '.dashboard-skeleton {' not in current:
+          if marker not in current:
               css.write_text(current + styles)
 
           faults = Path('frontend/src/pages/Faults.jsx')
           text = faults.read_text()
-          text = text.replace("const [busy, setBusy] = useState(false)", "const [busy, setBusy] = useState(false)\n  const [toast, setToast] = useState(null)")
-          text = text.replace("useEffect(() => { load() }, [])", "useEffect(() => { load() }, [])\n\n  useEffect(() => {\n    if (!toast) return\n    const timer = setTimeout(() => setToast(null), 2600)\n    return () => clearTimeout(timer)\n  }, [toast])")
+          if "const [toast, setToast]" not in text:
+              text = text.replace("const [busy, setBusy] = useState(false)", "const [busy, setBusy] = useState(false)\n  const [toast, setToast] = useState(null)")
+          if "if (!toast) return" not in text:
+              text = text.replace("useEffect(() => { load() }, [])", "useEffect(() => { load() }, [])\n\n  useEffect(() => {\n    if (!toast) return\n    const timer = setTimeout(() => setToast(null), 2600)\n    return () => clearTimeout(timer)\n  }, [toast])")
           text = text.replace("setForm(emptyForm); setShowForm(false); await load()", "setForm(emptyForm); setShowForm(false); await load(); setToast({ type: 'success', message: 'Fault recorded successfully.' })")
           text = text.replace("catch (e) { alert(`Could not log fault: ${e.message}`) }", "catch (e) { setToast({ type: 'error', message: `Could not log fault: ${e.message}` }) }")
           text = text.replace("try { await api.post(`/api/faults/${fault.id}/resolve`, { resolution: resolution.trim(), cause: cause?.trim() || undefined }); await load() }\n    catch (e) { alert(`Could not resolve fault: ${e.message}`) }", "try { await api.post(`/api/faults/${fault.id}/resolve`, { resolution: resolution.trim(), cause: cause?.trim() || undefined }); await load(); setToast({ type: 'success', message: 'Fault resolved successfully.' }) }\n    catch (e) { setToast({ type: 'error', message: `Could not resolve fault: ${e.message}` }) }")
