@@ -4,6 +4,7 @@ import { Loading, ErrorState } from './Dashboard.jsx'
 import { usePageHeader } from '../PageHeaderContext.jsx'
 import { useReducedEffects } from '../ThemeToggle.jsx'
 import { useAuth } from '../AuthContext.jsx'
+import '../user-management.css'
 
 const emptyForm = { username: '', full_name: '', email: '', role: 'technician' }
 
@@ -29,32 +30,23 @@ export default function SettingsPage() {
 
   const create = async (e) => {
     e.preventDefault(); setSavingUser(true)
-    try {
-      await api.post('/api/users', form)
-      setForm(emptyForm); await load(); setToast({ type: 'success', message: 'User added successfully.' })
-    } catch (e) { setToast({ type: 'error', message: `Could not add user: ${e.message}` }) }
+    try { await api.post('/api/users', form); setForm(emptyForm); await load(); setToast({ type: 'success', message: 'User added successfully.' }) }
+    catch (e) { setToast({ type: 'error', message: `Could not add user: ${e.message}` }) }
     finally { setSavingUser(false) }
   }
 
-  const startEdit = (u) => {
-    setEditing(u.id)
-    setForm({ username: u.username, full_name: u.full_name || '', email: u.email || '', role: u.role })
-  }
+  const startEdit = (u) => { setEditing(u.id); setForm({ username: u.username, full_name: u.full_name || '', email: u.email || '', role: u.role }) }
 
   const saveEdit = async (e) => {
     e.preventDefault(); setSavingUser(true)
-    try {
-      await api.patch(`/api/users/${editing}`, { full_name: form.full_name, email: form.email || null, role: form.role })
-      setEditing(null); setForm(emptyForm); await load(); setToast({ type: 'success', message: 'User updated successfully.' })
-    } catch (e) { setToast({ type: 'error', message: `Could not update user: ${e.message}` }) }
+    try { await api.patch(`/api/users/${editing}`, { full_name: form.full_name, email: form.email || null, role: form.role }); setEditing(null); setForm(emptyForm); await load(); setToast({ type: 'success', message: 'User updated successfully.' }) }
+    catch (e) { setToast({ type: 'error', message: `Could not update user: ${e.message}` }) }
     finally { setSavingUser(false) }
   }
 
   const toggleActive = async (u) => {
-    try {
-      await api.patch(`/api/users/${u.id}`, { active: !u.active })
-      await load(); setToast({ type: 'success', message: u.active ? 'User deactivated.' : 'User reactivated.' })
-    } catch (e) { setToast({ type: 'error', message: `Could not update user: ${e.message}` }) }
+    try { await api.patch(`/api/users/${u.id}`, { active: !u.active }); await load(); setToast({ type: 'success', message: u.active ? 'User deactivated.' : 'User reactivated.' }) }
+    catch (e) { setToast({ type: 'error', message: `Could not update user: ${e.message}` }) }
   }
 
   const saveKey = async (e) => {
@@ -69,13 +61,9 @@ export default function SettingsPage() {
 
   return <>
     {toast && <div className="ui-toast-stack" aria-live="polite"><div className={`ui-toast ${toast.type}`}>{toast.message}</div></div>}
-
     {authRequired && user && <div className="panel section-gap"><div className="panel-header"><span className="panel-title">Account</span></div><div className="panel-body"><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><div><div style={{ fontWeight: 600 }}>{user.username}</div><div style={{ color: 'var(--text-faint)', fontSize: 12.5 }}>{user.organization_name} · {user.role}</div></div><button className="btn secondary" onClick={logout}>Sign Out</button></div></div></div>}
-
     <div className="panel section-gap"><div className="panel-header"><span className="panel-title">Display &amp; Performance</span></div><div className="panel-body"><p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 12 }}>The frosted-glass look uses a background blur effect. If the app feels sluggish on older hardware or remote desktop sessions, reduce it here.</p><label style={{ display: 'flex', alignItems: 'center', gap: 10 }}><input type="checkbox" style={{ width: 'auto' }} checked={reducedEffects} onChange={(e) => setReducedEffects(e.target.checked)} />Reduce visual effects (disables background blur)</label></div></div>
-
     <div className="panel section-gap"><div className="panel-header"><span className="panel-title">AI Assistant — Gemini API Key</span></div><div className="panel-body"><p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 12 }}>Stored in the application's database and never shipped in source code.</p>{keyStatus?.configured ? <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><span className="badge healthy">Configured · •••• {keyStatus.last4}</span><button className="btn secondary" onClick={clearKey}>Remove Key</button></div> : <form onSubmit={saveKey} style={{ display: 'flex', gap: 8 }}><input type="password" value={keyDraft} onChange={(e) => setKeyDraft(e.target.value)} placeholder="Paste your Gemini API key" /><button className="btn" type="submit" disabled={keySaving}>{keySaving ? 'Saving…' : 'Save Key'}</button></form>}</div></div>
-
     <div className="panel section-gap">
       <div className="panel-header"><span className="panel-title">User Management</span><span className="badge neutral">{users.filter((u) => u.active !== false).length} active · {users.length} total</span></div>
       <div className="panel-body">
@@ -93,7 +81,6 @@ export default function SettingsPage() {
         {users.length === 0 && <tr><td colSpan={5} className="empty-state">No users yet.</td></tr>}
       </tbody></table></div>
     </div>
-
     <p style={{ color: 'var(--text-faint)', fontSize: 12, marginTop: 16 }}>{authRequired ? 'User roles are now enforced for user administration and work-order assignment.' : 'Local mode is active — the local session has administrator privileges.'}</p>
   </>
 }
