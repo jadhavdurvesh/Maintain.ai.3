@@ -1,0 +1,120 @@
+name: Fix loading UI
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Patch loading components
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          dashboard = Path('frontend/src/pages/Dashboard.jsx')
+          text = dashboard.read_text()
+          old = '''export function Loading() {
+            return <div className="empty-state">Loading…</div>
+          }'''
+          new = '''export function SkeletonBlock({ className = "" }) {
+            return <div className={`skeleton-block ${className}`} aria-hidden="true" />
+          }
+
+          export function PageSkeleton({ variant = "table" }) {
+            const rows = variant === "detail" ? 7 : 6
+            return (
+              <div className="page-skeleton" aria-label="Loading page">
+                <div className="page-skeleton-toolbar">
+                  <SkeletonBlock className="sk-heading" />
+                  <SkeletonBlock className="sk-button" />
+                </div>
+                <div className="page-skeleton-grid">
+                  {Array.from({ length: variant === "cards" ? 6 : variant === "table" ? 2 : 1 }).map((_, i) => (
+                    <div className="panel page-skeleton-panel" key={i}>
+                      <div className="panel-header"><SkeletonBlock className="sk-panel-title" /></div>
+                      <div className="panel-body">
+                        {variant === "cards" ? (
+                          <><SkeletonBlock className="sk-card-icon" /><SkeletonBlock className="sk-card-value" /><SkeletonBlock className="sk-line" /><SkeletonBlock className="sk-line short" /></>
+                        ) : (
+                          Array.from({ length: rows }).map((_, r) => (
+                            <div className="sk-row" key={r}><SkeletonBlock /><SkeletonBlock className="short" /><SkeletonBlock className="medium" /></div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="panel page-skeleton-panel section-gap">
+                  <div className="panel-header"><SkeletonBlock className="sk-panel-title wide" /></div>
+                  <div className="panel-body"><SkeletonBlock className="sk-large" /></div>
+                </div>
+              </div>
+            )
+          }
+
+          export function Loading({ variant = "table" }) {
+            return <PageSkeleton variant={variant} />
+          }'''
+          if old not in text:
+              raise SystemExit('Loading block not found')
+          dashboard.write_text(text.replace(old, new))
+
+          css = Path('frontend/src/index.css')
+          styles = '''
+
+/* ---- Reusable page loading skeleton ---- */
+.skeleton-block {
+  display: block;
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--panel-raised) 25%, var(--border) 50%, var(--panel-raised) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.35s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.page-skeleton { display: flex; flex-direction: column; gap: 14px; padding: 2px 0 20px; }
+.page-skeleton-toolbar { display: flex; align-items: center; justify-content: space-between; min-height: 38px; }
+.page-skeleton-toolbar .sk-heading { width: 150px; height: 18px; }
+.page-skeleton-toolbar .sk-button { width: 110px; height: 34px; border-radius: 9px; }
+.page-skeleton-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.page-skeleton-grid:has(.sk-card-icon) { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.page-skeleton-panel { min-height: 180px; overflow: hidden; }
+.page-skeleton-panel .panel-body { display: flex; flex-direction: column; gap: 14px; }
+.sk-panel-title { width: 135px; height: 12px; }
+.sk-panel-title.wide { width: 220px; }
+.sk-row { display: grid; grid-template-columns: minmax(0, 1fr) 90px 110px; gap: 14px; align-items: center; }
+.sk-row .short { width: 70px; }
+.sk-row .medium { width: 105px; }
+.sk-large { width: 100%; height: 180px; border-radius: 12px; }
+.sk-card-icon { width: 28px; height: 28px; border-radius: 9px; }
+.sk-card-value { width: 72px; height: 30px; border-radius: 7px; }
+.sk-line { width: 85%; }
+.sk-line.short { width: 55%; }
+
+@media (max-width: 760px) {
+  .page-skeleton-grid { grid-template-columns: 1fr; }
+}
+'''
+          current = css.read_text()
+          if '/* ---- Reusable page loading skeleton ---- */' not in current:
+              css.write_text(current + styles)
+          PY
+
+      - name: Commit source changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/pages/Dashboard.jsx frontend/src/index.css
+          git diff --cached --quiet || git commit -m "Use skeleton loading across pages"
+          git push
