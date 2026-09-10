@@ -14,6 +14,7 @@ export default function Faults() {
   const [form, setForm] = useState(emptyForm)
   const [filter, setFilter] = useState('all')
   const [busy, setBusy] = useState(false)
+  const [toast, setToast] = useState(null)
 
   usePageHeader('Fault Log', <button className="btn" onClick={() => setShowForm((v) => !v)}>{showForm ? 'Cancel' : '+ Log Fault'}</button>)
 
@@ -23,6 +24,12 @@ export default function Faults() {
 
   useEffect(() => { load() }, [])
 
+  useEffect(() => {
+    if (!toast) return
+    const timer = setTimeout(() => setToast(null), 2600)
+    return () => clearTimeout(timer)
+  }, [toast])
+
   const create = async (e) => {
     e.preventDefault()
     if (!form.machine_id || !form.description.trim()) return
@@ -30,7 +37,8 @@ export default function Faults() {
     try {
       await api.post('/api/faults', { ...form, machine_id: Number(form.machine_id) })
       setForm(emptyForm); setShowForm(false); await load()
-    } catch (e) { alert(`Could not log fault: ${e.message}`) }
+      setToast({ type: 'success', message: 'Fault recorded successfully.' })
+    } catch (e) { setToast({ type: 'error', message: `Could not log fault: ${e.message}` }) }
     finally { setBusy(false) }
   }
 
@@ -39,8 +47,11 @@ export default function Faults() {
     if (!resolution?.trim()) return
     const cause = window.prompt('Root cause (optional):', fault.cause || '')
     setBusy(true)
-    try { await api.post(`/api/faults/${fault.id}/resolve`, { resolution: resolution.trim(), cause: cause?.trim() || undefined }); await load() }
-    catch (e) { alert(`Could not resolve fault: ${e.message}`) }
+    try {
+      await api.post(`/api/faults/${fault.id}/resolve`, { resolution: resolution.trim(), cause: cause?.trim() || undefined })
+      await load()
+      setToast({ type: 'success', message: 'Fault resolved successfully.' })
+    } catch (e) { setToast({ type: 'error', message: `Could not resolve fault: ${e.message}` }) }
     finally { setBusy(false) }
   }
 
@@ -65,9 +76,9 @@ export default function Faults() {
           ? `Investigate fault: ${fault.symptoms}`
           : 'Investigate reported fault and confirm root cause.',
       })
-      alert('Work order created from this fault.')
       await load()
-    } catch (e) { alert(`Could not create work order: ${e.message}`) }
+      setToast({ type: 'success', message: 'Work order created successfully.' })
+    } catch (e) { setToast({ type: 'error', message: `Could not create work order: ${e.message}` }) }
     finally { setBusy(false) }
   }
 
@@ -78,6 +89,7 @@ export default function Faults() {
   const visible = faults.filter((f) => filter === 'all' || (filter === 'open' ? !f.resolved_date : !!f.resolved_date))
 
   return <>
+    {toast && <div className="ui-toast-stack" aria-live="polite"><div className={`ui-toast ${toast.type}`}>{toast.message}</div></div>}
     {showForm && <div className="panel section-gap">
       <form className="panel-body grid-2" onSubmit={create}>
         <div className="field"><label>Machine</label><select required value={form.machine_id} onChange={(e) => setForm({ ...form, machine_id: e.target.value })}><option value="">Select machine…</option>{machines.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></div>
