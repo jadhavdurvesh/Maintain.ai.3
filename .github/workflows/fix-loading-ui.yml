@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Patch loading components
+      - name: Patch loading and feedback UI
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -30,28 +30,42 @@ jobs:
 
           export function PageSkeleton({ variant = "table" }) {
             const rows = variant === "detail" ? 7 : 6
+            const columns = variant === "cards" ? 1 : 2
             return (
               <div className="page-skeleton" aria-label="Loading page">
                 <div className="page-skeleton-toolbar">
                   <SkeletonBlock className="sk-heading" />
                   <SkeletonBlock className="sk-button" />
                 </div>
-                <div className="page-skeleton-grid">
-                  {Array.from({ length: variant === "cards" ? 6 : variant === "table" ? 2 : 1 }).map((_, i) => (
-                    <div className="panel page-skeleton-panel" key={i}>
-                      <div className="panel-header"><SkeletonBlock className="sk-panel-title" /></div>
-                      <div className="panel-body">
-                        {variant === "cards" ? (
-                          <><SkeletonBlock className="sk-card-icon" /><SkeletonBlock className="sk-card-value" /><SkeletonBlock className="sk-line" /><SkeletonBlock className="sk-line short" /></>
-                        ) : (
-                          Array.from({ length: rows }).map((_, r) => (
-                            <div className="sk-row" key={r}><SkeletonBlock /><SkeletonBlock className="short" /><SkeletonBlock className="medium" /></div>
-                          ))
-                        )}
+                {variant === "cards" ? (
+                  <div className="page-skeleton-card-grid">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <div className="panel page-skeleton-card-panel" key={i}>
+                        <SkeletonBlock className="sk-card-icon" />
+                        <SkeletonBlock className="sk-card-value" />
+                        <SkeletonBlock className="sk-line" />
+                        <SkeletonBlock className="sk-line short" />
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="page-skeleton-grid">
+                    {Array.from({ length: columns }).map((_, i) => (
+                      <div className="panel page-skeleton-panel" key={i}>
+                        <div className="panel-header"><SkeletonBlock className="sk-panel-title" /></div>
+                        <div className="panel-body skeleton-table-body">
+                          {Array.from({ length: rows }).map((_, r) => (
+                            <div className="sk-row" key={r}>
+                              <SkeletonBlock />
+                              <SkeletonBlock className="short" />
+                              <SkeletonBlock className="medium" />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="panel page-skeleton-panel section-gap">
                   <div className="panel-header"><SkeletonBlock className="sk-panel-title wide" /></div>
                   <div className="panel-body"><SkeletonBlock className="sk-large" /></div>
@@ -63,19 +77,21 @@ jobs:
           export function Loading({ variant = "table" }) {
             return <PageSkeleton variant={variant} />
           }'''
-          if old not in text:
-              raise SystemExit('Loading block not found')
-          dashboard.write_text(text.replace(old, new))
+          if old in text:
+              text = text.replace(old, new)
+          dashboard.write_text(text)
 
           css = Path('frontend/src/index.css')
-          styles = '''
+          current = css.read_text()
+          marker = '/* ---- Reusable page loading skeleton ---- */'
+          styles = r'''
 
 /* ---- Reusable page loading skeleton ---- */
 .skeleton-block {
   display: block;
   height: 12px;
-  border-radius: 6px;
-  background: linear-gradient(90deg, var(--panel-raised) 25%, var(--border) 50%, var(--panel-raised) 75%);
+  border-radius: 7px;
+  background: linear-gradient(90deg, var(--panel-raised) 20%, var(--border-strong) 50%, var(--panel-raised) 80%);
   background-size: 200% 100%;
   animation: skeleton-shimmer 1.35s ease-in-out infinite;
 }
@@ -87,36 +103,76 @@ jobs:
 
 .page-skeleton { display: flex; flex-direction: column; gap: 14px; padding: 2px 0 20px; }
 .page-skeleton-toolbar { display: flex; align-items: center; justify-content: space-between; min-height: 38px; }
-.page-skeleton-toolbar .sk-heading { width: 150px; height: 18px; }
-.page-skeleton-toolbar .sk-button { width: 110px; height: 34px; border-radius: 9px; }
+.page-skeleton-toolbar .sk-heading { width: 145px; height: 18px; }
+.page-skeleton-toolbar .sk-button { width: 108px; height: 34px; border-radius: 9px; }
 .page-skeleton-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-.page-skeleton-grid:has(.sk-card-icon) { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
-.page-skeleton-panel { min-height: 180px; overflow: hidden; }
+.page-skeleton-panel { min-height: 220px; overflow: hidden; }
 .page-skeleton-panel .panel-body { display: flex; flex-direction: column; gap: 14px; }
+.skeleton-table-body { min-height: 170px; }
 .sk-panel-title { width: 135px; height: 12px; }
 .sk-panel-title.wide { width: 220px; }
 .sk-row { display: grid; grid-template-columns: minmax(0, 1fr) 90px 110px; gap: 14px; align-items: center; }
 .sk-row .short { width: 70px; }
 .sk-row .medium { width: 105px; }
-.sk-large { width: 100%; height: 180px; border-radius: 12px; }
-.sk-card-icon { width: 28px; height: 28px; border-radius: 9px; }
+.sk-large { width: 100%; height: 190px; border-radius: 12px; }
+.page-skeleton-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+.page-skeleton-card-panel { min-height: 150px; display: flex; flex-direction: column; gap: 14px; }
+.sk-card-icon { width: 30px; height: 30px; border-radius: 9px; }
 .sk-card-value { width: 72px; height: 30px; border-radius: 7px; }
 .sk-line { width: 85%; }
 .sk-line.short { width: 55%; }
 
+/* Dashboard skeleton uses the real dashboard proportions instead of empty outlines. */
+.dashboard-skeleton { display: flex; flex-direction: column; gap: 14px; padding-bottom: 20px; }
+.dashboard-skeleton-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 8px; }
+.dashboard-skeleton-card { min-height: 112px; padding: 16px 18px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--frost-bg); box-shadow: 7px 7px 16px var(--neu-dark), -5px -5px 14px var(--neu-light), inset 0 1px 0 var(--neu-light); display: flex; flex-direction: column; gap: 12px; }
+.dashboard-skeleton-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.dashboard-skeleton-panel { min-height: 220px; overflow: hidden; }
+.dashboard-skeleton-panel .panel-body { display: flex; flex-direction: column; gap: 14px; }
+.skeleton-icon { width: 22px; height: 22px; border-radius: 7px; align-self: flex-end; }
+.skeleton-label { width: 115px; height: 10px; }
+.skeleton-value { width: 58px; height: 30px; border-radius: 7px; }
+.skeleton-title { width: 150px; height: 12px; }
+.skeleton-title.medium { width: 175px; }
+.skeleton-title.wide { width: 230px; }
+.skeleton-chart-body { min-height: 190px; display: flex; align-items: center; justify-content: center; }
+.skeleton-chart { width: 78%; height: 150px; border-radius: 50%; }
+.skeleton-table-row { display: grid; grid-template-columns: minmax(0, 1fr) 75px 75px 100px; gap: 12px; align-items: center; }
+
+/* Non-blocking operation feedback */
+.ui-toast-stack { position: fixed; right: 24px; bottom: 24px; z-index: 100; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.ui-toast { min-width: 260px; max-width: min(420px, calc(100vw - 48px)); padding: 11px 14px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--panel-raised); color: var(--text); box-shadow: 0 12px 30px rgba(0,0,0,.28); animation: toast-in .2s var(--ease); }
+.ui-toast.success { border-color: rgba(62,224,184,.35); }
+.ui-toast.error { border-color: rgba(255,93,81,.4); color: var(--critical); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
 @media (max-width: 760px) {
-  .page-skeleton-grid { grid-template-columns: 1fr; }
+  .page-skeleton-grid, .dashboard-skeleton-grid { grid-template-columns: 1fr; }
+  .ui-toast-stack { right: 14px; bottom: 14px; }
 }
 '''
-          current = css.read_text()
-          if '/* ---- Reusable page loading skeleton ---- */' not in current:
+if marker not in current:
+    css.write_text(current + styles)
+          elif '.dashboard-skeleton {' not in current:
               css.write_text(current + styles)
+
+          faults = Path('frontend/src/pages/Faults.jsx')
+          text = faults.read_text()
+          text = text.replace("const [busy, setBusy] = useState(false)", "const [busy, setBusy] = useState(false)\n  const [toast, setToast] = useState(null)")
+          text = text.replace("useEffect(() => { load() }, [])", "useEffect(() => { load() }, [])\n\n  useEffect(() => {\n    if (!toast) return\n    const timer = setTimeout(() => setToast(null), 2600)\n    return () => clearTimeout(timer)\n  }, [toast])")
+          text = text.replace("setForm(emptyForm); setShowForm(false); await load()", "setForm(emptyForm); setShowForm(false); await load(); setToast({ type: 'success', message: 'Fault recorded successfully.' })")
+          text = text.replace("catch (e) { alert(`Could not log fault: ${e.message}`) }", "catch (e) { setToast({ type: 'error', message: `Could not log fault: ${e.message}` }) }")
+          text = text.replace("try { await api.post(`/api/faults/${fault.id}/resolve`, { resolution: resolution.trim(), cause: cause?.trim() || undefined }); await load() }\n    catch (e) { alert(`Could not resolve fault: ${e.message}`) }", "try { await api.post(`/api/faults/${fault.id}/resolve`, { resolution: resolution.trim(), cause: cause?.trim() || undefined }); await load(); setToast({ type: 'success', message: 'Fault resolved successfully.' }) }\n    catch (e) { setToast({ type: 'error', message: `Could not resolve fault: ${e.message}` }) }")
+          text = text.replace("      alert('Work order created from this fault.')\n      await load()", "      await load()\n      setToast({ type: 'success', message: 'Work order created successfully.' })")
+          text = text.replace("catch (e) { alert(`Could not create work order: ${e.message}`) }", "catch (e) { setToast({ type: 'error', message: `Could not create work order: ${e.message}` }) }")
+          text = text.replace("  return <>\n    {showForm", "  return <>\n    {toast && <div className=\"ui-toast-stack\" aria-live=\"polite\"><div className={`ui-toast ${toast.type}`}>{toast.message}</div></div>}\n    {showForm")
+          faults.write_text(text)
           PY
 
       - name: Commit source changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add frontend/src/pages/Dashboard.jsx frontend/src/index.css
-          git diff --cached --quiet || git commit -m "Use skeleton loading across pages"
+          git add frontend/src/pages/Dashboard.jsx frontend/src/index.css frontend/src/pages/Faults.jsx
+          git diff --cached --quiet || git commit -m "Improve loading skeleton and fault feedback"
           git push
