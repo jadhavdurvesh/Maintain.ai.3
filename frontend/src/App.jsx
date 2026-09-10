@@ -1,7 +1,7 @@
 import { Routes, Route, NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Factory, Wrench, ClipboardList, Bot,
-  AlertTriangle, Package, BarChart3, Settings as SettingsIcon, History as HistoryIcon, Info,
+  AlertTriangle, Package, BarChart3, Settings as SettingsIcon, History as HistoryIcon, Info, Bug,
 } from 'lucide-react'
 
 import { PageHeaderProvider, useCurrentHeader } from './PageHeaderContext.jsx'
@@ -14,6 +14,7 @@ import Machines from './pages/Machines.jsx'
 import MachineDetail from './pages/MachineDetail.jsx'
 import Maintenance from './pages/Maintenance.jsx'
 import WorkOrders from './pages/WorkOrders.jsx'
+import Faults from './pages/Faults.jsx'
 import AIAssistant from './pages/AIAssistant.jsx'
 import Alerts from './pages/Alerts.jsx'
 import SpareParts from './pages/SpareParts.jsx'
@@ -27,6 +28,7 @@ const NAV = [
   { to: '/machines', label: 'Machines', icon: Factory },
   { to: '/maintenance', label: 'Maintenance', icon: Wrench },
   { to: '/work-orders', label: 'Work Orders', icon: ClipboardList },
+  { to: '/faults', label: 'Fault Log', icon: Bug },
   { to: '/ai-assistant', label: 'AI Assistant', icon: Bot },
   { to: '/alerts', label: 'Alerts', icon: AlertTriangle },
   { to: '/spare-parts', label: 'Spare Parts', icon: Package },
@@ -38,80 +40,32 @@ const NAV = [
 
 function Topbar({ theme, setTheme }) {
   const { title, actions } = useCurrentHeader()
-  return (
-    <div className="topbar-glass">
-      <div className="topbar-inner">
-        <div className="topbar-title">{title}</div>
-        <div className="topbar-actions">
-          {actions}
-          <ThemeToggle theme={theme} setTheme={setTheme} />
-        </div>
-      </div>
-    </div>
-  )
+  return <div className="topbar-glass"><div className="topbar-inner"><div className="topbar-title">{title}</div><div className="topbar-actions">{actions}<ThemeToggle theme={theme} setTheme={setTheme} /></div></div></div>
 }
 
 function Sidebar() {
-  return (
-    <div className="sidebar-glass">
-      <div className="sidebar-inner">
-        <div className="brand">
-          <span className="brand-status-dot" />
-          <div>
-            <div className="brand-mark">MAINTAIN AI</div>
-            <div className="brand-sub">predictive maintenance</div>
-          </div>
-        </div>
-        <nav className="nav-group">
-          {NAV.map(({ to, label, icon: Icon, end }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={end}
-              className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
-            >
-              <Icon size={16} strokeWidth={1.75} />
-              {label}
-            </NavLink>
-          ))}
-        </nav>
-      </div>
-    </div>
-  )
+  return <div className="sidebar-glass"><div className="sidebar-inner"><div className="brand"><span className="brand-status-dot" /><div><div className="brand-mark">MAINTAIN AI</div><div className="brand-sub">predictive maintenance</div></div></div><nav className="nav-group">{NAV.map(({ to, label, icon: Icon, end }) => <NavLink key={to} to={to} end={end} className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}><Icon size={16} strokeWidth={1.75} />{label}</NavLink>)}</nav></div></div>
 }
 
 export default function App() {
   const [theme, setTheme] = useTheme()
   useReducedEffects()
   const { checking, needsLogin } = useAuth()
-
   if (checking) return null
   if (needsLogin) return <Login />
-
-  return (
-    <PageHeaderProvider>
-      <div className="app-shell">
-        <Sidebar />
-        <div className="main">
-          <Topbar theme={theme} setTheme={setTheme} />
-          <div className="content">
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/machines" element={<Machines />} />
-              <Route path="/machines/:id" element={<MachineDetail />} />
-              <Route path="/maintenance" element={<Maintenance />} />
-              <Route path="/work-orders" element={<WorkOrders />} />
-              <Route path="/ai-assistant" element={<AIAssistant />} />
-              <Route path="/alerts" element={<Alerts />} />
-              <Route path="/spare-parts" element={<SpareParts />} />
-              <Route path="/reports" element={<Reports />} />
-              <Route path="/history" element={<History />} />
-              <Route path="/settings" element={<SettingsPage />} />
-              <Route path="/about" element={<About />} />
-            </Routes>
-          </div>
-        </div>
-      </div>
-    </PageHeaderProvider>
-  )
+  return <PageHeaderProvider><div className="app-shell"><Sidebar /><div className="main"><Topbar theme={theme} setTheme={setTheme} /><div className="content"><Routes>
+    <Route path="/" element={<Dashboard />} />
+    <Route path="/machines" element={<Machines />} />
+    <Route path="/machines/:id" element={<MachineDetail />} />
+    <Route path="/maintenance" element={<Maintenance />} />
+    <Route path="/work-orders" element={<WorkOrders />} />
+    <Route path="/faults" element={<Faults />} />
+    <Route path="/ai-assistant" element={<AIAssistant />} />
+    <Route path="/alerts" element={<Alerts />} />
+    <Route path="/spare-parts" element={<SpareParts />} />
+    <Route path="/reports" element={<Reports />} />
+    <Route path="/history" element={<History />} />
+    <Route path="/settings" element={<SettingsPage />} />
+    <Route path="/about" element={<About />} />
+  </Routes></div></div></div></PageHeaderProvider>
 }
