@@ -38,7 +38,7 @@ export default function Dashboard() {
   }, [])
 
   if (error) return <ErrorState message={error} />
-  if (!summary) return <Loading />
+  if (!summary) return <DashboardSkeleton />
 
   const tiles = [
     { label: 'TOTAL MACHINES', value: summary.total_machines, cls: '', icon: Factory },
@@ -223,6 +223,68 @@ export default function Dashboard() {
         </div>
       </div>
     </>
+  )
+}
+
+function SkeletonBlock({ className = '' }) {
+  return <div className={`dashboard-skeleton-block ${className}`} aria-hidden="true" />
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="dashboard-skeleton" aria-label="Loading dashboard">
+      <div className="dashboard-skeleton-stat-grid">
+        {Array.from({ length: 7 }).map((_, i) => (
+          <div className="dashboard-skeleton-card" key={i}>
+            <SkeletonBlock className="skeleton-icon" />
+            <SkeletonBlock className="skeleton-label" />
+            <SkeletonBlock className="skeleton-value" />
+          </div>
+        ))}
+      </div>
+
+      <div className="dashboard-skeleton-grid section-gap">
+        {Array.from({ length: 2 }).map((_, i) => (
+          <div className="panel dashboard-skeleton-panel" key={i}>
+            <div className="panel-header"><SkeletonBlock className="skeleton-title" /></div>
+            <div className="panel-body skeleton-chart-body">
+              <SkeletonBlock className="skeleton-chart" />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="dashboard-skeleton-grid section-gap">
+        {Array.from({ length: 2 }).map((_, i) => (
+          <div className="panel dashboard-skeleton-panel" key={i}>
+            <div className="panel-header"><SkeletonBlock className="skeleton-title medium" /></div>
+            <div className="panel-body skeleton-table-body">
+              {Array.from({ length: 5 }).map((_, row) => (
+                <div className="skeleton-table-row" key={row}>
+                  <SkeletonBlock />
+                  <SkeletonBlock className="short" />
+                  <SkeletonBlock className="short" />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="panel dashboard-skeleton-panel section-gap">
+        <div className="panel-header"><SkeletonBlock className="skeleton-title wide" /></div>
+        <div className="panel-body skeleton-table-body">
+          {Array.from({ length: 4 }).map((_, row) => (
+            <div className="skeleton-table-row" key={row}>
+              <SkeletonBlock />
+              <SkeletonBlock className="short" />
+              <SkeletonBlock className="short" />
+              <SkeletonBlock className="medium" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   )
 }
 
