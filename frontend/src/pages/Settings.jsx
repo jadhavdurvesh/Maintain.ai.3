@@ -5,14 +5,18 @@ import { usePageHeader } from '../PageHeaderContext.jsx'
 import { useReducedEffects } from '../ThemeToggle.jsx'
 import { useAuth } from '../AuthContext.jsx'
 
+const emptyForm = { username: '', full_name: '', email: '', role: 'technician' }
+
 export default function SettingsPage() {
   usePageHeader('Settings')
   const { authRequired, user, logout } = useAuth()
   const [reducedEffects, setReducedEffects] = useReducedEffects()
   const [users, setUsers] = useState(null)
   const [error, setError] = useState(null)
-  const [form, setForm] = useState({ username: '', full_name: '', role: 'technician' })
-
+  const [toast, setToast] = useState(null)
+  const [form, setForm] = useState(emptyForm)
+  const [editing, setEditing] = useState(null)
+  const [savingUser, setSavingUser] = useState(false)
   const [keyStatus, setKeyStatus] = useState(null)
   const [keyDraft, setKeyDraft] = useState('')
   const [keySaving, setKeySaving] = useState(false)
@@ -21,145 +25,75 @@ export default function SettingsPage() {
   const loadKeyStatus = () => api.get('/api/settings/gemini-key').then(setKeyStatus).catch(() => {})
 
   useEffect(() => { load(); loadKeyStatus() }, [])
+  useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(null), 2800); return () => clearTimeout(timer) }, [toast])
 
   const create = async (e) => {
-    e.preventDefault()
-    await api.post('/api/users', form)
-    setForm({ username: '', full_name: '', role: 'technician' })
-    load()
+    e.preventDefault(); setSavingUser(true)
+    try {
+      await api.post('/api/users', form)
+      setForm(emptyForm); await load(); setToast({ type: 'success', message: 'User added successfully.' })
+    } catch (e) { setToast({ type: 'error', message: `Could not add user: ${e.message}` }) }
+    finally { setSavingUser(false) }
+  }
+
+  const startEdit = (u) => {
+    setEditing(u.id)
+    setForm({ username: u.username, full_name: u.full_name || '', email: u.email || '', role: u.role })
+  }
+
+  const saveEdit = async (e) => {
+    e.preventDefault(); setSavingUser(true)
+    try {
+      await api.patch(`/api/users/${editing}`, { full_name: form.full_name, email: form.email || null, role: form.role })
+      setEditing(null); setForm(emptyForm); await load(); setToast({ type: 'success', message: 'User updated successfully.' })
+    } catch (e) { setToast({ type: 'error', message: `Could not update user: ${e.message}` }) }
+    finally { setSavingUser(false) }
+  }
+
+  const toggleActive = async (u) => {
+    try {
+      await api.patch(`/api/users/${u.id}`, { active: !u.active })
+      await load(); setToast({ type: 'success', message: u.active ? 'User deactivated.' : 'User reactivated.' })
+    } catch (e) { setToast({ type: 'error', message: `Could not update user: ${e.message}` }) }
   }
 
   const saveKey = async (e) => {
-    e.preventDefault()
-    if (!keyDraft.trim()) return
-    setKeySaving(true)
-    try {
-      await api.post('/api/settings/gemini-key', { api_key: keyDraft.trim() })
-      setKeyDraft('')
-      await loadKeyStatus()
-    } finally {
-      setKeySaving(false)
-    }
+    e.preventDefault(); if (!keyDraft.trim()) return; setKeySaving(true)
+    try { await api.post('/api/settings/gemini-key', { api_key: keyDraft.trim() }); setKeyDraft(''); await loadKeyStatus() }
+    finally { setKeySaving(false) }
   }
-
-  const clearKey = async () => {
-    await api.del('/api/settings/gemini-key')
-    await loadKeyStatus()
-  }
+  const clearKey = async () => { await api.del('/api/settings/gemini-key'); await loadKeyStatus() }
 
   if (error) return <ErrorState message={error} />
   if (!users) return <Loading />
 
-  return (
-    <>
-      {authRequired && user && (
-        <div className="panel section-gap">
-          <div className="panel-header"><span className="panel-title">Account</span></div>
-          <div className="panel-body">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontWeight: 600 }}>{user.username}</div>
-                <div style={{ color: 'var(--text-faint)', fontSize: 12.5 }}>
-                  {user.organization_name} · {user.role}
-                </div>
-              </div>
-              <button className="btn secondary" onClick={logout}>Sign Out</button>
-            </div>
-          </div>
-        </div>
-      )}
+  return <>
+    {toast && <div className="ui-toast-stack" aria-live="polite"><div className={`ui-toast ${toast.type}`}>{toast.message}</div></div>}
 
-      <div className="panel section-gap">
-        <div className="panel-header"><span className="panel-title">Display &amp; Performance</span></div>
-        <div className="panel-body">
-          <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 12 }}>
-            The frosted-glass look uses a background blur effect. On most machines this is
-            hardware-accelerated and costs nothing noticeable — but on older hardware, some
-            virtual machines, or remote desktop sessions without GPU acceleration, blur can be
-            genuinely expensive. If the app feels sluggish, try this.
-          </p>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <input
-              type="checkbox"
-              style={{ width: 'auto' }}
-              checked={reducedEffects}
-              onChange={(e) => setReducedEffects(e.target.checked)}
-            />
-            Reduce visual effects (disables background blur)
-          </label>
-        </div>
+    {authRequired && user && <div className="panel section-gap"><div className="panel-header"><span className="panel-title">Account</span></div><div className="panel-body"><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><div><div style={{ fontWeight: 600 }}>{user.username}</div><div style={{ color: 'var(--text-faint)', fontSize: 12.5 }}>{user.organization_name} · {user.role}</div></div><button className="btn secondary" onClick={logout}>Sign Out</button></div></div></div>}
+
+    <div className="panel section-gap"><div className="panel-header"><span className="panel-title">Display &amp; Performance</span></div><div className="panel-body"><p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 12 }}>The frosted-glass look uses a background blur effect. If the app feels sluggish on older hardware or remote desktop sessions, reduce it here.</p><label style={{ display: 'flex', alignItems: 'center', gap: 10 }}><input type="checkbox" style={{ width: 'auto' }} checked={reducedEffects} onChange={(e) => setReducedEffects(e.target.checked)} />Reduce visual effects (disables background blur)</label></div></div>
+
+    <div className="panel section-gap"><div className="panel-header"><span className="panel-title">AI Assistant — Gemini API Key</span></div><div className="panel-body"><p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 12 }}>Stored in the application's database and never shipped in source code.</p>{keyStatus?.configured ? <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><span className="badge healthy">Configured · •••• {keyStatus.last4}</span><button className="btn secondary" onClick={clearKey}>Remove Key</button></div> : <form onSubmit={saveKey} style={{ display: 'flex', gap: 8 }}><input type="password" value={keyDraft} onChange={(e) => setKeyDraft(e.target.value)} placeholder="Paste your Gemini API key" /><button className="btn" type="submit" disabled={keySaving}>{keySaving ? 'Saving…' : 'Save Key'}</button></form>}</div></div>
+
+    <div className="panel section-gap">
+      <div className="panel-header"><span className="panel-title">User Management</span><span className="badge neutral">{users.filter((u) => u.active !== false).length} active · {users.length} total</span></div>
+      <div className="panel-body">
+        <div style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 14 }}>Add the people who can receive maintenance work orders. Viewers stay visible in the team but cannot be assigned work.</div>
+        <form className="user-form-grid" onSubmit={editing ? saveEdit : create}>
+          <div className="field"><label>Username</label><input required disabled={!!editing} value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder="ravi.k" /></div>
+          <div className="field"><label>Full name</label><input required value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} placeholder="Ravi Kulkarni" /></div>
+          <div className="field"><label>Email</label><input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="ravi@example.com" /></div>
+          <div className="field"><label>Role</label><select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}><option value="admin">Administrator</option><option value="technician">Technician</option><option value="viewer">Viewer</option></select></div>
+          <div className="user-form-actions"><button className="btn" type="submit" disabled={savingUser}>{savingUser ? 'Saving…' : editing ? 'Save Changes' : 'Add User'}</button>{editing && <button className="btn secondary" type="button" onClick={() => { setEditing(null); setForm(emptyForm) }}>Cancel</button>}</div>
+        </form>
       </div>
+      <div style={{ overflowX: 'auto' }}><table><thead><tr><th>User</th><th>Email</th><th>Role</th><th>Status</th><th></th></tr></thead><tbody>
+        {users.map((u) => <tr key={u.id}><td><div style={{ fontWeight: 600 }}>{u.full_name || u.username}</div><div className="mono" style={{ fontSize: 11, color: 'var(--text-faint)' }}>@{u.username}</div></td><td>{u.email || '—'}</td><td><span className={`badge ${u.role === 'admin' ? 'healthy' : u.role === 'technician' ? 'neutral' : 'warning'}`}>{u.role}</span></td><td><span className={`badge ${u.active !== false ? 'healthy' : 'critical'}`}>{u.active !== false ? 'Active' : 'Inactive'}</span></td><td><div className="chip-row"><button className="btn secondary" onClick={() => startEdit(u)}>Edit</button><button className="btn secondary" disabled={user?.id === u.id && u.active !== false} onClick={() => toggleActive(u)}>{u.active !== false ? 'Deactivate' : 'Activate'}</button></div></td></tr>)}
+        {users.length === 0 && <tr><td colSpan={5} className="empty-state">No users yet.</td></tr>}
+      </tbody></table></div>
+    </div>
 
-      <div className="panel section-gap">
-        <div className="panel-header"><span className="panel-title">AI Assistant — Gemini API Key</span></div>
-        <div className="panel-body">
-          <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 12 }}>
-            Stored locally in this app's own database — never in a source file, never shipped
-            in an installer. The offline diagnostic engine works with no key at all; this only
-            enables the "Use Gemini" option in the AI Assistant.
-          </p>
-          {keyStatus?.configured ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <span className="badge healthy">Configured · •••• {keyStatus.last4}</span>
-              <button className="btn secondary" onClick={clearKey}>Remove Key</button>
-            </div>
-          ) : (
-            <form onSubmit={saveKey} style={{ display: 'flex', gap: 8 }}>
-              <input
-                type="password"
-                value={keyDraft}
-                onChange={(e) => setKeyDraft(e.target.value)}
-                placeholder="Paste your Gemini API key"
-              />
-              <button className="btn" type="submit" disabled={keySaving}>{keySaving ? 'Saving…' : 'Save Key'}</button>
-            </form>
-          )}
-          <p style={{ color: 'var(--text-faint)', fontSize: 12, marginTop: 10 }}>
-            Don't have one? Get a free key at{' '}
-            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>
-              aistudio.google.com/apikey
-            </a>.
-          </p>
-        </div>
-      </div>
-
-      <div className="grid-2">
-        <div className="panel">
-          <div className="panel-header"><span className="panel-title">Add User</span></div>
-          <form className="panel-body" onSubmit={create}>
-            <div className="field"><label>Username</label><input required value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} /></div>
-            <div className="field"><label>Full name</label><input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} /></div>
-            <div className="field">
-              <label>Role</label>
-              <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-                <option value="admin">Administrator — full control</option>
-                <option value="technician">Technician — tasks &amp; AI assistant</option>
-                <option value="viewer">Viewer — dashboard &amp; reports only</option>
-              </select>
-            </div>
-            <button className="btn" type="submit">Add User</button>
-          </form>
-        </div>
-
-        <div className="panel">
-          <div className="panel-header"><span className="panel-title">Users</span></div>
-          <table>
-            <thead><tr><th>Username</th><th>Name</th><th>Role</th></tr></thead>
-            <tbody>
-              {users.map((u) => (
-                <tr key={u.id}><td className="mono">{u.username}</td><td>{u.full_name || '—'}</td><td>{u.role}</td></tr>
-              ))}
-              {users.length === 0 && <tr><td colSpan={3} className="empty-state">No users yet.</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <p style={{ color: 'var(--text-faint)', fontSize: 12, marginTop: 16 }}>
-        {authRequired
-          ? "Roles (admin/technician/viewer) are stored per user but not yet enforced as permissions — anyone signed in can currently do anything their account allows in the UI."
-          : "Running in local mode — no login required. Set REQUIRE_AUTH=true on the backend to turn on multi-company sign-in (see the README)."}
-      </p>
-    </>
-  )
+    <p style={{ color: 'var(--text-faint)', fontSize: 12, marginTop: 16 }}>{authRequired ? 'User roles are now enforced for user administration and work-order assignment.' : 'Local mode is active — the local session has administrator privileges.'}</p>
+  </>
 }
