@@ -46,8 +46,28 @@ export default function Faults() {
 
   const createWorkOrder = async (fault) => {
     setBusy(true)
-    try { await api.post(`/api/faults/${fault.id}/work-order`, {}); alert('Work order created from this fault.'); await load() }
-    catch (e) { alert(`Could not create work order: ${e.message}`) }
+    try {
+      const priority = fault.severity === 'critical'
+        ? 'critical'
+        : fault.severity === 'high'
+          ? 'high'
+          : fault.severity === 'warning'
+            ? 'medium'
+            : fault.severity === 'normal'
+              ? 'low'
+              : 'medium'
+
+      await api.post(`/api/faults/${fault.id}/work-order`, {
+        machine_id: Number(fault.machine_id),
+        problem: fault.description || 'Maintenance issue reported',
+        priority,
+        recommended_actions: fault.symptoms
+          ? `Investigate fault: ${fault.symptoms}`
+          : 'Investigate reported fault and confirm root cause.',
+      })
+      alert('Work order created from this fault.')
+      await load()
+    } catch (e) { alert(`Could not create work order: ${e.message}`) }
     finally { setBusy(false) }
   }
 
