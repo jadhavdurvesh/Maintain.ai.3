@@ -90,6 +90,24 @@ def create_work_order_from_fault(
     if not fault or fault.machine.organization_id != current.organization_id:
         raise HTTPException(404, "fault not found")
 
+    # A fault represents one underlying maintenance issue. Do not create a new
+    # pending/in-progress work order every time the button is clicked.
+    existing = (
+        db.query(models.WorkOrder)
+        .filter(
+            models.WorkOrder.machine_id == fault.machine_id,
+            models.WorkOrder.problem == fault.description,
+            models.WorkOrder.status.in_([
+                models.WorkOrderStatus.pending,
+                models.WorkOrderStatus.in_progress,
+            ]),
+        )
+        .order_by(models.WorkOrder.created_at.desc())
+        .first()
+    )
+    if existing is not None:
+        raise HTTPException(409, f"an active work order already exists (#{existing.id})")
+
     priority = fault.severity.value if hasattr(fault.severity, "value") else str(fault.severity)
     if priority == "warning":
         priority = "medium"
@@ -104,9 +122,32 @@ def create_work_order_from_fault(
         f"Investigate fault: {fault.symptoms}" if fault.symptoms else "Investigate reported fault and confirm root cause."
     )
 
+    assigned_to = data.get("assigned_to")
+    if assigned_to:
+        assignee = (
+            db.query(models.User)
+            .filter(
+                models.User.username == assigned_to,
+                models.User.organization_id == current.organization_id,
+            )
+            .first()
+        )
+        if not assignee:
+            raise HTTPException(400, "assigned user not found in this organization")
+        if assignee.role == models.UserRole.viewer:
+            raise HTTPException(400, "viewers cannot be assigned maintenance work")
+
     wo = models.WorkOrder(**data)
     db.add(wo)
     db.commit()
     db.refresh(wo)
-    audit.log_event(db, "fault", fault.id, "work_order_created", f"Work order #{wo.id} created from fault #{fault.id}")
+    audit.log_event(
+        db,
+        "fault",
+        fault.id,
+        "work_order_created",
+        f"Work order #{wo.id} created from fault #{fault.id}"
+        + (f" and assigned to {wo.assigned_to}" if wo.assigned_to else ""),
+        performed_by=current.username,
+    )
     return wo
