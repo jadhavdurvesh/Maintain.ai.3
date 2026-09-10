@@ -226,8 +226,56 @@ export default function Dashboard() {
   )
 }
 
-function SkeletonBlock({ className = '' }) {
-  return <div className={`dashboard-skeleton-block ${className}`} aria-hidden="true" />
+export function SkeletonBlock({ className = '' }) {
+  return <div className={`skeleton-block ${className}`} aria-hidden="true" />
+}
+
+export function PageSkeleton({ variant = 'table' }) {
+  const rows = variant === 'detail' ? 7 : 6
+  const columns = variant === 'cards' ? 1 : 2
+  return (
+    <div className="page-skeleton" aria-label="Loading page">
+      <div className="page-skeleton-toolbar">
+        <SkeletonBlock className="sk-heading" />
+        <SkeletonBlock className="sk-button" />
+      </div>
+
+      {variant === 'cards' ? (
+        <div className="page-skeleton-card-grid">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div className="panel page-skeleton-card-panel" key={i}>
+              <SkeletonBlock className="sk-card-icon" />
+              <SkeletonBlock className="sk-card-value" />
+              <SkeletonBlock className="sk-line" />
+              <SkeletonBlock className="sk-line short" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="page-skeleton-grid">
+          {Array.from({ length: columns }).map((_, i) => (
+            <div className="panel page-skeleton-panel" key={i}>
+              <div className="panel-header"><SkeletonBlock className="sk-panel-title" /></div>
+              <div className="panel-body skeleton-table-body">
+                {Array.from({ length: rows }).map((_, r) => (
+                  <div className="sk-row" key={r}>
+                    <SkeletonBlock />
+                    <SkeletonBlock className="short" />
+                    <SkeletonBlock className="medium" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="panel page-skeleton-panel section-gap">
+        <div className="panel-header"><SkeletonBlock className="sk-panel-title wide" /></div>
+        <div className="panel-body"><SkeletonBlock className="sk-large" /></div>
+      </div>
+    </div>
+  )
 }
 
 function DashboardSkeleton() {
@@ -288,8 +336,8 @@ function DashboardSkeleton() {
   )
 }
 
-export function Loading() {
-  return <div className="empty-state">Loading…</div>
+export function Loading({ variant = 'table' }) {
+  return <PageSkeleton variant={variant} />
 }
 
 function timeAgo(isoString) {
