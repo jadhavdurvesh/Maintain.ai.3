@@ -2,6 +2,8 @@ name: Fix loading UI
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
 
 permissions:
   contents: write
