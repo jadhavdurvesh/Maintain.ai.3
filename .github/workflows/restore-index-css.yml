@@ -1,0 +1,23 @@
+name: Restore frontend stylesheet
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore index.css from known-good commit
+        run: |
+          git checkout 50b1ce83c66e9a0d518fb7bdd11dba64604b8a45 -- frontend/src/index.css
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/index.css
+          git diff --cached --quiet || git commit -m "Restore frontend stylesheet"
+          git push
