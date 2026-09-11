@@ -1,5 +1,6 @@
 from datetime import datetime
-from typing import Optional, List
+from typing import List, Optional
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -7,9 +8,12 @@ class ComponentIn(BaseModel):
     name: str
     description: Optional[str] = None
 
+
 class ComponentOut(ComponentIn):
     model_config = ConfigDict(from_attributes=True)
+
     id: int
+
 
 class MachineIn(BaseModel):
     machine_code: str
@@ -24,6 +28,7 @@ class MachineIn(BaseModel):
     criticality: str = "medium"
     maintenance_interval_hours: float = 500
 
+
 class MachineUpdate(BaseModel):
     name: Optional[str] = None
     category: Optional[str] = None
@@ -35,8 +40,10 @@ class MachineUpdate(BaseModel):
     health_score: Optional[int] = None
     status: Optional[str] = None
 
+
 class MachineOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+
     id: int
     machine_code: str
     name: str
@@ -54,17 +61,21 @@ class MachineOut(BaseModel):
     next_maintenance_date: Optional[datetime]
     archived: bool = False
 
+
 class SensorReadingIn(BaseModel):
     reading_type: str
     value: float
     unit: Optional[str] = None
     source: str = "manual"
 
+
 class SensorReadingOut(SensorReadingIn):
     model_config = ConfigDict(from_attributes=True)
+
     id: int
     machine_id: int
     recorded_at: datetime
+
 
 class MaintenanceRecordIn(BaseModel):
     type: str
@@ -73,12 +84,15 @@ class MaintenanceRecordIn(BaseModel):
     performed_by: Optional[str] = None
     notes: Optional[str] = None
 
+
 class MaintenanceRecordOut(MaintenanceRecordIn):
     model_config = ConfigDict(from_attributes=True)
+
     id: int
     machine_id: int
     status: str
     completed_date: Optional[datetime]
+
 
 class FaultRecordIn(BaseModel):
     machine_id: int
@@ -88,15 +102,19 @@ class FaultRecordIn(BaseModel):
     resolution: Optional[str] = None
     severity: str = "warning"
 
+
 class FaultRecordOut(FaultRecordIn):
     model_config = ConfigDict(from_attributes=True)
+
     id: int
     reported_date: datetime
     resolved_date: Optional[datetime]
 
+
 class FaultResolveIn(BaseModel):
     cause: Optional[str] = None
     resolution: str
+
 
 class WorkOrderIn(BaseModel):
     machine_id: int
@@ -106,8 +124,10 @@ class WorkOrderIn(BaseModel):
     recommended_actions: Optional[str] = None
     assigned_to: Optional[str] = None
 
+
 class WorkOrderOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+
     id: int
     machine_id: int
     fault_id: Optional[int]
@@ -120,13 +140,16 @@ class WorkOrderOut(BaseModel):
     completed_at: Optional[datetime]
     resolution_notes: Optional[str]
 
+
 class WorkOrderUpdate(BaseModel):
     status: Optional[str] = None
     assigned_to: Optional[str] = None
     resolution_notes: Optional[str] = None
 
+
 class AlertOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+
     id: int
     machine_id: int
     alert_type: str
@@ -136,6 +159,7 @@ class AlertOut(BaseModel):
     acknowledged: bool
     resolved: bool
 
+
 class SparePartIn(BaseModel):
     name: str
     part_number: str
@@ -143,10 +167,13 @@ class SparePartIn(BaseModel):
     minimum_stock: int = 1
     compatible_machine_categories: Optional[str] = None
 
+
 class SparePartOut(SparePartIn):
     model_config = ConfigDict(from_attributes=True)
+
     id: int
     last_used_date: Optional[datetime]
+
 
 class DiagnoseRequest(BaseModel):
     machine_id: Optional[int] = None
@@ -156,10 +183,12 @@ class DiagnoseRequest(BaseModel):
     conversation_id: Optional[str] = None
     user_message: Optional[str] = None
 
+
 class PossibleCause(BaseModel):
     cause: str
     confidence: int
     certainty: str
+
 
 class DiagnoseResponse(BaseModel):
     session_id: Optional[int] = None
@@ -171,6 +200,7 @@ class DiagnoseResponse(BaseModel):
     source: str
     needs_more_info: bool = False
 
+
 class DashboardSummary(BaseModel):
     total_machines: int
     healthy: int
@@ -179,3 +209,21 @@ class DashboardSummary(BaseModel):
     open_work_orders: int
     upcoming_maintenance: int
     active_alerts: int
+
+
+class WorkerProfileOut(BaseModel):
+    user_id: int
+    username: str
+    full_name: Optional[str] = None
+    role: str
+    organization_id: int
+    organization_name: Optional[str] = None
+    active: bool
+
+
+class MachineAssignmentOut(BaseModel):
+    user_id: int
+    username: str
+    machine_id: int
+    machine_name: str
+    assigned: bool = True

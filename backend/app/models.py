@@ -2,8 +2,17 @@ import enum
 from datetime import datetime
 
 from sqlalchemy import (
-    Column, Integer, String, Float, Text, DateTime, Boolean,
-    ForeignKey, Enum, LargeBinary
+    Column,
+    Integer,
+    String,
+    Float,
+    Text,
+    DateTime,
+    Boolean,
+    ForeignKey,
+    Enum,
+    LargeBinary,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 
@@ -256,6 +265,37 @@ class User(Base):
     password_hash = Column(String, nullable=True)
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
     active = Column(Boolean, default=True, nullable=False)
+
+class UserMachineAssignment(Base):
+    __tablename__ = "user_machine_assignments"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "machine_id",
+            name="uq_user_machine_assignment",
+        ),
+    )
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+
+    machine_id = Column(
+        Integer,
+        ForeignKey("machines.id"),
+        nullable=False,
+        index=True,
+    )
 
 
 class AppSetting(Base):
