@@ -69,9 +69,9 @@ export default function SettingsPage() {
       <div className="panel-body">
         <div style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 14 }}>Add the people who can receive maintenance work orders. Viewers stay visible in the team but cannot be assigned work.</div>
         <form className="user-form-grid" onSubmit={editing ? saveEdit : create}>
-          <div className="field"><label>Username</label><input required disabled={!!editing} value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder="ravi.k" /></div>
-          <div className="field"><label>Full name</label><input required value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} placeholder="Ravi Kulkarni" /></div>
-          <div className="field"><label>Email</label><input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="ravi@example.com" /></div>
+          <div className="field"><label>Username</label><input required disabled={!!editing} value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder="user" /></div>
+          <div className="field"><label>Full name</label><input required value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} placeholder="User" /></div>
+          <div className="field"><label>Email</label><input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="user@gmail.com" /></div>
           <div className="field"><label>Role</label><select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}><option value="admin">Administrator</option><option value="technician">Technician</option><option value="viewer">Viewer</option></select></div>
           <div className="user-form-actions"><button className="btn" type="submit" disabled={savingUser}>{savingUser ? 'Saving…' : editing ? 'Save Changes' : 'Add User'}</button>{editing && <button className="btn secondary" type="button" onClick={() => { setEditing(null); setForm(emptyForm) }}>Cancel</button>}</div>
         </form>
