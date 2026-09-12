@@ -20,9 +20,7 @@
 
 <p><strong>AI-powered predictive maintenance and intelligent maintenance management platform.</strong></p>
 
-<p>
-  Monitor assets · Predict machine health · Diagnose faults · Manage maintenance · Analyze reliability · Integrate IoT
-</p>
+<p>Monitor assets · Predict machine health · Diagnose faults · Manage maintenance · Analyze reliability · Integrate IoT</p>
 
 </div>
 
@@ -225,7 +223,7 @@ The desktop package combines the frontend with the backend into an installable a
 
 ## 🔐 Security Verification
 
-The deployed MAINTAIN AI website at **`maintain-ai-3.vercel.app`** received an **A grade** in an ImmuniWeb Website Security Test dated **September 11, 2026**. fileciteturn19file0L2-L8
+The deployed MAINTAIN AI website at **`maintain-ai-3.vercel.app`** received an **A grade** in an ImmuniWeb Website Security Test dated **September 11, 2026**.
 
 <p align="center">
   <a href="https://www.immuniweb.com/websec/maintain-ai-3.vercel.app/3zbllKpI/">
@@ -235,7 +233,7 @@ The deployed MAINTAIN AI website at **`maintain-ai-3.vercel.app`** received an *
 
 **[Verify the security test results →](https://www.immuniweb.com/websec/maintain-ai-3.vercel.app/3zbllKpI/)**
 
-The original certificate identifies the tested target, test date, Grade A result, and independent verification page. fileciteturn19file0L3-L10
+The original certificate identifies the tested target, test date, Grade A result, and independent verification page.
 
 ## 🏗️ System Architecture
 
@@ -296,15 +294,15 @@ Maintain.ai.3/
 ├── frontend/                   # React + Vite application
 │   ├── src/
 │   │   ├── api/                # API client
-│   │   ├── components/          # Shared UI components
-│   │   └── pages/               # Application screens
+│   │   ├── components/         # Shared UI components
+│   │   └── pages/              # Application screens
 │   └── package.json
 │
 ├── desktop/                    # Electron desktop wrapper
 ├── firmware/                   # IoT firmware examples
 │   └── esp32_example.ino
 ├── scripts/                    # Utility and simulation scripts
-├── .github/workflows/           # Project build workflows
+├── .github/workflows/          # Project build workflows
 ├── SETUP.md                    # Detailed setup guide
 ├── DESKTOP.md                  # Desktop packaging guide
 └── README.md
