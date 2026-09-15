@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -8,6 +7,7 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..database import get_db
 from ..deps import CurrentUser, get_authenticated_user
+from ..notification_service import firebase_diagnostics
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
@@ -94,6 +94,16 @@ def list_notifications(
         }
         for row in rows
     ]
+
+
+@router.get("/diagnostics")
+def notification_diagnostics(
+    current: CurrentUser = Depends(get_authenticated_user),
+    db: Session = Depends(get_db),
+):
+    if not current.id:
+        raise HTTPException(401, "authenticated worker required")
+    return firebase_diagnostics(db, current)
 
 
 @router.post("/{notification_id}/read")
