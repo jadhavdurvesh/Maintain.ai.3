@@ -2,40 +2,53 @@
 
 import json
 import os
-from datetime import datetime
 
 from sqlalchemy.orm import Session
 
 from . import models
 
 _firebase_ready = False
-_firebase_failed = False
+_firebase_error: str | None = None
 
 
 def _firebase_messaging():
-    """Initialize Firebase Admin lazily so the API still starts without the secret."""
-    global _firebase_ready, _firebase_failed
-    if _firebase_failed:
-        return None
+    """Initialize Firebase Admin lazily and retry after transient failures."""
+    global _firebase_ready, _firebase_error
+    if _firebase_ready:
+        try:
+            from firebase_admin import messaging
+            return messaging
+        except Exception as exc:
+            _firebase_ready = False
+            _firebase_error = f"{type(exc).__name__}: {exc}"
+            return None
+
     try:
         import firebase_admin
         from firebase_admin import credentials, messaging
 
-        if not _firebase_ready:
-            raw = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
-            if not raw:
-                return None
-            try:
-                service_account = json.loads(raw)
-            except json.JSONDecodeError:
-                _firebase_failed = True
-                return None
-            if not firebase_admin._apps:
-                firebase_admin.initialize_app(credentials.Certificate(service_account))
-            _firebase_ready = True
+        raw = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
+        if not raw:
+            _firebase_error = "FIREBASE_SERVICE_ACCOUNT_JSON is not configured"
+            return None
+
+        try:
+            service_account = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            _firebase_error = f"FIREBASE_SERVICE_ACCOUNT_JSON is invalid JSON: {exc.msg}"
+            return None
+
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(credentials.Certificate(service_account))
+        _firebase_ready = True
+        _firebase_error = None
         return messaging
-    except Exception:
-        _firebase_failed = True
+    except Exception as exc:
+        # Do not permanently disable retries: Vercel instances can start while
+        # environment configuration is still propagating.
+        _firebase_ready = False
+        _firebase_error = f"{type(exc).__name__}: {exc}"
+        print(f"[notifications] Firebase Admin init failed: {_firebase_error}")
         return None
 
 
@@ -63,6 +76,7 @@ def _send_push(db: Session, user: models.User, title: str, body: str, data: dict
         .all()
     )
     if not devices:
+        print(f"[notifications] No active FCM devices for user_id={user.id}")
         return
 
     messages = [
@@ -83,15 +97,32 @@ def _send_push(db: Session, user: models.User, title: str, body: str, data: dict
 
     try:
         response = messaging.send_each(messages)
+        print(
+            f"[notifications] FCM delivery user_id={user.id} "
+            f"success={response.success_count} failed={response.failure_count}"
+        )
+        changed = False
         for device, result in zip(devices, response.responses):
-            if not result.success:
-                error_text = str(result.exception).lower()
-                if "registration-token-not-registered" in error_text or "not a valid fcm registration token" in error_text:
-                    device.active = False
-        db.commit()
-    except Exception:
-        # Push delivery must never break the core transaction/API request.
-        db.rollback()
+            if result.success:
+                continue
+            # Never log the complete token.
+            print(
+                f"[notifications] FCM device failure user_id={user.id} "
+                f"token_suffix={device.device_token[-8:]} error={result.exception!r}"
+            )
+            error_text = str(result.exception).lower()
+            if (
+                "registration-token-not-registered" in error_text
+                or "not a valid fcm registration token" in error_text
+                or "unregistered" in error_text
+            ):
+                device.active = False
+                changed = True
+        if changed:
+            db.commit()
+    except Exception as exc:
+        # Push delivery must never break the core API transaction.
+        print(f"[notifications] FCM send failed: {type(exc).__name__}: {exc}")
 
 
 def notify_worker(
@@ -186,3 +217,20 @@ def notify_alert(db: Session, alert: models.Alert, machine: models.Machine):
         alert.message,
         {"route": "machine_alert", "alert_id": alert.id, "machine_id": machine.id, "severity": severity},
     )
+
+
+def firebase_diagnostics(db: Session, user: models.User) -> dict:
+    devices = (
+        db.query(models.NotificationDevice)
+        .filter(models.NotificationDevice.user_id == user.id)
+        .all()
+    )
+    _firebase_messaging()
+    return {
+        "firebase_configured": bool(os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()),
+        "firebase_admin_ready": _firebase_ready,
+        "firebase_error": _firebase_error,
+        "registered_devices": len(devices),
+        "active_devices": sum(1 for device in devices if device.active),
+        "platforms": sorted({device.platform for device in devices}),
+    }
