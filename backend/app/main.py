@@ -10,7 +10,7 @@ from sqlalchemy import inspect, text
 from . import models
 from .bootstrap import ensure_bootstrap_organization
 from .database import Base, engine
-from .routers import machines, maintenance, work_orders, alerts, spare_parts, ai_assistant, reports, users, settings, audit_log, analytics, devices, auth, faults
+from .routers import machines, maintenance, work_orders, alerts, spare_parts, ai_assistant, reports, users, settings, audit_log, analytics, devices, auth, faults, notifications
 
 Base.metadata.create_all(bind=engine)
 
@@ -65,6 +65,7 @@ app.include_router(maintenance.router)
 app.include_router(work_orders.router)
 app.include_router(alerts.router)
 app.include_router(faults.router)
+app.include_router(notifications.router)
 app.include_router(spare_parts.router)
 app.include_router(ai_assistant.router)
 app.include_router(reports.router)
