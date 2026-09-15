@@ -266,36 +266,37 @@ class User(Base):
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
     active = Column(Boolean, default=True, nullable=False)
 
+
 class UserMachineAssignment(Base):
     __tablename__ = "user_machine_assignments"
+    __table_args__ = (UniqueConstraint("user_id", "machine_id", name="uq_user_machine_assignment"),)
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    machine_id = Column(Integer, ForeignKey("machines.id"), nullable=False, index=True)
 
-    __table_args__ = (
-        UniqueConstraint(
-            "user_id",
-            "machine_id",
-            name="uq_user_machine_assignment",
-        ),
-    )
 
-    id = Column(
-        Integer,
-        primary_key=True,
-        index=True,
-    )
+class NotificationDevice(Base):
+    __tablename__ = "notification_devices"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    device_token = Column(String, unique=True, index=True, nullable=False)
+    platform = Column(String, nullable=False, default="android")
+    app_version = Column(String, nullable=True)
+    active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_seen_at = Column(DateTime, default=datetime.utcnow)
 
-    user_id = Column(
-        Integer,
-        ForeignKey("users.id"),
-        nullable=False,
-        index=True,
-    )
 
-    machine_id = Column(
-        Integer,
-        ForeignKey("machines.id"),
-        nullable=False,
-        index=True,
-    )
+class InAppNotification(Base):
+    __tablename__ = "in_app_notifications"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    notification_type = Column(String, nullable=False, index=True)
+    title = Column(String, nullable=False)
+    body = Column(Text, nullable=False)
+    data_json = Column(Text, nullable=True)
+    read = Column(Boolean, default=False, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
 class AppSetting(Base):
