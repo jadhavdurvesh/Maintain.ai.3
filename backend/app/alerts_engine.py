@@ -1,13 +1,8 @@
-"""
-Smart Alert System — turns machine state into Alert rows.
-
-Kept as a plain function (not a background scheduler) so it can be called
-from a cron job, a webhook after a sensor reading is posted, or a manual
-"recompute alerts" button — whichever fits how this gets deployed.
-"""
+"""Smart machine-state alert evaluation."""
 from sqlalchemy.orm import Session
 
 from . import models
+from .notification_service import notify_alert
 
 
 def evaluate_machine(db: Session, machine: models.Machine) -> list[models.Alert]:
@@ -22,26 +17,41 @@ def evaluate_machine(db: Session, machine: models.Machine) -> list[models.Alert]
         if exists:
             return
         alert = models.Alert(
-            machine_id=machine.id, alert_type=alert_type, severity=severity, message=message
+            machine_id=machine.id,
+            alert_type=alert_type,
+            severity=severity,
+            message=message,
         )
         db.add(alert)
         new_alerts.append(alert)
 
     if machine.health_score < 40:
-        raise_alert("low_health_score", models.AlertSeverity.critical,
-                    f"{machine.name} health score is {machine.health_score}/100 — critical.")
+        raise_alert(
+            "low_health_score",
+            models.AlertSeverity.critical,
+            f"{machine.name} health score is {machine.health_score}/100 — critical.",
+        )
     elif machine.health_score < 70:
-        raise_alert("low_health_score", models.AlertSeverity.warning,
-                    f"{machine.name} health score is {machine.health_score}/100 — attention needed.")
+        raise_alert(
+            "low_health_score",
+            models.AlertSeverity.warning,
+            f"{machine.name} health score is {machine.health_score}/100 — attention needed.",
+        )
 
     interval = machine.maintenance_interval_hours or 500
     hours_remaining = interval - (machine.operating_hours % interval)
     if hours_remaining <= 0:
-        raise_alert("maintenance_overdue", models.AlertSeverity.high,
-                    f"{machine.name} maintenance is overdue.")
+        raise_alert(
+            "maintenance_overdue",
+            models.AlertSeverity.high,
+            f"{machine.name} maintenance is overdue.",
+        )
     elif hours_remaining <= interval * 0.1:
-        raise_alert("maintenance_due_soon", models.AlertSeverity.warning,
-                    f"{machine.name} has {round(hours_remaining)} operating hours left before service.")
+        raise_alert(
+            "maintenance_due_soon",
+            models.AlertSeverity.warning,
+            f"{machine.name} has {round(hours_remaining)} operating hours left before service.",
+        )
 
     recent_faults = (
         db.query(models.FaultRecord)
@@ -49,11 +59,18 @@ def evaluate_machine(db: Session, machine: models.Machine) -> list[models.Alert]
         .count()
     )
     if recent_faults >= 3:
-        raise_alert("repeated_failures", models.AlertSeverity.high,
-                    f"{machine.name} has {recent_faults} unresolved faults on record.")
+        raise_alert(
+            "repeated_failures",
+            models.AlertSeverity.high,
+            f"{machine.name} has {recent_faults} unresolved faults on record.",
+        )
 
     if new_alerts:
         db.commit()
+        for alert in new_alerts:
+            db.refresh(alert)
+            notify_alert(db, alert, machine)
+
     return new_alerts
 
 
