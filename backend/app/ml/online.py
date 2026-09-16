@@ -54,9 +54,16 @@ def update_online_state(db: Session, machine: models.Machine, reading: models.Se
 
     previous_mean = state.mean_value
     previous_ewma = state.ewma if state.sample_count else value
+    previous_std = math.sqrt(max(state.variance, 0.0))
+    sample_count_before = state.sample_count
+
+    # Score against the established baseline BEFORE incorporating this sample.
+    # This prevents a sudden outlier from diluting its own anomaly score.
+    z_score = 0.0 if sample_count_before < 3 or previous_std < 1e-9 else abs(value - previous_mean) / previous_std
+    anomaly_score = min(1.0, z_score / 6.0)
 
     # Welford online mean/variance update.
-    n = state.sample_count + 1
+    n = sample_count_before + 1
     delta = value - state.mean_value
     mean = state.mean_value + (delta / n)
     delta2 = value - mean
@@ -66,10 +73,7 @@ def update_online_state(db: Session, machine: models.Machine, reading: models.Se
 
     # EWMA responds faster than the long-term baseline.
     alpha = 0.25
-    ewma = value if state.sample_count == 0 else alpha * value + (1 - alpha) * state.ewma
-
-    z_score = 0.0 if std < 1e-9 else abs(value - mean) / std
-    anomaly_score = min(1.0, z_score / 6.0)
+    ewma = value if sample_count_before == 0 else alpha * value + (1 - alpha) * state.ewma
     trend_delta = abs(ewma - previous_ewma)
 
     state.sample_count = n
@@ -82,14 +86,15 @@ def update_online_state(db: Session, machine: models.Machine, reading: models.Se
     state.updated_at = datetime.utcnow()
     db.flush()
 
-    # Avoid strong events during cold-start and require persistent evidence.
+    # Cold-start protection plus persistence prevents one noisy sample from
+    # creating a strong behavioural event.
     persistent_change = (
         n >= 10
         and anomaly_score >= 0.35
         and (
             previous_mean == 0
             or abs(value - previous_mean) / max(abs(previous_mean), 1e-9) >= 0.05
-            or trend_delta > max(std * 0.25, 1e-6)
+            or trend_delta > max(previous_std * 0.25, 1e-6)
         )
     )
 
@@ -98,8 +103,10 @@ def update_online_state(db: Session, machine: models.Machine, reading: models.Se
         "machine_id": machine.id,
         "reading_type": reading_type,
         "value": value,
-        "baseline_mean": round(mean, 5),
-        "baseline_std": round(std, 5),
+        "baseline_mean": round(previous_mean, 5),
+        "baseline_std": round(previous_std, 5),
+        "learned_mean": round(mean, 5),
+        "learned_std": round(std, 5),
         "ewma": round(ewma, 5),
         "z_score": round(z_score, 4),
         "anomaly_score": round(anomaly_score, 4),
@@ -110,21 +117,21 @@ def update_online_state(db: Session, machine: models.Machine, reading: models.Se
 
 def score_machine(db: Session, machine_id: int) -> dict:
     states = db.query(models.MLBehaviourState).filter_by(machine_id=machine_id).all()
-
     if not states:
         return {"available": False, "reason": "No online-learning state yet."}
 
-    signals = []
-    for state in states:
-        signals.append({
+    signals = [
+        {
             "reading_type": state.reading_type,
             "anomaly_score": round(state.last_anomaly_score, 4),
             "samples": state.sample_count,
+            "last_value": round(state.last_value, 5),
             "ewma": round(state.ewma, 5),
             "mean": round(state.mean_value, 5),
             "std": round(math.sqrt(max(state.variance, 0.0)), 5),
-        })
-
+        }
+        for state in states
+    ]
     signals.sort(key=lambda item: item["anomaly_score"], reverse=True)
     max_score = signals[0]["anomaly_score"] if signals else 0.0
 
