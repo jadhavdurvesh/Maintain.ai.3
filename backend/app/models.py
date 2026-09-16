@@ -72,7 +72,6 @@ class UserRole(str, enum.Enum):
 
 class Machine(Base):
     __tablename__ = "machines"
-
     id = Column(Integer, primary_key=True, index=True)
     machine_code = Column(String, unique=True, index=True, nullable=False)
     name = Column(String, nullable=False)
@@ -325,3 +324,24 @@ class MLModelArtifact(Base):
     trained_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     n_samples = Column(Integer, nullable=False, default=0)
     artifact = Column(LargeBinary, nullable=False)
+
+
+class MLBehaviourState(Base):
+    """Persistent online-learning state for one machine/sensor signal."""
+    __tablename__ = "ml_behaviour_states"
+    __table_args__ = (
+        UniqueConstraint("machine_id", "reading_type", name="uq_ml_behaviour_machine_signal"),
+    )
+    id = Column(Integer, primary_key=True, index=True)
+    machine_id = Column(Integer, ForeignKey("machines.id"), nullable=False, index=True)
+    reading_type = Column(String, nullable=False, index=True)
+    model_version = Column(Integer, nullable=False, default=1)
+    sample_count = Column(Integer, nullable=False, default=0)
+    mean_value = Column(Float, nullable=False, default=0.0)
+    m2 = Column(Float, nullable=False, default=0.0)
+    variance = Column(Float, nullable=False, default=0.0)
+    ewma = Column(Float, nullable=False, default=0.0)
+    last_value = Column(Float, nullable=False, default=0.0)
+    last_anomaly_score = Column(Float, nullable=False, default=0.0)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
