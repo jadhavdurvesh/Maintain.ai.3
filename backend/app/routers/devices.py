@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from .. import models, audit
 from ..database import get_db
 from ..alerts_engine import evaluate_machine
+from ..ml.online import update_online_state
 
 router = APIRouter(prefix="/api/devices", tags=["devices"])
 
@@ -98,8 +99,6 @@ def _reading_condition_score(db: Session, machine: models.Machine, reading_type:
                 return max(10.0, 60.0 - (ratio - 1.50) * 60.0)
         return 100.0
 
-    # Humidity and other informational sensors do not directly penalize
-    # machine health without a machine-specific engineering threshold.
     return 100.0
 
 
@@ -114,8 +113,6 @@ def _apply_live_sensor_health(db: Session, machine: models.Machine, reading: mod
     elif condition < 90:
         delta = -1
     else:
-        # Normal readings do not instantly restore health. A small recovery
-        # models stabilization after the machine returns to normal operation.
         delta = 1
 
     old_score = int(machine.health_score or 0)
@@ -134,7 +131,7 @@ def _apply_live_sensor_health(db: Session, machine: models.Machine, reading: mod
 class DeviceStatusOut(BaseModel):
     iot_enabled: bool
     has_key: bool
-    device_key: str | None = None  # only ever returned once, right after (re)generation
+    device_key: str | None = None
 
 
 class IngestPayload(BaseModel):
@@ -153,8 +150,6 @@ def device_status(machine_id: int, db: Session = Depends(get_db)):
 
 @router.post("/{machine_id}/enable", response_model=DeviceStatusOut)
 def enable_device(machine_id: int, db: Session = Depends(get_db)):
-    """Turns on IoT ingestion for this machine and issues a fresh device key.
-    Calling this again rotates the key — the old one stops working immediately."""
     machine = db.get(models.Machine, machine_id)
     if not machine:
         raise HTTPException(404, "machine not found")
@@ -167,9 +162,6 @@ def enable_device(machine_id: int, db: Session = Depends(get_db)):
 
 @router.post("/{machine_id}/disable", response_model=DeviceStatusOut)
 def disable_device(machine_id: int, db: Session = Depends(get_db)):
-    """Turns IoT ingestion back off. The key is kept (not deleted) so
-    re-enabling later doesn't silently reuse an old, possibly-leaked key —
-    enabling again always issues a brand new one."""
     machine = db.get(models.Machine, machine_id)
     if not machine:
         raise HTTPException(404, "machine not found")
@@ -185,7 +177,9 @@ def ingest_reading(
     x_device_key: str = Header(..., alias="X-Device-Key"),
     db: Session = Depends(get_db),
 ):
-    """What an ESP32 (or any device) actually calls — see firmware/esp32_example.ino."""
+    """Accept a device reading and feed it through the existing processing path
+    plus the new incremental behavioural learner.
+    """
     machine = db.query(models.Machine).filter_by(device_key=x_device_key).first()
     if not machine or not machine.iot_enabled:
         raise HTTPException(401, "invalid or disabled device key")
@@ -201,11 +195,18 @@ def ingest_reading(
     db.commit()
     db.refresh(reading)
 
-    # Live data now has two effects:
-    # 1) the existing alert engine evaluates machine conditions;
-    # 2) this transparent sensor-health layer adjusts the stored health score.
+    # Existing transparent health + alert processing remains intact.
     _apply_live_sensor_health(db, machine, reading)
     evaluate_machine(db, machine)
     _check_sensor_anomaly(db, machine, reading)
 
-    return {"accepted": True, "machine": machine.name, "recorded_at": reading.recorded_at}
+    # Lab ML: update the machine's learned baseline in O(1) state. This does
+    # not retrain the RandomForest and is safe to run for every telemetry point.
+    behaviour = update_online_state(db, machine, reading)
+
+    return {
+        "accepted": True,
+        "machine": machine.name,
+        "recorded_at": reading.recorded_at,
+        "behaviour": behaviour,
+    }
