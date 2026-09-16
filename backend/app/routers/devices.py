@@ -1,22 +1,17 @@
 """
-Optional live-sensor integration. A machine works with pure manual entry
-forever if nobody touches this — iot_enabled defaults to False and the
-ingest endpoint refuses readings until a device key exists AND the machine
-has been explicitly switched on.
+Optional live-sensor integration for the Lab branch.
 
-This is intentionally a separate, minimal auth path (a per-machine key in
-a header) rather than requiring a full user login, since an ESP32 has no
-browser session to log in with. The key is scoped to exactly one machine
-and can be regenerated (invalidating the old one) at any time.
+REST ingestion remains backwards compatible. The Lab branch additionally
+supports a long-lived WebSocket connection for continuous telemetry.
 """
 import secrets
 
-from fastapi import APIRouter, Depends, HTTPException, Header
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Header, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
 from .. import models, audit
-from ..database import get_db
+from ..database import get_db, SessionLocal
 from ..alerts_engine import evaluate_machine
 from ..ml.online import update_online_state
 
@@ -24,7 +19,6 @@ router = APIRouter(prefix="/api/devices", tags=["devices"])
 
 
 def _check_sensor_anomaly(db: Session, machine: models.Machine, reading: models.SensorReading):
-    """Compare this reading with the machine's own recent baseline."""
     recent = (
         db.query(models.SensorReading)
         .filter_by(machine_id=machine.id, reading_type=reading.reading_type)
@@ -56,29 +50,19 @@ def _check_sensor_anomaly(db: Session, machine: models.Machine, reading: models.
 
 
 def _reading_condition_score(db: Session, machine: models.Machine, reading_type: str, value: float) -> float:
-    """Turn a live sensor into a simple 0-100 condition score.
-
-    This is a transparent engineering heuristic, not the ML model. It is
-    deliberately conservative so the UI health score visibly reacts to live
-    sensor stress while the learned RandomForest remains responsible for
-    predictive-risk analysis elsewhere in the application.
-    """
     kind = (reading_type or "").lower()
-
     if kind == "temperature":
         if value <= 45:
             return 100.0
         if value <= 60:
             return 100.0 - (value - 45.0) * 2.0
         return max(10.0, 70.0 - (value - 60.0) * 3.0)
-
     if kind == "vibration":
         if value <= 3:
             return 100.0
         if value <= 5:
             return 100.0 - (value - 3.0) * 12.5
         return max(10.0, 75.0 - (value - 5.0) * 13.0)
-
     if kind in {"current", "load"}:
         recent = (
             db.query(models.SensorReading)
@@ -97,27 +81,14 @@ def _reading_condition_score(db: Session, machine: models.Machine, reading_type:
                 if ratio <= 1.50:
                     return max(60.0, 100.0 - (ratio - 1.20) * 133.0)
                 return max(10.0, 60.0 - (ratio - 1.50) * 60.0)
-        return 100.0
-
     return 100.0
 
 
 def _apply_live_sensor_health(db: Session, machine: models.Machine, reading: models.SensorReading):
-    """Gradually move the stored health score according to live sensor stress."""
     condition = _reading_condition_score(db, machine, reading.reading_type, reading.value)
-
-    if condition < 40:
-        delta = -5
-    elif condition < 70:
-        delta = -2
-    elif condition < 90:
-        delta = -1
-    else:
-        delta = 1
-
+    delta = -5 if condition < 40 else -2 if condition < 70 else -1 if condition < 90 else 1
     old_score = int(machine.health_score or 0)
     new_score = max(0, min(100, old_score + delta))
-
     if new_score != old_score:
         machine.health_score = new_score
         machine.status = (
@@ -138,6 +109,25 @@ class IngestPayload(BaseModel):
     reading_type: str
     value: float
     unit: str | None = None
+
+
+def _process_reading(db: Session, machine: models.Machine, payload: IngestPayload):
+    """Single source of truth for REST and WebSocket sensor ingestion."""
+    reading = models.SensorReading(
+        machine_id=machine.id,
+        reading_type=payload.reading_type,
+        value=payload.value,
+        unit=payload.unit,
+        source="sensor",
+    )
+    db.add(reading)
+    db.commit()
+    db.refresh(reading)
+    _apply_live_sensor_health(db, machine, reading)
+    evaluate_machine(db, machine)
+    _check_sensor_anomaly(db, machine, reading)
+    behaviour = update_online_state(db, machine, reading)
+    return reading, behaviour
 
 
 @router.get("/{machine_id}/status", response_model=DeviceStatusOut)
@@ -177,36 +167,104 @@ def ingest_reading(
     x_device_key: str = Header(..., alias="X-Device-Key"),
     db: Session = Depends(get_db),
 ):
-    """Accept a device reading and feed it through the existing processing path
-    plus the new incremental behavioural learner.
-    """
     machine = db.query(models.Machine).filter_by(device_key=x_device_key).first()
     if not machine or not machine.iot_enabled:
         raise HTTPException(401, "invalid or disabled device key")
-
-    reading = models.SensorReading(
-        machine_id=machine.id,
-        reading_type=payload.reading_type,
-        value=payload.value,
-        unit=payload.unit,
-        source="sensor",
-    )
-    db.add(reading)
-    db.commit()
-    db.refresh(reading)
-
-    # Existing transparent health + alert processing remains intact.
-    _apply_live_sensor_health(db, machine, reading)
-    evaluate_machine(db, machine)
-    _check_sensor_anomaly(db, machine, reading)
-
-    # Lab ML: update the machine's learned baseline in O(1) state. This does
-    # not retrain the RandomForest and is safe to run for every telemetry point.
-    behaviour = update_online_state(db, machine, reading)
-
+    reading, behaviour = _process_reading(db, machine, payload)
     return {
         "accepted": True,
         "machine": machine.name,
         "recorded_at": reading.recorded_at,
         "behaviour": behaviour,
     }
+
+
+@router.websocket("/ws")
+async def device_websocket(websocket: WebSocket):
+    """Long-lived Lab telemetry channel.
+
+    Handshake:
+      {"type":"authenticate","device_key":"..."}
+    Then repeatedly send:
+      {"type":"reading","reading_type":"temperature","value":29.3,"unit":"°C"}
+
+    The existing REST endpoint remains available for older devices.
+    """
+    await websocket.accept()
+    db = SessionLocal()
+    try:
+        try:
+            auth_message = await websocket.receive_json()
+        except Exception:
+            await websocket.close(code=1008, reason="authentication required")
+            return
+
+        if auth_message.get("type") != "authenticate" or not auth_message.get("device_key"):
+            await websocket.send_json({"type": "error", "message": "authentication required"})
+            await websocket.close(code=1008)
+            return
+
+        machine = (
+            db.query(models.Machine)
+            .filter_by(device_key=str(auth_message["device_key"]), iot_enabled=True)
+            .first()
+        )
+        if not machine:
+            await websocket.send_json({"type": "error", "message": "invalid or disabled device key"})
+            await websocket.close(code=1008)
+            return
+
+        await websocket.send_json({
+            "type": "authenticated",
+            "machine_id": machine.id,
+            "machine": machine.name,
+            "protocol": "maintain-ai",
+            "version": 1,
+        })
+
+        while True:
+            message = await websocket.receive_json()
+            if message.get("type") == "ping":
+                await websocket.send_json({"type": "pong"})
+                continue
+            if message.get("type") != "reading":
+                await websocket.send_json({"type": "error", "message": "unsupported message type"})
+                continue
+            try:
+                payload = IngestPayload.model_validate(message)
+            except ValidationError as exc:
+                await websocket.send_json({"type": "error", "message": "invalid reading payload", "errors": exc.errors()})
+                continue
+
+            # Re-open the machine from the DB for each message so key rotation
+            # or IoT disablement takes effect on an existing socket too.
+            machine = (
+                db.query(models.Machine)
+                .filter_by(id=machine.id, device_key=str(auth_message["device_key"]), iot_enabled=True)
+                .first()
+            )
+            if not machine:
+                await websocket.send_json({"type": "error", "message": "device disabled or key rotated"})
+                await websocket.close(code=1008)
+                return
+
+            reading, behaviour = _process_reading(db, machine, payload)
+            await websocket.send_json({
+                "type": "reading_accepted",
+                "reading_id": reading.id,
+                "reading_type": reading.reading_type,
+                "value": reading.value,
+                "unit": reading.unit,
+                "recorded_at": reading.recorded_at.isoformat() if reading.recorded_at else None,
+                "behaviour": behaviour,
+            })
+    except WebSocketDisconnect:
+        pass
+    except Exception as exc:
+        print(f"[iot-ws] connection error: {type(exc).__name__}: {exc}")
+        try:
+            await websocket.close(code=1011)
+        except Exception:
+            pass
+    finally:
+        db.close()
