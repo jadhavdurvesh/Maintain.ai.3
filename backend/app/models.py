@@ -345,3 +345,19 @@ class MLBehaviourState(Base):
     last_anomaly_score = Column(Float, nullable=False, default=0.0)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class MLAnomalyEvent(Base):
+    """Durable record of a confirmed behavioural anomaly in the Lab."""
+    __tablename__ = "ml_anomaly_events"
+    id = Column(Integer, primary_key=True, index=True)
+    machine_id = Column(Integer, ForeignKey("machines.id"), nullable=False, index=True)
+    reading_type = Column(String, nullable=False, index=True)
+    anomaly_score = Column(Float, nullable=False, default=0.0)
+    severity = Column(Enum(AlertSeverity), nullable=False, default=AlertSeverity.warning)
+    message = Column(Text, nullable=False)
+    evidence_json = Column(Text, nullable=True)
+    notified = Column(Boolean, nullable=False, default=False)
+    acknowledged = Column(Boolean, nullable=False, default=False)
+    resolved = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
