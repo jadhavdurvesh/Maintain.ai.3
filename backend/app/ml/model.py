@@ -1,18 +1,15 @@
 """
-The local predictive model — deliberately small and cheap to run:
-RandomForestRegressor with 40 shallow trees. It predicts in milliseconds on
-CPU and now uses compact rolling sensor summaries alongside the existing
-maintenance/fault features.
+The optional batch predictive model.
 
-The serialized model is stored in the application's database so training and
-predictions persist across Vercel serverless instances and restarts.
+The live Lab anomaly pipeline does not require scikit-learn. To keep the
+serverless preview deployment lightweight, the RandomForest implementation is
+loaded only when the training/prediction endpoints are actually used and the
+ML packages are installed in the local ML environment.
 """
 import io
 import json
 from datetime import datetime
 
-import joblib
-from sklearn.ensemble import RandomForestRegressor
 from sqlalchemy.orm import Session
 
 from .. import models
@@ -22,7 +19,31 @@ MIN_TRAINING_SAMPLES = 4
 MODEL_VERSION = 2
 
 
+def _ml_backend():
+    try:
+        import joblib
+        from sklearn.ensemble import RandomForestRegressor
+        return joblib, RandomForestRegressor
+    except ImportError:
+        return None, None
+
+
+def _unavailable():
+    return {
+        "trained": False,
+        "available": False,
+        "reason": (
+            "The optional batch ML backend is not installed in this serverless deployment. "
+            "The live online behavioural and anomaly pipeline remains available."
+        ),
+    }
+
+
 def train(db: Session) -> dict:
+    joblib, RandomForestRegressor = _ml_backend()
+    if joblib is None or RandomForestRegressor is None:
+        return _unavailable()
+
     X, y, machine_ids = build_training_data(db)
 
     if len(X) < MIN_TRAINING_SAMPLES:
@@ -42,11 +63,8 @@ def train(db: Session) -> dict:
         n_jobs=1,
     )
     model.fit(X, y)
-
     in_sample_r2 = model.score(X, y)
 
-    # joblib's serialized artifact is small (typically tens of KB) and is
-    # persisted in Neon rather than relying on a serverless filesystem.
     buffer = io.BytesIO()
     joblib.dump(model, buffer)
     artifact = buffer.getvalue()
@@ -86,6 +104,10 @@ def train(db: Session) -> dict:
 
 
 def _load(db: Session):
+    joblib, _ = _ml_backend()
+    if joblib is None:
+        return None
+
     saved = db.query(models.MLModelArtifact).order_by(models.MLModelArtifact.id.desc()).first()
     if not saved:
         return None
@@ -111,6 +133,9 @@ def _is_compatible(saved: dict) -> bool:
 
 
 def model_status(db: Session) -> dict:
+    if _ml_backend()[0] is None:
+        return _unavailable() | {"endpoint": "batch_risk_model"}
+
     saved = _load(db)
     if not saved:
         return {"trained": False, "reason": "Model hasn't been trained yet."}
@@ -130,8 +155,10 @@ def model_status(db: Session) -> dict:
 
 
 def predict_risk(db: Session) -> dict:
-    saved = _load(db)
+    if _ml_backend()[0] is None:
+        return _unavailable()
 
+    saved = _load(db)
     if not saved:
         return {"available": False, "reason": "Model hasn't been trained yet — use the Retrain button."}
 
