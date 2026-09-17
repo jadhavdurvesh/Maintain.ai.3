@@ -38,8 +38,25 @@ def ensure_user_work_order_schema():
             connection.execute(text("ALTER TABLE work_orders ADD COLUMN fault_id INTEGER"))
 
 
+def ensure_lab_ml_schema():
+    """Create Lab ML tables on already-running databases.
+
+    Base.metadata.create_all handles new databases, while this compatibility
+    path makes the additive Lab schema available to existing deployments.
+    """
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    missing = {
+        "ml_behaviour_states",
+        "ml_anomaly_events",
+    } - tables
+    if missing:
+        Base.metadata.create_all(bind=engine)
+
+
 ensure_ai_conversation_schema()
 ensure_user_work_order_schema()
+ensure_lab_ml_schema()
 ensure_bootstrap_organization()
 
 if os.getenv("SEED_DEMO_DATA", "").lower() == "true":
