@@ -5,8 +5,9 @@ sensor baseline incrementally, without rebuilding a training dataset for every
 reading. Welford statistics provide an online mean/variance and EWMA captures
 short-term drift.
 
-The first phase intentionally produces evidence/anomaly scores. Notification
-policy and supervised model promotion stay separate until validated.
+The Lab layer also combines simultaneous sensor deviations so a machine can
+surface a multi-sensor behavioural change rather than treating every signal in
+isolation.
 """
 import math
 from datetime import datetime
@@ -16,7 +17,8 @@ from sqlalchemy.orm import Session
 from .. import models
 
 FEATURES = ("temperature", "vibration", "current", "load")
-MODEL_VERSION = 1
+MODEL_VERSION = 2
+ACTIVE_THRESHOLD = 0.35
 
 
 def _safe_float(value):
@@ -77,6 +79,7 @@ def update_online_state(db: Session, machine: models.Machine, reading: models.Se
     trend_delta = abs(ewma - previous_ewma)
 
     state.sample_count = n
+    state.model_version = MODEL_VERSION
     state.mean_value = mean
     state.m2 = m2
     state.variance = variance
@@ -90,7 +93,7 @@ def update_online_state(db: Session, machine: models.Machine, reading: models.Se
     # creating a strong behavioural event.
     persistent_change = (
         n >= 10
-        and anomaly_score >= 0.35
+        and anomaly_score >= ACTIVE_THRESHOLD
         and (
             previous_mean == 0
             or abs(value - previous_mean) / max(abs(previous_mean), 1e-9) >= 0.05
@@ -115,25 +118,81 @@ def update_online_state(db: Session, machine: models.Machine, reading: models.Se
     }
 
 
+def _signal_direction(state: models.MLBehaviourState) -> int:
+    """Return the learned short-term direction: +1, -1, or 0."""
+    std = math.sqrt(max(state.variance, 0.0))
+    if std < 1e-9:
+        return 0
+    drift = (state.ewma - state.mean_value) / std
+    if abs(drift) < 0.20:
+        return 0
+    return 1 if drift > 0 else -1
+
+
 def score_machine(db: Session, machine_id: int) -> dict:
-    states = db.query(models.MLBehaviourState).filter_by(machine_id=machine_id).all()
+    states = (
+        db.query(models.MLBehaviourState)
+        .filter_by(machine_id=machine_id)
+        .order_by(models.MLBehaviourState.reading_type.asc())
+        .all()
+    )
     if not states:
         return {"available": False, "reason": "No online-learning state yet."}
 
-    signals = [
-        {
+    signals = []
+    active_states = []
+    for state in states:
+        signal = {
             "reading_type": state.reading_type,
             "anomaly_score": round(state.last_anomaly_score, 4),
+            "active": state.last_anomaly_score >= ACTIVE_THRESHOLD and state.sample_count >= 10,
             "samples": state.sample_count,
             "last_value": round(state.last_value, 5),
             "ewma": round(state.ewma, 5),
             "mean": round(state.mean_value, 5),
             "std": round(math.sqrt(max(state.variance, 0.0)), 5),
+            "direction": _signal_direction(state),
         }
-        for state in states
-    ]
+        signals.append(signal)
+        if signal["active"]:
+            active_states.append((state, signal))
+
     signals.sort(key=lambda item: item["anomaly_score"], reverse=True)
     max_score = signals[0]["anomaly_score"] if signals else 0.0
+
+    # Multi-sensor correlation is deliberately evidence-based rather than a
+    # probability. Two or more active signals moving together strengthen the
+    # machine-level signal. Opposing directions do not get the same boost.
+    active_count = len(active_states)
+    directions = [signal["direction"] for _, signal in active_states if signal["direction"] != 0]
+    if directions:
+        dominant = 1 if sum(directions) >= 0 else -1
+        agreement = sum(1 for direction in directions if direction == dominant) / len(directions)
+    else:
+        agreement = 0.0
+
+    coincidence_boost = min(0.50, max(0, active_count - 1) * 0.15)
+    direction_boost = 0.05 * agreement if active_count >= 2 else 0.0
+    correlation_score = min(1.0, max_score * (1.0 + coincidence_boost) + direction_boost)
+    correlated = active_count >= 2 and agreement >= 0.50
+
+    correlation_severity = (
+        "critical" if correlation_score >= 0.80
+        else "high" if correlation_score >= 0.60
+        else "warning" if correlation_score >= ACTIVE_THRESHOLD
+        else "normal"
+    )
+
+    evidence = [
+        {
+            "reading_type": signal["reading_type"],
+            "anomaly_score": signal["anomaly_score"],
+            "direction": signal["direction"],
+            "ewma": signal["ewma"],
+            "baseline": signal["mean"],
+        }
+        for _, signal in active_states
+    ]
 
     return {
         "available": True,
@@ -142,8 +201,16 @@ def score_machine(db: Session, machine_id: int) -> dict:
         "severity": (
             "critical" if max_score >= 0.80
             else "high" if max_score >= 0.60
-            else "warning" if max_score >= 0.35
+            else "warning" if max_score >= ACTIVE_THRESHOLD
             else "normal"
         ),
+        "multi_sensor": {
+            "correlated": correlated,
+            "active_signals": active_count,
+            "direction_agreement": round(agreement, 4),
+            "correlation_score": round(correlation_score, 4),
+            "severity": correlation_severity,
+            "evidence": evidence,
+        },
         "signals": signals,
     }
