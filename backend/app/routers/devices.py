@@ -14,6 +14,8 @@ from .. import models, audit
 from ..database import get_db, SessionLocal
 from ..alerts_engine import evaluate_machine
 from ..ml.online import update_online_state
+from ..ml.anomaly_events import create_anomaly_event
+from ..notification_service import notify_machine_workers
 
 router = APIRouter(prefix="/api/devices", tags=["devices"])
 
@@ -127,6 +129,35 @@ def _process_reading(db: Session, machine: models.Machine, payload: IngestPayloa
     evaluate_machine(db, machine)
     _check_sensor_anomaly(db, machine, reading)
     behaviour = update_online_state(db, machine, reading)
+
+    # Confirmed Lab anomalies are durable and deduplicated. Only high/critical
+    # events are promoted to worker push notifications in this phase, keeping
+    # normal sensor noise out of the notification channel.
+    anomaly_event = None
+    if behaviour.get("persistent_change"):
+        anomaly_message = (
+            f"{machine.name}: {reading.reading_type} behaviour changed from its learned baseline. "
+            f"Anomaly score {behaviour.get('anomaly_score', 0):.2f}."
+        )
+        anomaly_event = create_anomaly_event(db, machine, behaviour, anomaly_message)
+        if anomaly_event and anomaly_event.severity in {models.AlertSeverity.high, models.AlertSeverity.critical}:
+            notify_machine_workers(
+                db,
+                machine.id,
+                "ml_anomaly",
+                "Machine Behaviour Anomaly",
+                anomaly_message,
+                {
+                    "route": "machine_alert",
+                    "machine_id": machine.id,
+                    "anomaly_event_id": anomaly_event.id,
+                    "reading_type": reading.reading_type,
+                    "severity": anomaly_event.severity.value,
+                },
+            )
+            anomaly_event.notified = True
+            db.commit()
+
     return reading, behaviour
 
 
