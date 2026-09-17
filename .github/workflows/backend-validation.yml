@@ -2,9 +2,9 @@ name: Backend Validation
 
 on:
   push:
-    branches: [main]
+    branches: [main, Lab]
   pull_request:
-    branches: [main]
+    branches: [main, Lab]
 
 jobs:
   validate:
