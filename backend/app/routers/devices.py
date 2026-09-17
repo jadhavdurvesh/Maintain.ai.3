@@ -130,9 +130,8 @@ def _process_reading(db: Session, machine: models.Machine, payload: IngestPayloa
     _check_sensor_anomaly(db, machine, reading)
     behaviour = update_online_state(db, machine, reading)
 
-    # Confirmed Lab anomalies are durable and deduplicated. Only high/critical
-    # events are promoted to worker push notifications in this phase, keeping
-    # normal sensor noise out of the notification channel.
+    # Confirmed Lab anomalies are durable and deduplicated. A worker push is
+    # emitted only the first time an event reaches high/critical severity.
     anomaly_event = None
     if behaviour.get("persistent_change"):
         anomaly_message = (
@@ -140,7 +139,11 @@ def _process_reading(db: Session, machine: models.Machine, payload: IngestPayloa
             f"Anomaly score {behaviour.get('anomaly_score', 0):.2f}."
         )
         anomaly_event = create_anomaly_event(db, machine, behaviour, anomaly_message)
-        if anomaly_event and anomaly_event.severity in {models.AlertSeverity.high, models.AlertSeverity.critical}:
+        if (
+            anomaly_event
+            and not anomaly_event.notified
+            and anomaly_event.severity in {models.AlertSeverity.high, models.AlertSeverity.critical}
+        ):
             notify_machine_workers(
                 db,
                 machine.id,
