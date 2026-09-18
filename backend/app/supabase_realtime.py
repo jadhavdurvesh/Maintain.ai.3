@@ -13,7 +13,7 @@ async def broadcast(topic: str, event: str, payload: dict, private: bool = True)
     if private: url += "?private=true"
     body = json.dumps(payload).encode("utf-8")
     def send():
-        req = urllib.request.Request(url, data=body, method="POST", headers={"apikey": SUPABASE_SECRET_KEY, "Content-Type": "application/json"})
+        req = urllib.request.Request(url, data=body, method="POST", headers={"apikey": SUPABASE_SECRET_KEY, "Authorization": "Bearer " + SUPABASE_SECRET_KEY, "Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=3) as response: return 200 <= response.status < 300
     try: return await asyncio.to_thread(send)
     except Exception: return False
