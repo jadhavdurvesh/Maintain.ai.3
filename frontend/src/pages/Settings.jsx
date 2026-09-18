@@ -64,6 +64,15 @@ export default function SettingsPage() {
       .then(setUsers)
       .catch((e) => setError(e.message))
 
+  const loadMembers = () => api.get('/api/users/members').then(setMembers).catch(() => {})
+
+  const setApplication = async (userId, application, enabled) => {
+    setAppSaving(userId + application)
+    try { await api.post(`/api/users/${userId}/applications/${application}?enabled=${enabled}`); await loadMembers(); setToast({type:'success', message:'Application access updated.'}) }
+    catch (e) { setToast({type:'error', message:`Could not update application access: ${e.message}`}) }
+    finally { setAppSaving(null) }
+  }
+
   const loadMachines = () =>
     api
       .get('/api/machines')
@@ -78,6 +87,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     load()
+    loadMembers()
     loadMachines()
     loadKeyStatus()
   }, [])
@@ -546,6 +556,14 @@ export default function SettingsPage() {
               </button>
             </form>
           )}
+        </div>
+      </div>
+
+      <div className="panel section-gap">
+        <div className="panel-header"><span className="panel-title">Application Access</span><span className="badge neutral">{members?.length || 0} organization members</span></div>
+        <div className="panel-body">
+          <p style={{color:'var(--text-dim)',fontSize:13,marginBottom:14}}>Control which Maintain.ai client each organization member can use. Engineering access stays in the main application; workforce access is for technician operations.</p>
+          {members && <div style={{overflowX:'auto'}}><table><thead><tr><th>User</th><th>Engineering</th><th>Android</th><th>Workforce</th></tr></thead><tbody>{members.map(m=><tr key={m.user_id}><td><strong>{m.full_name || m.username}</strong><div className="mono" style={{fontSize:11,color:'var(--text-faint)'}}>{m.email || '@'+m.username}</div></td>{['engineering','android','workforce'].map(app=>{const on=m.applications.includes(app); const busy=appSaving===m.user_id+app; return <td key={app}><button className={on?'btn':'btn secondary'} disabled={busy} onClick={()=>setApplication(m.user_id,app,!on)}>{busy?'…':on?'Enabled':'Enable'}</button></td>})}</tr>)}</tbody></table></div>}
         </div>
       </div>
 
