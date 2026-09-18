@@ -28,7 +28,27 @@ def get_risk_predictions(db: Session = Depends(get_db)):
     return risk_model.predict_risk(db)
 
 
-@router.get("/temporal-model-status")\ndef get_temporal_model_status():\n    """Return the bootstrap temporal model artifact and calibration status."""\n    return temporal_artifact_status()\n\n\n@router.get("/pretrained-model-status")\ndef get_pretrained_model_status():\n    """Return optional pretrained zero-shot model availability."""\n    return pretrained_status()\n\n\n@router.get("/machines/{machine_id}/pretrained-anomaly")\ndef get_pretrained_anomaly(machine_id: int, db: Session = Depends(get_db)):\n    """Run optional pretrained anomaly inference without training or calibration."""\n    if db.get(models.Machine, machine_id) is None:\n        raise HTTPException(404, "machine not found")\n    return score_pretrained_machine(db, machine_id)\n\n\n@router.get("/machines/{machine_id}/behaviour")
+@router.get("/temporal-model-status")
+def get_temporal_model_status():
+    """Return the bootstrap temporal model artifact and calibration status."""
+    return temporal_artifact_status()
+
+
+@router.get("/pretrained-model-status")
+def get_pretrained_model_status():
+    """Return optional pretrained zero-shot model availability."""
+    return pretrained_status()
+
+
+@router.get("/machines/{machine_id}/pretrained-anomaly")
+def get_pretrained_anomaly(machine_id: int, db: Session = Depends(get_db)):
+    """Run optional pretrained anomaly inference without training or calibration."""
+    if db.get(models.Machine, machine_id) is None:
+        raise HTTPException(404, "machine not found")
+    return score_pretrained_machine(db, machine_id)
+
+
+@router.get("/machines/{machine_id}/behaviour")
 def get_machine_behaviour(machine_id: int, db: Session = Depends(get_db)):
     """Return the Lab online learner's current behavioural evidence."""
     if db.get(models.Machine, machine_id) is None:
