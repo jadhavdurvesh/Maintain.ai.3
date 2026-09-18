@@ -190,6 +190,51 @@ def get_machine(
     )
 
 
+
+@router.get(
+    "/{machine_id}/detail",
+    response_model=schemas.MachineDetailOut,
+)
+def get_machine_detail(
+    machine_id: int,
+    current: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return the small initial Machine Detail payload in one DB request cycle."""
+    machine = _get_scoped_machine(db, machine_id, current)
+
+    components = (
+        db.query(models.Component)
+        .filter(models.Component.machine_id == machine_id)
+        .order_by(models.Component.id.asc())
+        .all()
+    )
+    readings = (
+        db.query(models.SensorReading)
+        .filter(models.SensorReading.machine_id == machine_id)
+        .order_by(models.SensorReading.recorded_at.desc(), models.SensorReading.id.desc())
+        .limit(20)
+        .all()
+    )
+    maintenance = (
+        db.query(models.MaintenanceRecord)
+        .filter(models.MaintenanceRecord.machine_id == machine_id)
+        .order_by(models.MaintenanceRecord.scheduled_date.desc(), models.MaintenanceRecord.id.desc())
+        .limit(50)
+        .all()
+    )
+
+    return {
+        "machine": machine,
+        "components": components,
+        "readings": readings,
+        "maintenance": maintenance,
+        "device_status": {
+            "iot_enabled": bool(machine.iot_enabled),
+            "has_key": bool(machine.device_key),
+        },
+    }
+
 @router.patch(
     "/{machine_id}",
     response_model=schemas.MachineOut,
