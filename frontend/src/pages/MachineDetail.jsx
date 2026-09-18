@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import api from '../api/client.js'
+import { formatDateTime, formatDate } from '../utils/dates.js'
 import StatusBadge from '../components/StatusBadge.jsx'
 import { Loading, ErrorState } from './Dashboard.jsx'
 import { usePageHeader } from '../PageHeaderContext.jsx'
@@ -87,7 +88,7 @@ export default function MachineDetail() {
         <div className="stat-tile"><div className="stat-label">HEALTH SCORE</div><div className={`stat-value ${machine.status}`}>{machine.health_score}/100</div></div>
         <div className="stat-tile"><div className="stat-label">OPERATING HOURS</div><div className="stat-value">{machine.operating_hours}</div></div>
         <div className="stat-tile"><div className="stat-label">CRITICALITY</div><div className="stat-value">{machine.criticality}</div></div>
-        <div className="stat-tile"><div className="stat-label">NEXT MAINTENANCE</div><div className="stat-value" style={{ fontSize: 15 }}>{machine.next_maintenance_date ? new Date(machine.next_maintenance_date).toLocaleDateString() : '—'}</div></div>
+        <div className="stat-tile"><div className="stat-label">NEXT MAINTENANCE</div><div className="stat-value" style={{ fontSize: 15 }}>{machine.next_maintenance_date ? formatDate(machine.next_maintenance_date) : '—'}</div></div>
       </div>
 
       <div className="panel section-gap">
@@ -175,7 +176,7 @@ export default function MachineDetail() {
               <thead><tr><th>Type</th><th>Value</th><th>Recorded</th></tr></thead>
               <tbody>
                 {readings.slice(0, 8).map((r) => (
-                  <tr key={r.id}><td>{r.reading_type}</td><td className="mono">{r.value} {r.unit}</td><td className="mono">{new Date(r.recorded_at).toLocaleString()}</td></tr>
+                  <tr key={r.id}><td>{r.reading_type}</td><td className="mono">{r.value} {r.unit}</td><td className="mono">{formatDateTime(r.recorded_at)}</td></tr>
                 ))}
                 {readings.length === 0 && <tr><td colSpan={3} className="empty-state">No readings logged yet.</td></tr>}
               </tbody>
@@ -189,7 +190,7 @@ export default function MachineDetail() {
             <thead><tr><th>Type</th><th>Status</th><th>Scheduled</th></tr></thead>
             <tbody>
               {maintenance.map((r) => (
-                <tr key={r.id}><td>{r.type}</td><td><StatusBadge status={r.status === 'completed' ? 'healthy' : r.status === 'overdue' ? 'critical' : 'warning'} /></td><td className="mono">{r.scheduled_date ? new Date(r.scheduled_date).toLocaleDateString() : '—'}</td></tr>
+                <tr key={r.id}><td>{r.type}</td><td><StatusBadge status={r.status === 'completed' ? 'healthy' : r.status === 'overdue' ? 'critical' : 'warning'} /></td><td className="mono">{r.scheduled_date ? formatDate(r.scheduled_date) : '—'}</td></tr>
               ))}
               {maintenance.length === 0 && <tr><td colSpan={3} className="empty-state">No maintenance history yet.</td></tr>}
             </tbody>
