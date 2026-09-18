@@ -36,7 +36,7 @@ export default function MachineDetail() {
     Promise.all([
       api.get(`/api/machines/${id}`),
       api.get(`/api/machines/${id}/components`),
-      api.get(`/api/machines/${id}/readings`),
+      api.get(`/api/machines/${id}/readings?limit=20`),
       api.get(`/api/maintenance?machine_id=${id}`),
       api.get(`/api/devices/${id}/status`),
     ])
