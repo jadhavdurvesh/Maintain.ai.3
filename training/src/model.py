@@ -1,11 +1,17 @@
-"""Shared category-aware temporal model."""
+"""Shared category-aware temporal model.
+
+Input channels are a common physical-sensor block plus generic source channels.
+Missing channels are represented by NaN-safe preprocessing before inference.
+"""
 import torch
 from torch import nn
 class SharedTemporalModel(nn.Module):
-    def __init__(self,sensor_count=7,category_count=5,hidden=128,horizons=3):
+    def __init__(self,sensor_count=28,category_count=5,hidden=128,horizons=3):
         super().__init__()
         self.category=nn.Embedding(category_count,16)
-        self.encoder=nn.Sequential(nn.Conv1d(sensor_count,64,5,padding=2),nn.GELU(),nn.Conv1d(64,hidden,5,padding=2),nn.GELU())
+        self.encoder=nn.Sequential(
+            nn.Conv1d(sensor_count,64,5,padding=2),nn.GELU(),
+            nn.Conv1d(64,hidden,5,padding=2),nn.GELU())
         self.temporal=nn.GRU(hidden,hidden,batch_first=True)
         self.norm=nn.LayerNorm(hidden+16)
         self.risk=nn.Sequential(nn.Linear(hidden+16,64),nn.GELU(),nn.Linear(64,horizons))
