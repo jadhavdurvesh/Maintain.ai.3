@@ -59,6 +59,10 @@ export default function MachineDetail() {
   }
 
   useEffect(() => {
+    load()
+  }, [id])
+
+  useEffect(() => {
     let socket, retry, stopped = false
     const connect = () => {
       const base = import.meta.env.VITE_API_URL || window.location.origin
