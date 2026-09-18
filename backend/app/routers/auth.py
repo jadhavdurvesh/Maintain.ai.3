@@ -283,6 +283,14 @@ def sync_supabase_user(
         if payload.full_name: user.full_name = payload.full_name
         db.commit()
     organization = db.get(models.Organization, user.organization_id)
+    if user.role == models.UserRole.admin:
+        access = db.query(models.UserApplicationAccess).filter(
+            models.UserApplicationAccess.user_id == user.id,
+            models.UserApplicationAccess.application == "engineering",
+        ).first()
+        if not access:
+            db.add(models.UserApplicationAccess(user_id=user.id, application="engineering", enabled=True))
+            db.commit()
     sync_organization_claim(sid, user.organization_id)
     return {"user_id": user.id, "username": user.username, "organization_id": user.organization_id, "organization_name": organization.name if organization else None, "role": user.role.value}
 
