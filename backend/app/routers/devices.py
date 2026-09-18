@@ -18,6 +18,7 @@ from ..ml.online import update_online_state
 from ..ml.temporal_features import materialize_windows
 from ..ml.anomaly_events import create_anomaly_event
 from ..notification_service import notify_machine_workers
+from ..supabase_realtime import broadcast as supabase_broadcast
 
 router = APIRouter(prefix="/api/devices", tags=["devices"])
 
@@ -276,7 +277,7 @@ def _process_reading(db: Session, machine: models.Machine, payload: IngestPayloa
 
 
 async def _publish_reading(machine, reading, behaviour, safety=None, degradation=None):
-    await telemetry_stream.broadcast({
+    event = {
         "type": "telemetry", "machine_id": machine.id, "machine": machine.name,
         "reading_id": reading.id, "reading_type": reading.reading_type,
         "value": reading.value, "unit": reading.unit,
@@ -284,7 +285,9 @@ async def _publish_reading(machine, reading, behaviour, safety=None, degradation
         "behaviour": behaviour,
         "safety": safety,
         "degradation": degradation,
-    })
+    }
+    await telemetry_stream.broadcast(event)
+    await supabase_broadcast("org:" + str(machine.organization_id) + ":telemetry", "telemetry", event)
 
 
 @router.websocket("/stream")
@@ -369,6 +372,7 @@ async def ingest_reading(
     if not machine or not machine.iot_enabled:
         raise HTTPException(401, "invalid or disabled device key")
     reading, behaviour, safety, degradation = _process_reading(db, machine, payload)
+    await _publish_reading(machine, reading, behaviour, safety, degradation)
     if safety and safety.get("shutdown_requested"):
         client = _device_command_clients.get(machine.id)
         if client:
