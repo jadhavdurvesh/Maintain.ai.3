@@ -1,6 +1,6 @@
 # Reproducible first training configuration.
-sequence_hours: 24
-window_hours: 1
+sequence_length_steps: 24
+# Time units remain source-native during bootstrap; MAINTAIN AI labels use real timestamps.
 prediction_horizons_hours: [24, 48, 168]
 batch_size: 128
 epochs: 50
