@@ -227,3 +227,10 @@ class MachineAssignmentOut(BaseModel):
     machine_id: int
     machine_name: str
     assigned: bool = True
+
+class MachineDetailOut(BaseModel):
+    machine: MachineOut
+    components: List[ComponentOut]
+    readings: List[SensorReadingOut]
+    maintenance: List[MaintenanceRecordOut]
+    device_status: dict
