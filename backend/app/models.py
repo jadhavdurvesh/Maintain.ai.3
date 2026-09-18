@@ -435,6 +435,24 @@ class MLDegradationSnapshot(Base):
     source = Column(String, nullable=False, default="online_behaviour")
 
 
+class MLOutcomeFeedback(Base):
+    """Technician-confirmed outcome used to improve future predictive models."""
+    __tablename__ = "ml_outcome_feedback"
+    id = Column(Integer, primary_key=True, index=True)
+    machine_id = Column(Integer, ForeignKey("machines.id"), nullable=False, index=True)
+    fault_id = Column(Integer, ForeignKey("fault_records.id"), nullable=True, index=True)
+    work_order_id = Column(Integer, ForeignKey("work_orders.id"), nullable=True, index=True)
+    outcome_type = Column(String, nullable=False, index=True)
+    confirmed_root_cause = Column(Text, nullable=True)
+    failed_component = Column(String, nullable=True)
+    corrective_action = Column(Text, nullable=True)
+    downtime_minutes = Column(Float, nullable=True)
+    false_alarm = Column(Boolean, nullable=False, default=False)
+    notes = Column(Text, nullable=True)
+    created_by = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
 class MachineSafetyPolicy(Base):
     """Per-machine warning and automatic-shutdown interlock configuration."""
     __tablename__ = "machine_safety_policies"
