@@ -6,6 +6,8 @@ from ..ml import model as risk_model
 from ..ml.online import score_machine
 from ..ml.temporal import artifact_status as temporal_artifact_status
 from ..ml.pretrained import pretrained_status, score_machine as score_pretrained_machine
+from ..ml.forecasts import forecast_status as forecast_models_status, forecast_signal as chronos_forecast
+from ..ml.timer import timer_status, forecast as timer_forecast
 from .. import models
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
@@ -97,3 +99,28 @@ def get_live_behaviour(db: Session = Depends(get_db)):
             "behaviour": behaviour,
         })
     return {"machines": results}
+
+
+@router.get("/forecast-model-status")
+def get_forecast_model_status():
+    return {"chronos_2": forecast_models_status(), "timer": timer_status()}
+
+
+@router.get("/machines/{machine_id}/forecast")
+def get_machine_forecast(machine_id: int, reading_type: str = "temperature", model: str = "chronos2", horizon: int = 12, db: Session = Depends(get_db)):
+    machine = db.get(models.Machine, machine_id)
+    if not machine:
+        raise HTTPException(404, "machine not found")
+    if horizon < 1 or horizon > 96:
+        raise HTTPException(400, "horizon must be between 1 and 96")
+    rows = (
+        db.query(models.SensorReading)
+        .filter_by(machine_id=machine_id, reading_type=reading_type)
+        .order_by(models.SensorReading.recorded_at.desc(), models.SensorReading.id.desc())
+        .limit(2880)
+        .all()
+    )
+    values = [float(r.value) for r in reversed(rows)]
+    if model.lower() in {"timer", "timer-84m"}:
+        return {"machine_id": machine_id, "reading_type": reading_type, **timer_forecast(values, horizon)}
+    return {"machine_id": machine_id, "reading_type": reading_type, **chronos_forecast(values, horizon)}
