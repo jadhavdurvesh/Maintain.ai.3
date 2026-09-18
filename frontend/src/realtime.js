@@ -142,11 +142,13 @@ export function useTelemetryStream() {
     }
 
     window.addEventListener('maintain-ai-org-context', handleOrgContext)
+    window.addEventListener('maintain-ai-auth-context', handleOrgContext)
     connect()
 
     return () => {
       stopped = true
       window.removeEventListener('maintain-ai-org-context', handleOrgContext)
+      window.removeEventListener('maintain-ai-auth-context', handleOrgContext)
       closeSocket()
     }
   }, [])
