@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Factory, CheckCircle2, AlertTriangle, Flame, ClipboardList, CalendarClock, Bell } from 'lucide-react'
 import api from '../api/client.js'
+import { parseBackendDate } from '../utils/dates.js'
 import StatusBadge from '../components/StatusBadge.jsx'
 import { HealthDistributionChart, MachineHealthBarChart } from '../components/Charts.jsx'
 import { usePageHeader } from '../PageHeaderContext.jsx'
@@ -342,7 +343,7 @@ export function Loading({ variant = 'table' }) {
 
 function timeAgo(isoString) {
   if (!isoString) return 'unknown time'
-  const diffMs = Date.now() - new Date(isoString + 'Z').getTime()
+  const diffMs = Date.now() - parseBackendDate(isoString).getTime()
   const hours = Math.floor(diffMs / 3600000)
   if (hours < 1) return 'just now'
   if (hours < 24) return `${hours}h ago`
