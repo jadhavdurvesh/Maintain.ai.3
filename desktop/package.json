@@ -26,12 +26,10 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "assets/maintain-ai-logo.ico"
     },
     "mac": {
       "target": "dmg",
       "category": "public.app-category.productivity",
-      "icon": "assets/maintain-ai-logo.icns"
     },
     "linux": {
       "target": [
