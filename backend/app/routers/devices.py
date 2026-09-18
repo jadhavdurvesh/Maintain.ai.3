@@ -416,6 +416,14 @@ async def device_websocket(websocket: WebSocket):
             if message.get("type") == "ping":
                 await websocket.send_json({"type": "pong"})
                 continue
+            if message.get("type") in {"shutdown_ack", "shutdown_test_ack"}:
+                event_id = message.get("event_id")
+                if event_id:
+                    event = db.get(models.MachineSafetyEvent, int(event_id))
+                    if event:
+                        event.device_acknowledged = True
+                        db.commit()
+                continue
             if message.get("type") != "reading":
                 await websocket.send_json({"type": "error", "message": "unsupported message type"})
                 continue
