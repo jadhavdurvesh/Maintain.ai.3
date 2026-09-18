@@ -147,3 +147,37 @@ def get_machine_forecast(machine_id: int, reading_type: str = "temperature", mod
     if model.lower() in {"timer", "timer-84m"}:
         return {"machine_id": machine_id, "reading_type": reading_type, **timer_forecast(values, horizon)}
     return {"machine_id": machine_id, "reading_type": reading_type, **chronos_forecast(values, horizon)}
+
+@router.get('/model-lab')
+def get_model_lab(db: Session = Depends(get_db)):
+    from datetime import datetime
+    machines = db.query(models.Machine).filter_by(archived=False).all()
+    reading_count = db.query(models.SensorReading).count()
+    machines_with_readings = sum(1 for m in machines if db.query(models.SensorReading.id).filter_by(machine_id=m.id).first())
+    return {'generated_at': datetime.utcnow().isoformat(), 'pretrained': pretrained_status(), 'forecasts': {'chronos_2': forecast_models_status(), 'timer': timer_status()}, 'fleet': fleet_intelligence(db), 'risk_readiness': risk_readiness(db), 'telemetry': {'reading_count': reading_count, 'machines_with_readings': machines_with_readings}}
+
+@router.get('/evidence-feed')
+def get_evidence_feed(limit: int = 80, db: Session = Depends(get_db)):
+    limit = max(10, min(int(limit), 200))
+    events = []
+    machines = {m.id: m.name for m in db.query(models.Machine).all()}
+    def add(kind, ident, machine_id, timestamp, message):
+        if timestamp is not None:
+            events.append({'id': ident, 'type': kind, 'machine_id': machine_id, 'machine_name': machines.get(machine_id, 'Machine'), 'timestamp': timestamp.isoformat(), 'message': message})
+    for r in db.query(models.SensorReading).order_by(models.SensorReading.recorded_at.desc(), models.SensorReading.id.desc()).limit(limit).all():
+        add('telemetry', 'reading-' + str(r.id), r.machine_id, r.recorded_at, str(r.reading_type) + ': ' + str(r.value) + ' ' + str(r.unit or ''))
+    for e in db.query(models.MLAnomalyEvent).order_by(models.MLAnomalyEvent.created_at.desc()).limit(limit).all():
+        add('anomaly', 'anomaly-' + str(e.id), e.machine_id, e.created_at, e.message)
+    for d in db.query(models.MLDegradationSnapshot).order_by(models.MLDegradationSnapshot.recorded_at.desc()).limit(limit).all():
+        add('degradation', 'degradation-' + str(d.id), d.machine_id, d.recorded_at, 'score ' + format(d.degradation_score, '.3f') + ', trend ' + format(d.trend_score, '.3f') + ', active signals ' + str(d.active_signal_count))
+    for f in db.query(models.FaultRecord).order_by(models.FaultRecord.reported_date.desc()).limit(limit).all():
+        add('fault', 'fault-' + str(f.id), f.machine_id, f.reported_date, f.description + ((' · cause: ' + f.cause) if f.cause else ''))
+    for w in db.query(models.WorkOrder).order_by(models.WorkOrder.created_at.desc()).limit(limit).all():
+        status = w.status.value if hasattr(w.status, 'value') else w.status
+        add('work_order', 'workorder-' + str(w.id), w.machine_id, w.created_at, str(status) + ': ' + w.problem)
+    for o in db.query(models.MLOutcomeFeedback).order_by(models.MLOutcomeFeedback.created_at.desc()).limit(limit).all():
+        add('outcome', 'outcome-' + str(o.id), o.machine_id, o.created_at, o.outcome_type + ((' · ' + o.confirmed_root_cause) if o.confirmed_root_cause else ''))
+    for s in db.query(models.MachineSafetyEvent).order_by(models.MachineSafetyEvent.created_at.desc()).limit(limit).all():
+        add('safety', 'safety-' + str(s.id), s.machine_id, s.created_at, s.message)
+    events.sort(key=lambda item: item['timestamp'], reverse=True)
+    return {'events': events[:limit], 'count': min(len(events), limit), 'sources': ['sensor_readings', 'ml_anomaly_events', 'ml_degradation_snapshots', 'fault_records', 'work_orders', 'ml_outcome_feedback', 'machine_safety_events']}
