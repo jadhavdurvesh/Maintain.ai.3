@@ -20,3 +20,5 @@ google-generativeai==0.8.3
 # The heavier batch ML stack is intentionally kept out of the Vercel/serverless
 # dependency set. Install backend/requirements-ml.txt in the desktop/local ML
 # environment when RandomForest training is needed.
+
+# Supabase JWT signature verification for asymmetric signing keys.\ncryptography==43.0.1\n
