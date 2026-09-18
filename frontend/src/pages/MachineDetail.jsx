@@ -34,27 +34,21 @@ export default function MachineDetail() {
 
   const load = () => {
     setError(null)
-    api.get(`/api/machines/${id}/detail`)
-      .then((data) => {
-        setMachine(data.machine)
-        setComponents(data.components)
-        setReadings(data.readings)
-        setMaintenance(data.maintenance)
-        setDeviceStatus(data.device_status)
-      })
-      .catch(() => Promise.all([
-        api.get(`/api/machines/${id}`),
-        api.get(`/api/machines/${id}/components`),
-        api.get(`/api/machines/${id}/readings?limit=20`),
-        api.get(`/api/maintenance?machine_id=${id}&limit=50`),
-        api.get(`/api/devices/${id}/status`),
-      ]).then(([m, c, r, mt, ds]) => {
+    Promise.all([
+      api.get(`/api/machines/${id}`),
+      api.get(`/api/machines/${id}/components`),
+      api.get(`/api/machines/${id}/readings?limit=20`),
+      api.get(`/api/maintenance?machine_id=${id}&limit=50`),
+      api.get(`/api/devices/${id}/status`),
+    ])
+      .then(([m, c, r, mt, ds]) => {
         setMachine(m)
         setComponents(c)
         setReadings(r)
         setMaintenance(mt)
         setDeviceStatus(ds)
-      }).catch((e) => setError(e.message)))
+      })
+      .catch((e) => setError(e.message))
   }
 
   useEffect(() => {
