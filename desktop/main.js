@@ -1,57 +1,11 @@
 const { app, BrowserWindow } = require('electron')
 const path = require('path')
-const { spawn } = require('child_process')
-const http = require('http')
 
-let backendProcess = null
 let mainWindow = null
 
-const isDev = !app.isPackaged
-
-function backendBinaryPath() {
-  const exeName = process.platform === 'win32' ? 'maintain-ai-backend.exe' : 'maintain-ai-backend'
-  return path.join(process.resourcesPath, 'backend', exeName)
-}
-
-function waitForServer(url, timeoutMs = 20000) {
-  return new Promise((resolve, reject) => {
-    const start = Date.now()
-    const check = () => {
-      http.get(url, () => resolve())
-        .on('error', () => {
-          if (Date.now() - start > timeoutMs) reject(new Error('Backend did not respond in time'))
-          else setTimeout(check, 300)
-        })
-    }
-    check()
-  })
-}
-
-function startBackend() {
-  if (isDev) {
-    // In dev, run the backend yourself (see desktop/README.md) — Electron
-    // just points at it, same as it points at the Vite dev server.
-    return Promise.resolve()
-  }
-
-  // Per-user, per-OS app-data folder — survives app updates/reinstalls,
-  // unlike anything stored inside the install directory itself.
-  const dbPath = path.join(app.getPath('userData'), 'maintain_ai.db')
-
-  backendProcess = spawn(backendBinaryPath(), [], {
-    env: {
-      ...process.env,
-      DATABASE_URL: `sqlite:///${dbPath.replace(/\\/g, '/')}`,
-      MODEL_PATH: path.join(app.getPath('userData'), 'risk_model.joblib'),
-      PORT: '8000',
-    },
-  })
-  backendProcess.stdout.on('data', (d) => console.log(`[backend] ${d}`))
-  backendProcess.stderr.on('data', (d) => console.error(`[backend] ${d}`))
-  backendProcess.on('error', (err) => console.error('Failed to start backend:', err))
-
-  return waitForServer('http://127.0.0.1:8000/')
-}
+// The desktop installer is a client for the hosted MAINTAIN AI backend.
+// The Vite build embeds VITE_API_URL into the frontend bundle.
+const backendUrl = process.env.MAINTAIN_AI_API_URL || 'https://maintain-ai-3.vercel.app'
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -67,7 +21,7 @@ function createWindow() {
     },
   })
 
-  if (isDev) {
+  if (!app.isPackaged) {
     mainWindow.loadURL('http://localhost:5173')
     mainWindow.webContents.openDevTools({ mode: 'detach' })
   } else {
@@ -77,14 +31,8 @@ function createWindow() {
   mainWindow.on('closed', () => { mainWindow = null })
 }
 
-app.whenReady().then(async () => {
-  try {
-    await startBackend()
-  } catch (err) {
-    console.error('Backend failed to become ready:', err)
-    // Still open the window — it'll show the app's own "couldn't reach backend" screen
-    // instead of a blank Electron window, which is more useful for debugging.
-  }
+app.whenReady().then(() => {
+  console.log('MAINTAIN AI desktop client configured for:', backendUrl)
   createWindow()
 
   app.on('activate', () => {
@@ -93,10 +41,5 @@ app.whenReady().then(async () => {
 })
 
 app.on('window-all-closed', () => {
-  if (backendProcess) backendProcess.kill()
   if (process.platform !== 'darwin') app.quit()
-})
-
-app.on('before-quit', () => {
-  if (backendProcess) backendProcess.kill()
 })
