@@ -10,6 +10,7 @@ from ..ml.forecasts import forecast_status as forecast_models_status, forecast_s
 from ..ml.timer import timer_status, forecast as timer_forecast
 from ..ml.degradation import get_timeline
 from ..ml.intelligence import process_telemetry
+from ..ml.risk_horizons import risk_readiness, fleet_intelligence
 from .. import models
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
@@ -109,6 +110,18 @@ def get_machine_degradation(machine_id: int, limit: int = 48, db: Session = Depe
     if db.get(models.Machine, machine_id) is None:
         raise HTTPException(404, "machine not found")
     return get_timeline(db, machine_id, limit)
+
+
+@router.get("/fleet-intelligence")
+def get_fleet_intelligence(db: Session = Depends(get_db)):
+    """Return current degradation evidence for the active fleet."""
+    return fleet_intelligence(db)
+
+
+@router.get("/risk-readiness")
+def get_risk_readiness(db: Session = Depends(get_db)):
+    """Return future-risk label readiness without exposing uncalibrated probabilities."""
+    return risk_readiness(db)
 
 
 @router.get("/forecast-model-status")
