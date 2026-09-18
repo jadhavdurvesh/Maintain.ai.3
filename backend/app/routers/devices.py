@@ -212,7 +212,7 @@ def _evaluate_safety_policy(db: Session, machine: models.Machine, reading: model
 
     return {
         "event_id": event.id, "type": event_type, "shutdown_requested": shutdown_requested,
-        "device_command_available": device_command_available, "message": message,
+        "device_command_available": device_command_available, "threshold": threshold, "message": message,
     }
 
 
@@ -444,11 +444,15 @@ async def device_websocket(websocket: WebSocket):
                 continue
             if message.get("type") in {"shutdown_ack", "shutdown_test_ack"}:
                 event_id = message.get("event_id")
-                if event_id:
-                    event = db.get(models.MachineSafetyEvent, int(event_id))
-                    if event:
-                        event.device_acknowledged = True
-                        db.commit()
+                event = db.get(models.MachineSafetyEvent, int(event_id)) if event_id else (
+                    db.query(models.MachineSafetyEvent)
+                    .filter_by(machine_id=machine.id, event_type="shutdown_threshold")
+                    .order_by(models.MachineSafetyEvent.created_at.desc())
+                    .first()
+                )
+                if event:
+                    event.device_acknowledged = True
+                    db.commit()
                 continue
             if message.get("type") != "reading":
                 await websocket.send_json({"type": "error", "message": "unsupported message type"})
