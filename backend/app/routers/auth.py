@@ -14,6 +14,7 @@ from ..deps import (
     CurrentUser,
     auth_required,
 )
+from ..supabase_auth import enabled as supabase_auth_enabled, verify_access_token
 
 router = APIRouter(
     prefix="/api/auth",
@@ -36,6 +37,12 @@ class LoginIn(BaseModel):
 
 class WorkerLoginIn(BaseModel):
     username: str
+
+
+class SupabaseSyncIn(BaseModel):
+    organization_name: str | None = None
+    username: str | None = None
+    full_name: str | None = None
 
 
 class AuthOut(BaseModel):
@@ -251,6 +258,32 @@ def worker_login(
         role=user.role.value,
     )
 
+
+@router.post("/supabase/sync")
+def sync_supabase_user(
+    payload: SupabaseSyncIn,
+    authorization: str | None = None,
+    db: Session = Depends(get_db),
+):
+    if not supabase_auth_enabled(): raise HTTPException(status_code=503, detail="Supabase Auth is not configured")
+    if not authorization or not authorization.startswith("Bearer "): raise HTTPException(status_code=401, detail="Supabase access token required")
+    claims = verify_access_token(authorization.removeprefix("Bearer ").strip())
+    if not claims or not claims.get("sub"): raise HTTPException(status_code=401, detail="invalid Supabase access token")
+    sid, email = str(claims["sub"]), claims.get("email")
+    user = db.query(models.User).filter_by(supabase_user_id=sid).first()
+    if not user and email: user = db.query(models.User).filter_by(email=email).first()
+    if not user:
+        base = (payload.username or (email.split("@")[0] if email else "user")).strip() or "user"; username = base; suffix = 2
+        while db.query(models.User).filter_by(username=username).first(): username = f"{base}{suffix}"; suffix += 1
+        organization = models.Organization(name=(payload.organization_name or "My Organization").strip()); db.add(organization); db.commit(); db.refresh(organization)
+        user = models.User(username=username, full_name=payload.full_name, email=email, supabase_user_id=sid, organization_id=organization.id, role=models.UserRole.admin, active=True)
+        db.add(user); db.commit(); db.refresh(user)
+    else:
+        user.supabase_user_id = sid
+        if payload.full_name: user.full_name = payload.full_name
+        db.commit()
+    organization = db.get(models.Organization, user.organization_id)
+    return {"user_id": user.id, "username": user.username, "organization_id": user.organization_id, "organization_name": organization.name if organization else None, "role": user.role.value}
 
 @router.get("/me")
 def me(
