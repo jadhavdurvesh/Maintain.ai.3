@@ -23,6 +23,9 @@ export default function MachineDetail() {
   const [liveHistory, setLiveHistory] = useState({})
   const [liveConnected, setLiveConnected] = useState(false)
   const [intelligence, setIntelligence] = useState(null)
+  const [safety, setSafety] = useState(null)
+  const [safetyForm, setSafetyForm] = useState({ enabled: false, monitored_reading_type: 'temperature', unit: '°C', warning_low: '', warning_high: '', shutdown_low: '', shutdown_high: '', auto_shutdown_enabled: false })
+  const [safetyBusy, setSafetyBusy] = useState(false)
 
   usePageHeader(
     <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -58,6 +61,7 @@ export default function MachineDetail() {
     if (maintenanceResult.status === 'fulfilled') setMaintenance(maintenanceResult.value)
     if (deviceResult.status === 'fulfilled') setDeviceStatus(deviceResult.value)
     try { setIntelligence(await api.get(`/api/analytics/machines/${id}/intelligence`)) } catch { setIntelligence(null) }
+    try { const s = await api.get(`/api/devices/${id}/safety`); setSafety(s); if (s.configured) setSafetyForm({ ...s, warning_low: s.warning_low ?? '', warning_high: s.warning_high ?? '', shutdown_low: s.shutdown_low ?? '', shutdown_high: s.shutdown_high ?? '' }) } catch { setSafety(null) }
   }
 
   useEffect(() => {
@@ -119,6 +123,21 @@ export default function MachineDetail() {
     load()
   }
 
+  const saveSafety = async (e) => {
+    e.preventDefault()
+    setSafetyBusy(true)
+    try {
+      const payload = { ...safetyForm, warning_low: safetyForm.warning_low === '' ? null : Number(safetyForm.warning_low), warning_high: safetyForm.warning_high === '' ? null : Number(safetyForm.warning_high), shutdown_low: safetyForm.shutdown_low === '' ? null : Number(safetyForm.shutdown_low), shutdown_high: safetyForm.shutdown_high === '' ? null : Number(safetyForm.shutdown_high) }
+      const saved = await api.put('/api/devices/' + id + '/safety', payload)
+      setSafety(saved)
+      setSafetyForm({ ...saved, warning_low: saved.warning_low ?? '', warning_high: saved.warning_high ?? '', shutdown_low: saved.shutdown_low ?? '', shutdown_high: saved.shutdown_high ?? '' })
+    } finally { setSafetyBusy(false) }
+  }
+
+  const testSafetyShutdown = async () => {
+    setSafetyBusy(true)
+    try { await api.post('/api/devices/' + id + '/safety/test-shutdown', {}) } finally { setSafetyBusy(false) }
+  }
   const enableDevice = async () => {
     setDeviceBusy(true)
     try {
@@ -194,7 +213,35 @@ export default function MachineDetail() {
 
       <div className="panel section-gap">
         <div className="panel-header">
-          <span className="panel-title">Pretrained AI Signal</span>
+          <span className="panel-title">Machine Safety Limits & Auto-Shutdown</span>
+          <span className={'badge ' + (safety?.enabled ? 'healthy' : 'neutral')}>{safety?.enabled ? 'Monitoring' : 'Off'}</span>
+        </div>
+        <div className="panel-body">
+          <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 12 }}>Configure early warning points and hard shutdown points for one telemetry signal. Automatic shutdown is separately controlled and requires a connected safety-capable IoT device.</p>
+          <form onSubmit={saveSafety}>
+            <div className="chip-row" style={{ marginBottom: 10 }}>
+              <label><input type="checkbox" checked={!!safetyForm.enabled} onChange={e => setSafetyForm({...safetyForm, enabled:e.target.checked})} /> Enable limit monitoring</label>
+              <label>Signal <select value={safetyForm.monitored_reading_type} onChange={e => setSafetyForm({...safetyForm, monitored_reading_type:e.target.value})}><option value="temperature">Temperature</option><option value="vibration">Vibration</option><option value="current">Current</option><option value="load">Load</option></select></label>
+              <label>Unit <input style={{width:70}} value={safetyForm.unit || ''} onChange={e => setSafetyForm({...safetyForm, unit:e.target.value})} /></label>
+            </div>
+            <div className="grid-2" style={{ marginBottom: 10 }}>
+              <label>Warning low <input type="number" step="any" value={safetyForm.warning_low} onChange={e=>setSafetyForm({...safetyForm,warning_low:e.target.value})} /></label>
+              <label>Warning high <input type="number" step="any" value={safetyForm.warning_high} onChange={e=>setSafetyForm({...safetyForm,warning_high:e.target.value})} /></label>
+              <label>Shutdown low <input type="number" step="any" value={safetyForm.shutdown_low} onChange={e=>setSafetyForm({...safetyForm,shutdown_low:e.target.value})} /></label>
+              <label>Shutdown high <input type="number" step="any" value={safetyForm.shutdown_high} onChange={e=>setSafetyForm({...safetyForm,shutdown_high:e.target.value})} /></label>
+            </div>
+            <div className="chip-row">
+              <label><input type="checkbox" checked={!!safetyForm.auto_shutdown_enabled} onChange={e=>setSafetyForm({...safetyForm,auto_shutdown_enabled:e.target.checked})} /> Enable automatic shutdown command</label>
+              <button className="btn" type="submit" disabled={safetyBusy}>{safetyBusy ? 'Saving…' : 'Save Safety Settings'}</button>
+              <button className="btn secondary" type="button" onClick={testSafetyShutdown} disabled={safetyBusy || !deviceStatus?.iot_enabled}>Test IoT Shutdown Signal</button>
+            </div>
+          </form>
+          <div style={{ marginTop: 10, color: 'var(--text-faint)', fontSize: 11 }}>The app sends a shutdown command to the authenticated IoT safety channel when a hard limit is crossed. For real equipment, the ESP32 should drive a properly rated relay/contactor or independent safety interlock locally; do not use a hobby GPIO as the sole protection for mains or hazardous machinery.</div>
+        </div>
+      </div>
+      <div className="panel section-gap">
+        <div className="panel-header">
+          <span className="panel-title">Pretrained AI Signal</span
           <span className={'badge ' + (intelligence?.pretrained_anomaly?.available ? 'healthy' : 'warning')}>
             {intelligence?.pretrained_anomaly?.available ? 'Zero-shot' : 'Not ready'}
           </span>
