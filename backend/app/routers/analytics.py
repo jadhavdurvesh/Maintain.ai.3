@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..ml import model as risk_model
 from ..ml.online import score_machine
+from ..ml.temporal import artifact_status as temporal_artifact_status
+from ..ml.pretrained import pretrained_status, score_machine as score_pretrained_machine
 from .. import models
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
@@ -26,7 +28,7 @@ def get_risk_predictions(db: Session = Depends(get_db)):
     return risk_model.predict_risk(db)
 
 
-@router.get("/temporal-model-status")\ndef get_temporal_model_status():\n    """Return the V1 bootstrap temporal model artifact and calibration status."""\n    return temporal_artifact_status()\n\n\n@router.get("/machines/{machine_id}/behaviour")
+@router.get("/temporal-model-status")\ndef get_temporal_model_status():\n    """Return the bootstrap temporal model artifact and calibration status."""\n    return temporal_artifact_status()\n\n\n@router.get("/pretrained-model-status")\ndef get_pretrained_model_status():\n    """Return optional pretrained zero-shot model availability."""\n    return pretrained_status()\n\n\n@router.get("/machines/{machine_id}/pretrained-anomaly")\ndef get_pretrained_anomaly(machine_id: int, db: Session = Depends(get_db)):\n    """Run optional pretrained anomaly inference without training or calibration."""\n    if db.get(models.Machine, machine_id) is None:\n        raise HTTPException(404, "machine not found")\n    return score_pretrained_machine(db, machine_id)\n\n\n@router.get("/machines/{machine_id}/behaviour")
 def get_machine_behaviour(machine_id: int, db: Session = Depends(get_db)):
     """Return the Lab online learner's current behavioural evidence."""
     if db.get(models.Machine, machine_id) is None:
