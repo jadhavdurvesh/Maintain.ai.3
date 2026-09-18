@@ -58,10 +58,30 @@ export default function Reports() {
     }
   }
 
+  const exportDatasets = [
+    ['all', 'Everything (ZIP)'], ['workorders', 'Work Orders'], ['maintenance', 'Maintenance'], ['faults', 'Faults'], ['alerts', 'Alerts'],
+    ['sensor_readings', 'Sensor Readings'], ['components', 'Components'], ['machines', 'Machines'], ['safety', 'Safety Settings'],
+    ['safety_events', 'Safety Events'], ['spare_parts', 'Spare Parts'], ['notifications', 'Notifications'],
+  ]
+
+  const downloadDataset = async (dataset) => {
+    if (dataset === 'all') return downloadExport('all')
+    try {
+      const token = getToken()
+      const response = await fetch(`${API_BASE}/api/reports/export/${dataset}.csv`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      if (!response.ok) throw new Error(await response.text())
+      const blob = await response.blob()
+      const disposition = response.headers.get('content-disposition') || ''
+      const match = disposition.match(/filename="?([^"]+)"?/i)
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a'); link.href = url; link.download = match?.[1] || `maintain_ai_${dataset}.csv`; document.body.appendChild(link); link.click(); link.remove(); window.URL.revokeObjectURL(url)
+    } catch (e) { alert(`Export failed: ${e.message}`) }
+  }
+
   usePageHeader('Reports & Analytics', (
     <div className="chip-row">
-      <button className="btn secondary" onClick={() => downloadExport('csv')}>CSV</button>
-      <button className="btn secondary" onClick={() => downloadExport('excel')}>Excel</button>
+      <button className="btn secondary" onClick={() => downloadExport('csv')}>Summary CSV</button>
+      <button className="btn secondary" onClick={() => downloadExport('excel')}>Excel Report</button>
       <button className="btn" onClick={() => downloadExport('pdf')}>PDF Report</button>
     </div>
   ))
@@ -98,6 +118,21 @@ export default function Reports() {
 
   return (
     <>
+      <div className="panel section-gap">
+        <div className="panel-header">
+          <span className="panel-title">Export Data</span>
+          <span className="badge neutral">CSV / ZIP</span>
+        </div>
+        <div className="panel-body">
+          <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 12 }}>
+            Export individual operational datasets or download a complete archive. Historical records are exported; nothing is deleted or changed.
+          </p>
+          <div className="chip-row">
+            {exportDatasets.map(([key, label]) => <button key={key} className={key === 'all' ? 'btn' : 'btn secondary'} onClick={() => downloadDataset(key)}>{label}</button>)}
+          </div>
+        </div>
+      </div>
+
       <div className="panel section-gap">
         <div className="panel-header">
           <span className="panel-title">Predictive Model (local, on-device)</span>
