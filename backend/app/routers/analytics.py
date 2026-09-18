@@ -26,7 +26,7 @@ def get_risk_predictions(db: Session = Depends(get_db)):
     return risk_model.predict_risk(db)
 
 
-@router.get("/machines/{machine_id}/behaviour")
+@router.get("/temporal-model-status")\ndef get_temporal_model_status():\n    """Return the V1 bootstrap temporal model artifact and calibration status."""\n    return temporal_artifact_status()\n\n\n@router.get("/machines/{machine_id}/behaviour")
 def get_machine_behaviour(machine_id: int, db: Session = Depends(get_db)):
     """Return the Lab online learner's current behavioural evidence."""
     if db.get(models.Machine, machine_id) is None:

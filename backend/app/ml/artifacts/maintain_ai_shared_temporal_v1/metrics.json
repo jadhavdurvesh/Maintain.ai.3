@@ -1,0 +1,10 @@
+{
+  "dataset": "NASA C-MAPSS FD001-FD004",
+  "test_engines": 698,
+  "mae": 37.71240997314453,
+  "rmse": 49.280662536621094,
+  "sequence_length": 24,
+  "model": "shared-temporal-v1",
+  "bootstrap_objective": "RUL",
+  "test_targets": "official NASA C-MAPSS RUL targets"
+}

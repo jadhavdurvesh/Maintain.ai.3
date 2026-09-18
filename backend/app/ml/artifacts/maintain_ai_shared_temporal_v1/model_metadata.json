@@ -1,0 +1,13 @@
+{
+  "model_version": "shared-temporal-v1",
+  "architecture": "TemporalConv1D + GRU + category embedding",
+  "input_channels": 28,
+  "sequence_length": 24,
+  "category_count": 5,
+  "categories": ["induction_motor", "pump", "compressor", "conveyor", "other"],
+  "bootstrap_datasets": ["NASA C-MAPSS FD001", "NASA C-MAPSS FD002", "NASA C-MAPSS FD003", "NASA C-MAPSS FD004"],
+  "training_objective": "Remaining Useful Life (RUL)",
+  "risk_outputs": ["24h", "48h", "7d"],
+  "risk_status": "Not trained yet",
+  "note": "Bootstrap RUL model. 24h/48h/7d failure-risk heads require real MAINTAIN AI telemetry and technician-confirmed future failure labels."
+}
