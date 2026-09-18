@@ -35,6 +35,8 @@
 
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <WebSocketsClient.h>
+#include <time.h>
 #include <DHT.h>
 
 // ---- Fill these in ----
@@ -42,6 +44,11 @@ const char* WIFI_SSID     = "YOUR_WIFI_NAME";
 const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
 const char* API_BASE_URL  = "http://192.168.1.42:8000";   // your machine's local IP + port
 const char* DEVICE_KEY    = "PASTE_YOUR_DEVICE_KEY_HERE"; // from the app's IoT Device panel
+
+// WebSocket settings. Use the backend host/IP directly; do not use localhost.
+const char* WS_HOST = "192.168.1.42";
+const uint16_t WS_PORT = 8000;
+const char* WS_PATH = "/api/devices/ws";
 
 // ---- Sensor wiring ----
 #define DHTPIN 4
@@ -52,6 +59,37 @@ DHT dht(DHTPIN, DHTTYPE);
 // there's no need, and it just spams the audit-adjacent alert checks.
 const unsigned long SEND_INTERVAL_MS = 30000; // 30 seconds
 unsigned long lastSendTime = 0;
+WebSocketsClient webSocket;
+bool wsConnected = false;
+
+String utcTimestamp() {
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo, 1000)) return "";
+  char buf[25];
+  strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &timeinfo);
+  return String(buf);
+}
+
+void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
+  if (type == WStype_CONNECTED) {
+    wsConnected = true;
+    String auth = String("{\"type\":\"authenticate\",\"device_key\":\"") + DEVICE_KEY + "\"}";
+    webSocket.sendTXT(auth);
+    Serial.println("Telemetry WebSocket connected — authenticating...");
+  } else if (type == WStype_DISCONNECTED) {
+    wsConnected = false;
+    Serial.println("Telemetry WebSocket disconnected — reconnecting automatically...");
+  } else if (type == WStype_TEXT) {
+    Serial.printf("WS <- %.*s\n", (int)length, payload);
+  }
+}
+
+void connectWebSocket() {
+  webSocket.begin(WS_HOST, WS_PORT, WS_PATH);
+  webSocket.onEvent(webSocketEvent);
+  webSocket.setReconnectInterval(5000);
+  webSocket.enableHeartbeat(15000, 3000, 2);
+}
 
 void connectWiFi() {
   Serial.print("Connecting to WiFi");
@@ -63,6 +101,154 @@ void connectWiFi() {
   Serial.println();
   Serial.print("Connected. IP address: ");
   Serial.println(WiFi.localIP());
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  Serial.println("Synchronizing UTC clock...");
+  struct tm timeinfo;
+  getLocalTime(&timeinfo, 10000);
+  connectWebSocket();
+}
+
+// Sends one reading. Returns true on success (HTTP 2xx).
+bool sendReading(const char* readingType, float value, const char* unit) {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi dropped — reconnecting before sending...");
+    connectWiFi();
+  }
+
+  String timestamp = utcTimestamp();
+  String body = String("{\"type\":\"reading\",\"reading_type\":\"") + readingType +
+                "\",\"value\":" + String(value, 2) +
+                ",\"unit\":\"" + unit + "\"" +
+                (timestamp.length() ? String(",\"recorded_at\":\"") + timestamp + "\"" : "") + "}";
+
+  if (wsConnected) {
+    webSocket.sendTXT(body);
+    Serial.printf("[%s] WS -> %s\\n", readingType, body.c_str());
+    return true;
+  }
+
+  // Backwards-compatible HTTP fallback while the WebSocket is reconnecting.
+  HTTPClient http;
+  String url = String(API_BASE_URL) + "/api/devices/ingest";
+  http.begin(url);
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("X-Device-Key", DEVICE_KEY);
+  String httpBody = String("{\"reading_type\":\"") + readingType +
+                    "\",\"value\":" + String(value, 2) +
+                    ",\"unit\":\"" + unit + "\"" +
+                    (timestamp.length() ? String(",\"recorded_at\":\"") + timestamp + "\"" : "") + "}";
+  int statusCode = http.POST(httpBody);
+  Serial.printf("[%s] HTTP fallback -> %d\\n", readingType, statusCode);
+  http.end();
+  return statusCode >= 200 && statusCode < 300;
+}*
+ * MAINTAIN AI — ESP32 live sensor example
+ * ----------------------------------------
+ * Reads a sensor periodically and pushes it straight into MAINTAIN AI's
+ * live-machine-data endpoint. This is one working example, not the only
+ * way to do it — swap the sensor-reading section for whatever hardware
+ * you actually have (vibration sensor, current clamp, etc.) and keep the
+ * WiFi + HTTP POST section as-is.
+ *
+ * HARDWARE (as written): ESP32 dev board + DHT22 temperature/humidity
+ * sensor. DHT22 data pin -> GPIO 4 (change DHTPIN below if wired
+ * differently). Don't forget the DHT22's pull-up resistor (4.7k-10k
+ * between VCC and DATA) if your breakout board doesn't already have one.
+ *
+ * LIBRARIES NEEDED (Arduino IDE -> Library Manager):
+ *   - "DHT sensor library" by Adafruit
+ *   - "Adafruit Unified Sensor" (DHT library depends on this)
+ *   (WiFi.h and HTTPClient.h ship with the ESP32 board package already)
+ *
+ * SETUP:
+ *   1. In the app: open the machine's page -> enable IoT device -> copy
+ *      the device key it gives you (shown once — if you lose it,
+ *      re-enabling issues a new one).
+ *   2. Fill in WIFI_SSID, WIFI_PASSWORD, API_BASE_URL, and DEVICE_KEY below.
+ *   3. Flash this to the ESP32 (Arduino IDE: Tools -> Board -> your ESP32
+ *      board, then Sketch -> Upload).
+ *   4. Open the Serial Monitor at 115200 baud to watch it connect and post.
+ *
+ * API_BASE_URL must be reachable from the ESP32's network. If MAINTAIN AI
+ * is running on your laptop (not a public server), that means the ESP32
+ * needs to be on the SAME WiFi network, and you use your laptop's local
+ * IP (e.g., http://192.168.1.42:8000), not "localhost" — the ESP32 has no
+ * idea what "localhost" means on your laptop.
+ */
+
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <WebSocketsClient.h>
+#include <time.h>
+#include <DHT.h>
+
+// ---- Fill these in ----
+const char* WIFI_SSID     = "YOUR_WIFI_NAME";
+const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
+const char* API_BASE_URL  = "http://192.168.1.42:8000";   // your machine's local IP + port
+const char* DEVICE_KEY    = "PASTE_YOUR_DEVICE_KEY_HERE"; // from the app's IoT Device panel
+
+// WebSocket settings. Use the backend host/IP directly; do not use localhost.
+const char* WS_HOST = "192.168.1.42";
+const uint16_t WS_PORT = 8000;
+const char* WS_PATH = "/api/devices/ws";
+
+// ---- Sensor wiring ----
+#define DHTPIN 4
+#define DHTTYPE DHT22
+DHT dht(DHTPIN, DHTTYPE);
+
+// How often to send a reading. Don't go faster than every few seconds —
+// there's no need, and it just spams the audit-adjacent alert checks.
+const unsigned long SEND_INTERVAL_MS = 30000; // 30 seconds
+unsigned long lastSendTime = 0;
+WebSocketsClient webSocket;
+bool wsConnected = false;
+
+String utcTimestamp() {
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo, 1000)) return "";
+  char buf[25];
+  strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &timeinfo);
+  return String(buf);
+}
+
+void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
+  if (type == WStype_CONNECTED) {
+    wsConnected = true;
+    String auth = String("{\"type\":\"authenticate\",\"device_key\":\"") + DEVICE_KEY + "\"}";
+    webSocket.sendTXT(auth);
+    Serial.println("Telemetry WebSocket connected — authenticating...");
+  } else if (type == WStype_DISCONNECTED) {
+    wsConnected = false;
+    Serial.println("Telemetry WebSocket disconnected — reconnecting automatically...");
+  } else if (type == WStype_TEXT) {
+    Serial.printf("WS <- %.*s\n", (int)length, payload);
+  }
+}
+
+void connectWebSocket() {
+  webSocket.begin(WS_HOST, WS_PORT, WS_PATH);
+  webSocket.onEvent(webSocketEvent);
+  webSocket.setReconnectInterval(5000);
+  webSocket.enableHeartbeat(15000, 3000, 2);
+}
+
+void connectWiFi() {
+  Serial.print("Connecting to WiFi");
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println();
+  Serial.print("Connected. IP address: ");
+  Serial.println(WiFi.localIP());
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  Serial.println("Synchronizing UTC clock...");
+  struct tm timeinfo;
+  getLocalTime(&timeinfo, 10000);
+  connectWebSocket();
 }
 
 // Sends one reading. Returns true on success (HTTP 2xx).
@@ -103,9 +289,12 @@ void setup() {
 
   dht.begin();
   connectWiFi();
+  lastSendTime = millis() - SEND_INTERVAL_MS;
 }
 
 void loop() {
+  webSocket.loop();
+
   unsigned long now = millis();
   if (now - lastSendTime < SEND_INTERVAL_MS) {
     return; // not time yet — keep loop() fast and non-blocking
