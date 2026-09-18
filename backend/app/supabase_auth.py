@@ -54,3 +54,29 @@ def sync_organization_claim(supabase_user_id: str, organization_id: int):
             return 200 <= response.status < 300
     except Exception:
         return False
+
+
+def invite_user_by_email(email: str, redirect_to: str | None = None, metadata: dict | None = None):
+    """Create an invited Supabase Auth identity using the server-only secret key."""
+    if not SUPABASE_URL or not SUPABASE_SECRET_KEY:
+        raise RuntimeError("Supabase server credentials are not configured")
+    payload = {"email": email}
+    if metadata:
+        payload["data"] = metadata
+    if redirect_to:
+        payload["redirect_to"] = redirect_to
+    req = urllib.request.Request(
+        f"{SUPABASE_URL}/auth/v1/invite",
+        data=json.dumps(payload).encode("utf-8"),
+        method="POST",
+        headers={
+            "apikey": SUPABASE_SECRET_KEY,
+            "Authorization": f"Bearer {SUPABASE_SECRET_KEY}",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except Exception as exc:
+        raise RuntimeError(f"Supabase invitation failed: {exc}") from exc
