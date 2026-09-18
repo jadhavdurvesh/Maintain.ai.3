@@ -19,10 +19,27 @@
       "package.json"
     ],
     "extraResources": [
-      { "from": "../frontend/dist", "to": "frontend" }
+      {
+        "from": "../frontend/dist",
+        "to": "frontend"
+      }
     ],
-    "win": { "target": "nsis" },
-    "mac": { "target": "dmg", "category": "public.app-category.productivity" },
-    "linux": { "target": ["AppImage", "deb"], "category": "Utility" }
+    "win": {
+      "target": "nsis",
+      "icon": "assets/maintain-ai-logo.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.productivity",
+      "icon": "assets/maintain-ai-logo.icns"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Utility",
+      "icon": "assets/maintain-ai-logo.png"
+    }
   }
 }
