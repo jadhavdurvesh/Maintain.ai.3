@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import api from './api/client.js'
 import { getToken, setToken, onUnauthorized } from './api/client.js'
 import { supabaseAuth } from './supabaseAuth.js'
+import { setRealtimeOrganizationId } from './realtime.js'
 
 const AuthContext = createContext(null)
 
@@ -9,7 +10,15 @@ export function AuthProvider({ children }) {
   const [authRequired, setAuthRequired] = useState(null)
   const [user, setUser] = useState(null)
   const [checking, setChecking] = useState(true)
-  const loadMe = () => api.get('/api/auth/me').then(setUser).catch(() => setUser(null))
+  const loadMe = () => api.get('/api/auth/me').then((nextUser) => {
+    setUser(nextUser)
+    setRealtimeOrganizationId(nextUser?.organization_id ?? null)
+    return nextUser
+  }).catch((error) => {
+    setUser(null)
+    setRealtimeOrganizationId(null)
+    throw error
+  })
 
   useEffect(() => {
     let mounted = true
@@ -27,7 +36,7 @@ export function AuthProvider({ children }) {
     }
     boot()
     const unsubscribe = supabaseAuth.enabled ? supabaseAuth.onAuthStateChange(async (next) => {
-      if (next?.access_token) { setToken(next.access_token); await loadMe() } else { setToken(null); setUser(null) }
+      if (next?.access_token) { setToken(next.access_token); await loadMe() } else { setToken(null); setUser(null); setRealtimeOrganizationId(null) }
     }) : null
     onUnauthorized(() => setUser(null))
     return () => { mounted = false; unsubscribe?.() }
@@ -45,7 +54,7 @@ export function AuthProvider({ children }) {
     }
     const r = await api.post('/api/auth/register', { organization_name, username, email, password, full_name }); setToken(r.access_token); await loadMe()
   }
-  const logout = async () => { if (supabaseAuth.enabled) await supabaseAuth.signOut(); setToken(null); setUser(null) }
+  const logout = async () => { if (supabaseAuth.enabled) await supabaseAuth.signOut(); setToken(null); setUser(null); setRealtimeOrganizationId(null) }
   const needsLogin = authRequired === true && !user
   return <AuthContext.Provider value={{ authRequired, user, checking, needsLogin, login, register, logout }}>{children}</AuthContext.Provider>
 }
