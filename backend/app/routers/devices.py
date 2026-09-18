@@ -358,7 +358,7 @@ def disable_device(machine_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/ingest")
-def ingest_reading(
+async def ingest_reading(
     payload: IngestPayload,
     x_device_key: str = Header(..., alias="X-Device-Key"),
     db: Session = Depends(get_db),
@@ -367,6 +367,22 @@ def ingest_reading(
     if not machine or not machine.iot_enabled:
         raise HTTPException(401, "invalid or disabled device key")
     reading, behaviour, safety = _process_reading(db, machine, payload)
+    if safety and safety.get("shutdown_requested"):
+        client = _device_command_clients.get(machine.id)
+        if client:
+            try:
+                await client.send_json({
+                    "type": "shutdown",
+                    "machine_id": machine.id,
+                    "reason": safety["message"],
+                    "reading_type": reading.reading_type,
+                    "value": reading.value,
+                    "threshold": safety.get("threshold"),
+                    "event_id": safety.get("event_id"),
+                })
+                safety["device_command_sent"] = True
+            except Exception:
+                _device_command_clients.pop(machine.id, None)
     return {
         "accepted": True,
         "machine": machine.name,
