@@ -213,7 +213,7 @@ def _export_dataset(db, dataset):
 
 
 @router.get("/export/csv")
-def export_machines_csv(db: Session = Depends(get_db)):
+def export_machines_csv(db: Session = Depends(get_db), current: CurrentUser = Depends(get_current_user)):
     machines = db.query(models.Machine).filter_by(archived=False).all()
     buffer = io.StringIO()
     writer = csv.writer(buffer)
@@ -236,7 +236,7 @@ def export_machines_csv(db: Session = Depends(get_db)):
 
 
 @router.get("/export/pdf")
-def export_pdf(db: Session = Depends(get_db)):
+def export_pdf(db: Session = Depends(get_db), current: CurrentUser = Depends(get_current_user)):
     pdf_bytes = build_pdf_report(db)
     filename = f"maintain_ai_report_{datetime.utcnow().date()}.pdf"
     return StreamingResponse(
@@ -247,7 +247,7 @@ def export_pdf(db: Session = Depends(get_db)):
 
 
 @router.get("/export/excel")
-def export_excel(db: Session = Depends(get_db)):
+def export_excel(db: Session = Depends(get_db), current: CurrentUser = Depends(get_current_user)):
     xlsx_bytes = build_excel_report(db)
     filename = f"maintain_ai_report_{datetime.utcnow().date()}.xlsx"
     return StreamingResponse(
@@ -259,7 +259,7 @@ def export_excel(db: Session = Depends(get_db)):
 
 
 @router.get("/export/gemini-pdf")
-def export_gemini_pdf(db: Session = Depends(get_db)):
+def export_gemini_pdf(db: Session = Depends(get_db), current: CurrentUser = Depends(get_current_user)):
     """Generate a detailed, evidence-grounded PDF with Gemini narrative when configured."""
     machines = db.query(models.Machine).filter_by(archived=False).all()
     facts = []
@@ -294,7 +294,7 @@ def export_gemini_pdf(db: Session = Depends(get_db)):
     filename = f"maintain_ai_gemini_report_{datetime.utcnow().date()}.pdf"
     return StreamingResponse(iter([pdf]), media_type="application/pdf", headers={"Content-Disposition":f"attachment; filename={filename}"})
 @router.get("/export/{dataset}.csv")
-def export_dataset_csv(dataset: str, db: Session = Depends(get_db)):
+def export_dataset_csv(dataset: str, db: Session = Depends(get_db), current: CurrentUser = Depends(get_current_user)):
     allowed = {"machines","workorders","maintenance","faults","alerts","sensor_readings","components","safety","safety_events","spare_parts","notifications"}
     if dataset not in allowed:
         from fastapi import HTTPException
@@ -305,7 +305,7 @@ def export_dataset_csv(dataset: str, db: Session = Depends(get_db)):
 
 
 @router.get("/export/all")
-def export_all_data(db: Session = Depends(get_db)):
+def export_all_data(db: Session = Depends(get_db), current: CurrentUser = Depends(get_current_user)):
     allowed = ["machines","workorders","maintenance","faults","alerts","sensor_readings","components","safety","safety_events","spare_parts","notifications"]
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
