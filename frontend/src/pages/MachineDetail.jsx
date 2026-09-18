@@ -246,7 +246,7 @@ export default function MachineDetail() {
 
       <div className="panel section-gap">
         <div className="panel-header">
-          <span className="panel-title">Machine Safety Limits & Auto-Shutdown</span
+          <span className="panel-title">Machine Safety Limits & Auto-Shutdown</span>
           <span className={'badge ' + (safety?.enabled ? 'healthy' : 'neutral')}>{safety?.enabled ? 'Monitoring' : 'Off'}</span>
         </div>
         <div className="panel-body">
@@ -274,7 +274,7 @@ export default function MachineDetail() {
       </div>
       <div className="panel section-gap">
         <div className="panel-header">
-          <span className="panel-title">Pretrained AI Signal</span
+          <span className="panel-title">Pretrained AI Signal</span>
           <span className={'badge ' + (intelligence?.pretrained_anomaly?.available ? 'healthy' : 'warning')}>
             {intelligence?.pretrained_anomaly?.available ? 'Zero-shot' : 'Not ready'}
           </span>
