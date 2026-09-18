@@ -8,6 +8,8 @@ from ..ml.temporal import artifact_status as temporal_artifact_status
 from ..ml.pretrained import pretrained_status, score_machine as score_pretrained_machine
 from ..ml.forecasts import forecast_status as forecast_models_status, forecast_signal as chronos_forecast
 from ..ml.timer import timer_status, forecast as timer_forecast
+from ..ml.degradation import get_timeline
+from ..ml.intelligence import process_telemetry
 from .. import models
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
@@ -99,6 +101,14 @@ def get_live_behaviour(db: Session = Depends(get_db)):
             "behaviour": behaviour,
         })
     return {"machines": results}
+
+
+@router.get("/machines/{machine_id}/degradation")
+def get_machine_degradation(machine_id: int, limit: int = 48, db: Session = Depends(get_db)):
+    """Return the explainable online degradation timeline."""
+    if db.get(models.Machine, machine_id) is None:
+        raise HTTPException(404, "machine not found")
+    return get_timeline(db, machine_id, limit)
 
 
 @router.get("/forecast-model-status")
