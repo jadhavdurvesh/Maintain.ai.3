@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from .. import models, schemas, audit
@@ -43,13 +43,13 @@ def _get_work_order(wo_id: int, current: CurrentUser, db: Session) -> models.Wor
 
 
 @router.get("", response_model=List[schemas.WorkOrderOut])
-def list_work_orders(status: str | None = None, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+def list_work_orders(status: str | None = None, limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0), current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     query = db.query(models.WorkOrder).join(models.Machine).filter(models.Machine.organization_id == current.organization_id)
     if _is_worker(current):
         query = query.filter(models.WorkOrder.assigned_to == current.username)
     if status:
         query = query.filter(models.WorkOrder.status == status)
-    return query.order_by(models.WorkOrder.created_at.desc()).all()
+    return query.order_by(models.WorkOrder.created_at.desc(), models.WorkOrder.id.desc()).offset(offset).limit(limit).all()
 
 
 @router.post("", response_model=schemas.WorkOrderOut)
