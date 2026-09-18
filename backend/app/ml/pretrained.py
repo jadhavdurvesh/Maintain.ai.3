@@ -19,7 +19,7 @@ SENSOR_TYPES = ("temperature", "vibration", "current", "load")
 
 def _model_dir() -> Path:
     configured = os.getenv("MAINTAIN_PRETRAINED_MODEL_DIR", "").strip()
-    return Path(configured).expanduser() if configured else Path("backend/app/ml/artifacts/pretrained/TimeRadar")
+    return Path(configured).expanduser() if configured else Path(__file__).resolve().parent / "artifacts" / "pretrained" / "TimeRadar"
 
 
 def pretrained_status() -> dict:
