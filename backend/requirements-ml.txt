@@ -4,3 +4,8 @@ numpy==2.1.1
 scikit-learn==1.5.2
 joblib==1.4.2
 torch>=2.1,<3
+
+# Optional pretrained TimeRadar zero-shot inference
+transformers>=4.45,<5
+torch-frft>=0.8.1
+safetensors>=0.7.0
