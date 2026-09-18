@@ -5,7 +5,7 @@ import { formatDateTime, formatDate } from '../utils/dates.js'
 import StatusBadge from '../components/StatusBadge.jsx'
 import { Loading, ErrorState } from './Dashboard.jsx'
 import { usePageHeader } from '../PageHeaderContext.jsx'
-import { getToken } from '../api/client.js'
+import { getToken, clearApiCache } from '../api/client.js'
 
 export default function MachineDetail() {
   const { id } = useParams()
@@ -78,6 +78,7 @@ export default function MachineDetail() {
     e.preventDefault()
     await api.post(`/api/machines/${id}/readings`, { ...newReading, value: Number(newReading.value) })
     setNewReading({ ...newReading, value: '' })
+    clearApiCache(`/api/machines/${id}`)
     load()
   }
 
@@ -86,6 +87,7 @@ export default function MachineDetail() {
     if (!newComponent.trim()) return
     await api.post(`/api/machines/${id}/components`, { name: newComponent })
     setNewComponent('')
+    clearApiCache(`/api/machines/${id}`)
     load()
   }
 
