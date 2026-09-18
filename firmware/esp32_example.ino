@@ -91,7 +91,16 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
     wsConnected = false;
     Serial.println("Telemetry WebSocket disconnected — reconnecting automatically...");
   } else if (type == WStype_TEXT) {
-    Serial.printf("WS <- %.*s\n", (int)length, payload);
+    String message = String((char*)payload).substring(0, length);
+    Serial.printf("WS <- %s\n", message.c_str());
+    if (message.indexOf("\"type\":\"shutdown\"") >= 0 || message.indexOf("\"type\":\"shutdown_test\"") >= 0) {
+      machineShutdownLatched = true;
+      setMachinePower(false);
+      Serial.println("SAFETY SHUTDOWN: machine power output disabled");
+      String ackType = message.indexOf("shutdown_test") >= 0 ? "shutdown_test_ack" : "shutdown_ack";
+      String ack = String("{\"type\":\"") + ackType + "\",\"status\":\"latched_off\"}";
+      webSocket.sendTXT(ack);
+    }
   }
 }
 
