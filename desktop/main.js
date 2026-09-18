@@ -1,4 +1,6 @@
 const { app, BrowserWindow } = require('electron')
+
+app.setName('MAINTAIN AI')
 const path = require('path')
 
 let mainWindow = null
