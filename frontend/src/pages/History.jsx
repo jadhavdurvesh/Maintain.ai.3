@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import api from '../api/client.js'
+import { formatDateTime } from '../utils/dates.js'
 import { Loading, ErrorState } from './Dashboard.jsx'
 import { usePageHeader } from '../PageHeaderContext.jsx'
 
@@ -69,7 +70,7 @@ export default function History() {
             {entries.map((e) => (
               <tr key={e.id}>
                 <td className="mono" style={{ whiteSpace: 'nowrap', color: 'var(--text-faint)' }}>
-                  {new Date(e.created_at + 'Z').toLocaleString()}
+                  {formatDateTime(e.created_at)}
                 </td>
                 <td>
                   <span className={`badge ${ACTION_TONE[e.action] || 'neutral'}`} style={{ marginRight: 8 }}>{e.action}</span>
