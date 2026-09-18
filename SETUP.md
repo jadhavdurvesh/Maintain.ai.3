@@ -127,6 +127,20 @@ The anomaly score is deliberately **not presented as a failure probability**. Ca
 
 If the optional ML stack or checkpoint is missing, the rest of MAINTAIN AI continues to work normally and the Machine Detail page reports that the pretrained signal is unavailable.
 
+## 6. Hosted PostgreSQL
+
+The online backend is PostgreSQL-ready and uses the same SQLAlchemy models as local SQLite. Set `DATABASE_URL` on the backend:
+
+```env
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DATABASE
+```
+
+PostgreSQL uses connection pooling and stale-connection checks. SQLite remains the default when `DATABASE_URL` is not set, so local development is unchanged.
+
+For the hosted deployment, provision a managed PostgreSQL database and add its `DATABASE_URL` only to the backend environment. **Never put the database URL in the frontend or desktop app.** Clients continue to communicate only with FastAPI.
+
+Before moving production data, take a backup and verify the hosted schema with the application/API test suite.
+
 ## Troubleshooting
 
 **"Address already in use" on port 8000 or 5173**
