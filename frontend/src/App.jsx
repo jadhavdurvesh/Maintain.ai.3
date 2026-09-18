@@ -1,7 +1,7 @@
 import { Routes, Route, NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Factory, Wrench, ClipboardList, Bot,
-  AlertTriangle, Package, BarChart3, Settings as SettingsIcon, History as HistoryIcon, Info, Bug,
+  AlertTriangle, Package, BarChart3, Settings as SettingsIcon, History as HistoryIcon, Info, Bug, BrainCircuit,
 } from 'lucide-react'
 
 import { PageHeaderProvider, useCurrentHeader } from './PageHeaderContext.jsx'
@@ -22,6 +22,7 @@ import Reports from './pages/Reports.jsx'
 import SettingsPage from './pages/Settings.jsx'
 import History from './pages/History.jsx'
 import About from './pages/About.jsx'
+import ModelLab from './pages/ModelLab.jsx'
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -33,6 +34,7 @@ const NAV = [
   { to: '/alerts', label: 'Alerts', icon: AlertTriangle },
   { to: '/spare-parts', label: 'Spare Parts', icon: Package },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
+  { to: '/model-lab', label: 'AI Model Lab', icon: BrainCircuit },
   { to: '/history', label: 'History', icon: HistoryIcon },
   { to: '/settings', label: 'Settings', icon: SettingsIcon },
   { to: '/about', label: 'About', icon: Info },
@@ -64,6 +66,7 @@ export default function App() {
     <Route path="/alerts" element={<Alerts />} />
     <Route path="/spare-parts" element={<SpareParts />} />
     <Route path="/reports" element={<Reports />} />
+    <Route path="/model-lab" element={<ModelLab />} />
     <Route path="/history" element={<History />} />
     <Route path="/settings" element={<SettingsPage />} />
     <Route path="/about" element={<About />} />
