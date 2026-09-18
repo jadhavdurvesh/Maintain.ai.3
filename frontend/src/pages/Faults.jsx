@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import api from '../api/client.js'
+import { formatDateTime } from '../utils/dates.js'
 import { Loading, ErrorState } from './Dashboard.jsx'
 import { usePageHeader } from '../PageHeaderContext.jsx'
 
@@ -140,7 +141,7 @@ export default function Faults() {
             <div className="chip-row" style={{ marginTop: 12 }}>
               {!f.resolved_date && <button className="btn secondary" disabled={busy} onClick={() => resolve(f)}>Resolve</button>}
               {!f.resolved_date && (activeOrder ? <span className="badge healthy">Work Order #{activeOrder.id} · {activeOrder.status.replace('_', ' ')}</span> : <button className="btn secondary" disabled={busy} onClick={() => openWorkOrder(f)}>Create Work Order</button>)}
-              <span className="text-faint" style={{ fontSize: 11 }}>{new Date(f.reported_date + 'Z').toLocaleString()}{f.resolved_date ? ` · resolved ${new Date(f.resolved_date + 'Z').toLocaleString()}` : ''}</span>
+              <span className="text-faint" style={{ fontSize: 11 }}>{formatDateTime(f.reported_date)}{f.resolved_date ? ` · resolved ${formatDateTime(f.resolved_date)}` : ''}</span>
             </div>
           </div>
         })}
