@@ -398,3 +398,24 @@ class MLTrainingLabel(Base):
     fault_id = Column(Integer, ForeignKey("fault_records.id"), nullable=True, index=True)
     work_order_id = Column(Integer, ForeignKey("work_orders.id"), nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class MLSequenceSample(Base):
+    """Contiguous temporal windows joined to future outcome labels."""
+    __tablename__ = "ml_sequence_samples"
+    __table_args__ = (
+        UniqueConstraint("machine_id", "end_window_id", "sequence_length", "horizon_seconds",
+                         name="uq_ml_sequence_sample"),
+        Index("ix_ml_sequence_machine_end", "machine_id", "window_end"),
+    )
+    id = Column(Integer, primary_key=True, index=True)
+    machine_id = Column(Integer, ForeignKey("machines.id"), nullable=False, index=True)
+    end_window_id = Column(Integer, ForeignKey("ml_telemetry_windows.id"), nullable=False, index=True)
+    window_end = Column(DateTime, nullable=False, index=True)
+    window_seconds = Column(Integer, nullable=False)
+    sequence_length = Column(Integer, nullable=False)
+    horizon_seconds = Column(Integer, nullable=False)
+    sequence_json = Column(Text, nullable=False)
+    target_failure = Column(Boolean, nullable=False, default=False)
+    fault_id = Column(Integer, ForeignKey("fault_records.id"), nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
