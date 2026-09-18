@@ -18,6 +18,7 @@ export default function Dashboard() {
   const [recentFaults, setRecentFaults] = useState([])
   const [recentActivity, setRecentActivity] = useState([])
   const [riskPredictions, setRiskPredictions] = useState(null)
+  const [pretrainedStatus, setPretrainedStatus] = useState(null)
   const [error, setError] = useState(null)
 
   useEffect(() => {
@@ -30,10 +31,11 @@ export default function Dashboard() {
       api.get('/api/reports/recent-faults'),
       api.get('/api/reports/recent-activity'),
       api.get('/api/analytics/risk-predictions'),
+      api.get('/api/analytics/pretrained-model-status'),
     ])
-      .then(([s, m, a, u, r, rf, ra, risk]) => {
+      .then(([s, m, a, u, r, rf, ra, risk, pretrained]) => {
         setSummary(s); setMachines(m); setAlerts(a); setUpcoming(u); setReliability(r)
-        setRecentFaults(rf); setRecentActivity(ra); setRiskPredictions(risk)
+        setRecentFaults(rf); setRecentActivity(ra); setRiskPredictions(risk); setPretrainedStatus(pretrained)
       })
       .catch((e) => setError(e.message))
   }, [])
@@ -115,6 +117,28 @@ export default function Dashboard() {
               {alerts.length === 0 && <tr><td colSpan={2} className="empty-state">No active alerts.</td></tr>}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <div className="panel section-gap">
+        <div className="panel-header">
+          <span className="panel-title">Temporal AI Intelligence</span>
+          <span className={'badge ' + (pretrainedStatus?.configured ? 'healthy' : 'warning')}>
+            {pretrainedStatus?.configured ? 'Ready' : 'Optional'}
+          </span>
+        </div>
+        <div className="panel-body">
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center' }}>
+            <div>
+              <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>Pretrained foundation model</div>
+              <div className="mono" style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>{pretrainedStatus?.model || 'TimeRadar'}</div>
+            </div>
+            <div style={{ maxWidth: 650, color: 'var(--text-faint)', fontSize: 12 }}>
+              {pretrainedStatus?.configured
+                ? 'Zero-shot anomaly inference is available for machines with supported telemetry. Failure probability remains separate and uncalibrated.'
+                : 'Install the optional ML stack and pretrained checkpoint to enable zero-shot temporal anomaly inference. The rest of the application remains fully functional without it.'}
+            </div>
+          </div>
         </div>
       </div>
 
