@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
@@ -262,7 +262,7 @@ def worker_login(
 @router.post("/supabase/sync")
 def sync_supabase_user(
     payload: SupabaseSyncIn,
-    authorization: str | None = None,
+    authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
     if not supabase_auth_enabled(): raise HTTPException(status_code=503, detail="Supabase Auth is not configured")
