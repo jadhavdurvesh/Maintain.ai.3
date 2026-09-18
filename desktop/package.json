@@ -25,19 +25,18 @@
       }
     ],
     "win": {
-      "target": "nsis",
+      "target": "nsis"
     },
     "mac": {
       "target": "dmg",
-      "category": "public.app-category.productivity",
+      "category": "public.app-category.productivity"
     },
     "linux": {
       "target": [
         "AppImage",
         "deb"
       ],
-      "category": "Utility",
-      "icon": "assets/maintain-ai-logo.png"
+      "category": "Utility"
     }
   }
 }
