@@ -7,11 +7,18 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..database import get_db
 from ..deps import get_current_user, CurrentUser
+from ..supabase_auth import enabled as supabase_enabled, invite_user_by_email, sync_organization_claim
 
 router = APIRouter(
     prefix="/api/users",
     tags=["users"],
 )
+
+
+class InvitationIn(BaseModel):
+    email: str
+    role: str = "technician"
+    application: str = "workforce"
 
 
 class UserIn(BaseModel):
@@ -105,6 +112,92 @@ def _applications(db: Session, user_id: int) -> list[str]:
         models.UserApplicationAccess.enabled.is_(True),
     ).all()
     return [row.application for row in rows]
+
+
+@router.post("/invitations", response_model=schemas.OrganizationInvitationOut)
+def invite_member(
+    payload: InvitationIn,
+    current: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_admin(current)
+    if not supabase_enabled():
+        raise HTTPException(503, "Supabase Auth is not configured")
+    email = payload.email.strip().lower()
+    if payload.role not in {"admin", "technician", "viewer"}:
+        raise HTTPException(400, "invalid role")
+    if payload.application not in APPLICATIONS:
+        raise HTTPException(400, "invalid application")
+
+    existing_local = db.query(models.User).filter(models.User.email == email).first()
+    if existing_local and existing_local.organization_id != current.organization_id:
+        raise HTTPException(409, "that email belongs to another organization")
+    pending = db.query(models.OrganizationInvitation).filter(
+        models.OrganizationInvitation.organization_id == current.organization_id,
+        models.OrganizationInvitation.email == email,
+        models.OrganizationInvitation.status == "pending",
+    ).first()
+    if pending:
+        raise HTTPException(409, "an invitation is already pending for this email")
+
+    try:
+        invited = invite_user_by_email(
+            email,
+            redirect_to=None,
+            metadata={"organization_id": str(current.organization_id), "application": payload.application},
+        )
+    except RuntimeError as exc:
+        raise HTTPException(502, str(exc))
+
+    supabase_id = str(invited.get("id") or "")
+    username_base = email.split("@")[0][:40] or "user"
+    username = username_base
+    suffix = 2
+    while db.query(models.User).filter(models.User.username == username).first():
+        username = f"{username_base}{suffix}"
+        suffix += 1
+
+    if existing_local:
+        user = existing_local
+        user.supabase_user_id = supabase_id or user.supabase_user_id
+        user.role = models.UserRole(payload.role)
+        user.active = True
+    else:
+        user = models.User(
+            username=username,
+            email=email,
+            supabase_user_id=supabase_id or None,
+            organization_id=current.organization_id,
+            role=models.UserRole(payload.role),
+            active=True,
+        )
+        db.add(user)
+        db.flush()
+
+    access = db.query(models.UserApplicationAccess).filter(
+        models.UserApplicationAccess.user_id == user.id,
+        models.UserApplicationAccess.application == payload.application,
+    ).first()
+    if not access:
+        db.add(models.UserApplicationAccess(user_id=user.id, application=payload.application, enabled=True))
+    else:
+        access.enabled = True
+
+    invitation = models.OrganizationInvitation(
+        organization_id=current.organization_id,
+        email=email,
+        role=models.UserRole(payload.role),
+        application=payload.application,
+        supabase_user_id=supabase_id or None,
+        created_by=current.username,
+        status="pending",
+    )
+    db.add(invitation)
+    db.commit()
+    db.refresh(invitation)
+    if supabase_id:
+        sync_organization_claim(supabase_id, current.organization_id)
+    return invitation
 
 
 @router.get("/members", response_model=List[schemas.OrganizationMemberOut])
