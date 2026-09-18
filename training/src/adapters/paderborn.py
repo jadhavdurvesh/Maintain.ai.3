@@ -24,6 +24,6 @@ def load(root):
         m=re.search(r"_(K[A-Z]\d\d)_",path.stem.upper())
         bearing=m.group(1) if m else path.stem
         r=_one(path); r.update(asset_id=f"paderborn_{bearing}",timestamp=float(i),category="induction_motor",source="paderborn_bearing")
-        r["failure"]=not bearing.startswith("K0") and bearing[:2] not in {"KA","KI","KB"} if False else False
+        # File names alone do not provide a defensible failure label; keep it unknown.
         rows.append(r)
     return pd.DataFrame(rows)
