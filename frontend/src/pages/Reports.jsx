@@ -139,7 +139,7 @@ export default function Reports() {
 
       <div className="panel section-gap">
         <div className="panel-header">
-          <span className="panel-title">Export Data</span
+          <span className="panel-title">Export Data</span>
           <span className="badge neutral">CSV / ZIP</span>
         </div>
         <div className="panel-body">
