@@ -12,7 +12,20 @@ from .bootstrap import ensure_bootstrap_organization
 from .database import Base, engine
 from .routers import machines, maintenance, work_orders, alerts, spare_parts, ai_assistant, reports, users, settings, audit_log, analytics, devices, auth, faults, notifications
 
-Base.metadata.create_all(bind=engine)
+# Database initialization is deliberately best-effort at import time.
+# Vercel/serverless must be able to import FastAPI even if an old database
+# needs a separate migration. API requests can then report the real DB error
+# instead of failing the entire function invocation.
+def _initialize_database():
+    try:
+        Base.metadata.create_all(bind=engine)
+        ensure_ai_conversation_schema()
+        ensure_user_work_order_schema()
+        ensure_lab_ml_schema()
+        ensure_bootstrap_organization()
+    except Exception:
+        # Never make the whole ASGI function fail during a cold start.
+        pass
 
 # Lightweight compatibility migrations for existing SQLite/Postgres databases.
 def ensure_ai_conversation_schema():
@@ -47,10 +60,7 @@ def ensure_lab_ml_schema():
         # database needs a separate migration.
         pass
 
-ensure_ai_conversation_schema()
-ensure_user_work_order_schema()
-ensure_lab_ml_schema()
-ensure_bootstrap_organization()
+_initialize_database()
 
 if os.getenv("SEED_DEMO_DATA", "").lower() == "true":
     from .seed_data import seed
