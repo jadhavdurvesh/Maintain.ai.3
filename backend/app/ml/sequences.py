@@ -10,7 +10,7 @@ from .. import models
 
 SEQUENCE_LENGTH = 24
 WINDOW_SECONDS = 3600
-HORIZONS = (24 * 3600, 48 * 3600, 7 * 24 * 3600)
+HORIZONS = (24 * 3600, 48 * 3600, 7 * 24 * 3600, 30 * 24 * 3600)
 
 def build_sequences_for_machine(db: Session, machine_id: int, limit: int = 5000):
     windows = (
