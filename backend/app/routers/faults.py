@@ -166,3 +166,37 @@ def create_work_order_from_fault(fault_id: int, payload: schemas.WorkOrderIn | N
             notify_work_order_assigned(db, work_order, machine)
 
     return work_order
+
+
+@router.post("/outcome-feedback", response_model=schemas.MLOutcomeFeedbackOut)
+def record_ml_outcome_feedback(
+    payload: schemas.MLOutcomeFeedbackIn,
+    current: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    machine = _get_machine(payload.machine_id, current, db)
+    if payload.fault_id:
+        fault = db.get(models.FaultRecord, payload.fault_id)
+        if not fault or fault.machine_id != machine.id:
+            raise HTTPException(400, "fault does not belong to this machine")
+    if payload.work_order_id:
+        work_order = db.get(models.WorkOrder, payload.work_order_id)
+        if not work_order or work_order.machine_id != machine.id:
+            raise HTTPException(400, "work order does not belong to this machine")
+    allowed = {"confirmed_failure", "preventive_finding", "false_alarm", "no_issue", "unknown"}
+    if payload.outcome_type not in allowed:
+        raise HTTPException(400, f"outcome_type must be one of: {', '.join(sorted(allowed))}")
+    feedback = models.MLOutcomeFeedback(
+        **payload.model_dump(),
+        false_alarm=(payload.false_alarm or payload.outcome_type == "false_alarm"),
+        created_by=current.username,
+    )
+    db.add(feedback)
+    db.commit()
+    db.refresh(feedback)
+    audit.log_event(
+        db, "ml_outcome_feedback", feedback.id, "recorded",
+        f"Technician outcome recorded for {machine.name}: {feedback.outcome_type}",
+        performed_by=current.username,
+    )
+    return feedback
