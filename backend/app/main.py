@@ -49,6 +49,7 @@ def ensure_lab_ml_schema():
     missing = {
         "ml_behaviour_states",
         "ml_anomaly_events",
+        "ml_telemetry_windows",
     } - tables
     if missing:
         Base.metadata.create_all(bind=engine)
