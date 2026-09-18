@@ -4,6 +4,7 @@ from datetime import datetime
 from sqlalchemy import (
     Column,
     Integer,
+    Index,
     String,
     Float,
     Text,
@@ -367,7 +368,7 @@ class MLAnomalyEvent(Base):
 class MLTelemetryWindow(Base):
     """Materialized rolling time-series features for advanced ML training/inference."""
     __tablename__ = "ml_telemetry_windows"
-    __table_args__ = (UniqueConstraint("machine_id", "window_end", name="uq_ml_window_machine_end"),)
+    __table_args__ = (UniqueConstraint("machine_id", "window_end", "window_seconds", name="uq_ml_window_machine_end"),)
     id = Column(Integer, primary_key=True, index=True)
     machine_id = Column(Integer, ForeignKey("machines.id"), nullable=False, index=True)
     window_end = Column(DateTime, nullable=False, index=True)
