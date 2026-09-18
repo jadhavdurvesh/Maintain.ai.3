@@ -8,6 +8,7 @@ from . import models
 from .auth import decode_access_token
 from .bootstrap import BOOTSTRAP_ORG_ID
 from .database import get_db
+from .supabase_auth import enabled as supabase_auth_enabled, verify_access_token
 
 
 def auth_required() -> bool:
@@ -97,13 +98,24 @@ def _user_from_token(
     )
 
 
+def _supabase_user_from_token(authorization: str | None, db: Session):
+    if not supabase_auth_enabled() or not authorization or not authorization.startswith("Bearer "): return None
+    claims = verify_access_token(authorization.removeprefix("Bearer ").strip())
+    if not claims or not claims.get("sub"): return None
+    user = db.query(models.User).filter_by(supabase_user_id=str(claims["sub"])).first()
+    if not user and claims.get("email"): user = db.query(models.User).filter_by(email=claims["email"]).first()
+    if not user or not user.active: return None
+    if not user.supabase_user_id:
+        user.supabase_user_id = str(claims["sub"]); db.commit()
+    return CurrentUser(id=user.id, organization_id=user.organization_id or BOOTSTRAP_ORG_ID, username=user.username, role=user.role.value)
 def get_current_user(
     authorization: str | None = Header(
         default=None,
     ),
     db: Session = Depends(get_db),
 ) -> CurrentUser:
-    # A valid token always takes precedence over local mode.
+    supabase_user = _supabase_user_from_token(authorization, db)
+    if supabase_user: return supabase_user
     if authorization and authorization.startswith("Bearer "):
         return _user_from_token(
             authorization,
