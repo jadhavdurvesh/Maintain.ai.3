@@ -196,6 +196,16 @@ def _evaluate_safety_policy(db: Session, machine: models.Machine, reading: model
             severity=models.AlertSeverity.warning, message=message,
         ))
         db.commit()
+        notify_machine_workers(
+            db, machine.id, "safety_warning", "Machine Safety Warning", message,
+            {"route": "machine_alert", "machine_id": machine.id, "event_id": event.id},
+        )
+
+    if event_type == "shutdown_threshold":
+        notify_machine_workers(
+            db, machine.id, "safety_shutdown", "Machine Safety Limit Crossed", message,
+            {"route": "machine_alert", "machine_id": machine.id, "event_id": event.id, "auto_shutdown": shutdown_requested},
+        )
 
     device_command_available = machine.id in _device_command_clients
 
