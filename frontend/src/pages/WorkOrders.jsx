@@ -16,6 +16,8 @@ export default function WorkOrders() {
   const [error, setError] = useState(null)
   const [showForm, setShowForm] = useState(false)
   const [toast, setToast] = useState(null)
+  const [completeOrder, setCompleteOrder] = useState(null)
+  const [resolutionNotes, setResolutionNotes] = useState('')
   const [form, setForm] = useState({ machine_id: '', problem: '', priority: 'medium', recommended_actions: '', assigned_to: '' })
 
   usePageHeader('Work Orders', <button className="btn" onClick={() => setShowForm((s) => !s)}>{showForm ? 'Cancel' : '+ New Work Order'}</button>)
@@ -38,8 +40,23 @@ export default function WorkOrders() {
   }
 
   const advance = async (id, status) => {
-    try { await api.patch(`/api/work-orders/${id}`, { status }); await load(); setToast({ type: 'success', message: status === 'completed' ? 'Work order completed.' : 'Work order started.' }) }
+    if (status === 'completed') {
+      const order = orders.find((o) => o.id === id)
+      setCompleteOrder(order || null); setResolutionNotes('')
+      return
+    }
+    try { await api.patch(`/api/work-orders/${id}`, { status }); await load(); setToast({ type: 'success', message: 'Work order started.' }) }
     catch (e) { setToast({ type: 'error', message: `Could not update work order: ${e.message}` }) }
+  }
+
+  const complete = async (e) => {
+    e.preventDefault()
+    if (!completeOrder || !resolutionNotes.trim()) return
+    try {
+      await api.patch(`/api/work-orders/${completeOrder.id}`, { status: 'completed', resolution_notes: resolutionNotes.trim() })
+      setCompleteOrder(null); setResolutionNotes(''); await load()
+      setToast({ type: 'success', message: 'Work order completed and outcome captured for ML.' })
+    } catch (e) { setToast({ type: 'error', message: `Could not complete work order: ${e.message}` }) }
   }
 
   if (error) return <ErrorState message={error} />
@@ -51,6 +68,25 @@ export default function WorkOrders() {
   return (
     <>
       {toast && <div className="ui-toast-stack" aria-live="polite"><div className={`ui-toast ${toast.type}`}>{toast.message}</div></div>}
+      {completeOrder && (
+        <div className="panel section-gap">
+          <div className="panel-header">
+            <span className="panel-title">Complete Work Order #{completeOrder.id}</span>
+            <button className="btn secondary" onClick={() => setCompleteOrder(null)}>Cancel</button>
+          </div>
+          <form className="panel-body" onSubmit={complete}>
+            <div style={{fontSize:12,color:'var(--text-faint)',marginBottom:10}}>
+              Completing this order automatically records an initial ML outcome. You can refine root cause, component, downtime, or false-alarm status later from the Fault Log.
+            </div>
+            <div className="field">
+              <label>Resolution / work performed</label>
+              <textarea required value={resolutionNotes} onChange={(e) => setResolutionNotes(e.target.value)} placeholder="Describe what was inspected, repaired, replaced, or adjusted…" />
+            </div>
+            <button className="btn" type="submit">Complete & Capture Outcome</button>
+          </form>
+        </div>
+      )}
+
       {showForm && (
         <div className="panel section-gap">
           <form className="panel-body grid-3" onSubmit={create} style={{ alignItems: 'end' }}>
