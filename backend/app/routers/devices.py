@@ -15,6 +15,7 @@ from .. import models, audit
 from ..database import get_db, SessionLocal
 from ..alerts_engine import evaluate_machine
 from ..ml.online import update_online_state
+from ..ml.temporal_features import materialize_windows
 from ..ml.anomaly_events import create_anomaly_event
 from ..notification_service import notify_machine_workers
 
@@ -158,6 +159,7 @@ def _process_reading(db: Session, machine: models.Machine, payload: IngestPayloa
     evaluate_machine(db, machine)
     _check_sensor_anomaly(db, machine, reading)
     behaviour = update_online_state(db, machine, reading)
+    materialize_windows(db, machine.id, reading.recorded_at)
 
     # Confirmed Lab anomalies are durable and deduplicated. A worker push is
     # emitted only the first time an event reaches high/critical severity.
