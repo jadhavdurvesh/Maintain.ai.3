@@ -419,3 +419,38 @@ class MLSequenceSample(Base):
     target_failure = Column(Boolean, nullable=False, default=False)
     fault_id = Column(Integer, ForeignKey("fault_records.id"), nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+
+class MachineSafetyPolicy(Base):
+    """Per-machine warning and automatic-shutdown interlock configuration."""
+    __tablename__ = "machine_safety_policies"
+    id = Column(Integer, primary_key=True, index=True)
+    machine_id = Column(Integer, ForeignKey("machines.id"), nullable=False, unique=True, index=True)
+    enabled = Column(Boolean, nullable=False, default=False)
+    monitored_reading_type = Column(String, nullable=False, default="temperature")
+    unit = Column(String, nullable=True)
+    warning_low = Column(Float, nullable=True)
+    warning_high = Column(Float, nullable=True)
+    shutdown_low = Column(Float, nullable=True)
+    shutdown_high = Column(Float, nullable=True)
+    auto_shutdown_enabled = Column(Boolean, nullable=False, default=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    last_trip_at = Column(DateTime, nullable=True)
+    last_trip_value = Column(Float, nullable=True)
+    last_trip_reason = Column(Text, nullable=True)
+
+
+class MachineSafetyEvent(Base):
+    """Durable record of threshold warnings and shutdown requests."""
+    __tablename__ = "machine_safety_events"
+    id = Column(Integer, primary_key=True, index=True)
+    machine_id = Column(Integer, ForeignKey("machines.id"), nullable=False, index=True)
+    event_type = Column(String, nullable=False, index=True)
+    reading_type = Column(String, nullable=False)
+    value = Column(Float, nullable=False)
+    threshold = Column(Float, nullable=True)
+    message = Column(Text, nullable=False)
+    shutdown_requested = Column(Boolean, nullable=False, default=False)
+    device_acknowledged = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
