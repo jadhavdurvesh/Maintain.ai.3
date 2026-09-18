@@ -55,9 +55,26 @@ def ensure_lab_ml_schema():
         Base.metadata.create_all(bind=engine)
 
 
+
+def ensure_performance_indexes():
+    """Add indexes needed by high-volume history and telemetry queries."""
+    statements = [
+        "CREATE INDEX IF NOT EXISTS ix_sensor_readings_machine_recorded ON sensor_readings (machine_id, recorded_at, id)",
+        "CREATE INDEX IF NOT EXISTS ix_work_orders_created ON work_orders (created_at, id)",
+        "CREATE INDEX IF NOT EXISTS ix_faults_reported ON fault_records (reported_date, id)",
+        "CREATE INDEX IF NOT EXISTS ix_maintenance_scheduled ON maintenance_records (scheduled_date, id)",
+    ]
+    with engine.begin() as connection:
+        for statement in statements:
+            try:
+                connection.execute(text(statement))
+            except Exception:
+                pass
+
 ensure_ai_conversation_schema()
 ensure_user_work_order_schema()
 ensure_lab_ml_schema()
+ensure_performance_indexes()
 ensure_bootstrap_organization()
 
 if os.getenv("SEED_DEMO_DATA", "").lower() == "true":
