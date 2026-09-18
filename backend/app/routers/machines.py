@@ -1,6 +1,6 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from .. import models, schemas, audit
@@ -408,6 +408,8 @@ def add_reading(
 )
 def list_readings(
     machine_id: int,
+    limit: int = Query(20, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     current: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -419,12 +421,9 @@ def list_readings(
 
     return (
         db.query(models.SensorReading)
-        .filter(
-            models.SensorReading.machine_id
-            == machine_id
-        )
-        .order_by(
-            models.SensorReading.recorded_at.desc()
-        )
+        .filter(models.SensorReading.machine_id == machine_id)
+        .order_by(models.SensorReading.recorded_at.desc(), models.SensorReading.id.desc())
+        .offset(offset)
+        .limit(limit)
         .all()
     )
