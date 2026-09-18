@@ -22,7 +22,7 @@ export default function MachineDetail() {
   const [liveReadings, setLiveReadings] = useState({})
   const [liveHistory, setLiveHistory] = useState({})
   const [liveConnected, setLiveConnected] = useState(false)
-  const [pretrained, setPretrained] = useState(null)
+  const [intelligence, setIntelligence] = useState(null)
 
   usePageHeader(
     <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -57,12 +57,20 @@ export default function MachineDetail() {
     if (readingsResult.status === 'fulfilled') setReadings(readingsResult.value)
     if (maintenanceResult.status === 'fulfilled') setMaintenance(maintenanceResult.value)
     if (deviceResult.status === 'fulfilled') setDeviceStatus(deviceResult.value)
-    try { setPretrained(await api.get(`/api/analytics/machines/${id}/pretrained-anomaly`)) } catch { setPretrained(null) }
+    try { setIntelligence(await api.get(`/api/analytics/machines/${id}/intelligence`)) } catch { setIntelligence(null) }
   }
 
   useEffect(() => {
     load()
   }, [id])
+
+  useEffect(() => {
+    if (!machine) return
+    const refresh = window.setInterval(async () => {
+      try { setIntelligence(await api.get(`/api/analytics/machines/${id}/intelligence`)) } catch { /* telemetry may be offline */ }
+    }, 15000)
+    return () => window.clearInterval(refresh)
+  }, [id, machine])
 
   useEffect(() => {
     let socket, retry, stopped = false
@@ -188,7 +196,7 @@ export default function MachineDetail() {
         <div className="panel-header">
           <span className="panel-title">Pretrained AI Signal</span>
           <span className={'badge ' + (pretrained?.available ? 'healthy' : 'warning')}>
-            {pretrained?.available ? 'Zero-shot' : 'Not ready'}
+            {intelligence?.pretrained_anomaly?.available ? 'Zero-shot' : 'Not ready'}
           </span>
         </div>
         <div className="panel-body">
@@ -196,11 +204,11 @@ export default function MachineDetail() {
             <div>
               <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>Time-series anomaly model</div>
               <div className="mono" style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>
-                {pretrained?.available ? Number(pretrained.anomaly_score).toFixed(3) : '—'}
+                {intelligence?.pretrained_anomaly?.available ? Number(intelligence.pretrained_anomaly.anomaly_score).toFixed(3) : '—'}
               </div>
             </div>
             <div style={{ maxWidth: 520, color: 'var(--text-faint)', fontSize: 12 }}>
-              {pretrained?.available ? 'Pretrained zero-shot anomaly score from live telemetry. This is not a calibrated failure probability.' : (pretrained?.reason || 'Waiting for pretrained model / telemetry.')}
+              {intelligence?.pretrained_anomaly?.available ? 'Pretrained zero-shot anomaly score from live telemetry. This is not a calibrated failure probability.' : (intelligence?.pretrained_anomaly?.reason || 'Waiting for pretrained model / telemetry.')}
             </div>
           </div>
         </div>
