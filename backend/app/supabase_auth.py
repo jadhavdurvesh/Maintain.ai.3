@@ -8,6 +8,7 @@ from jwt import PyJWKClient
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
 SUPABASE_PUBLISHABLE_KEY = os.getenv("SUPABASE_PUBLISHABLE_KEY", "")
+SUPABASE_SECRET_KEY = os.getenv("SUPABASE_SECRET_KEY", "")
 
 def enabled():
     return bool(SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY)
@@ -30,3 +31,26 @@ def verify_access_token(token: str):
         return {"sub": user.get("id"), "email": user.get("email"), "user": user}
     except Exception:
         return None
+
+
+
+def sync_organization_claim(supabase_user_id: str, organization_id: int):
+    if not SUPABASE_URL or not SUPABASE_SECRET_KEY:
+        return False
+    url = f"{SUPABASE_URL}/auth/v1/admin/users/{supabase_user_id}"
+    payload = json.dumps({"app_metadata": {"organization_id": str(organization_id)}}).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        method="PUT",
+        headers={
+            "apikey": SUPABASE_SECRET_KEY,
+            "Authorization": f"Bearer {SUPABASE_SECRET_KEY}",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as response:
+            return 200 <= response.status < 300
+    except Exception:
+        return False
