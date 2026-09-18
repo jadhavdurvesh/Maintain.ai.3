@@ -26,6 +26,9 @@ export default function MachineDetail() {
   const [safety, setSafety] = useState(null)
   const [safetyForm, setSafetyForm] = useState({ enabled: false, monitored_reading_type: 'temperature', unit: '°C', warning_low: '', warning_high: '', shutdown_low: '', shutdown_high: '', auto_shutdown_enabled: false })
   const [safetyBusy, setSafetyBusy] = useState(false)
+  const [forecast, setForecast] = useState(null)
+  const [forecastModel, setForecastModel] = useState('chronos2')
+  const [forecastBusy, setForecastBusy] = useState(false)
 
   usePageHeader(
     <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -123,6 +126,12 @@ export default function MachineDetail() {
     load()
   }
 
+  const runForecast = async () => {
+    setForecastBusy(true)
+    try { setForecast(await api.get('/api/analytics/machines/' + id + '/forecast?reading_type=temperature&model=' + forecastModel + '&horizon=12')) }
+    finally { setForecastBusy(false) }
+  }
+
   const saveSafety = async (e) => {
     e.preventDefault()
     setSafetyBusy(true)
@@ -213,7 +222,31 @@ export default function MachineDetail() {
 
       <div className="panel section-gap">
         <div className="panel-header">
-          <span className="panel-title">Machine Safety Limits & Auto-Shutdown</span>
+          <span className="panel-title">Pretrained Signal Forecast</span>
+          <span className="badge neutral">Zero-shot</span>
+        </div>
+        <div className="panel-body">
+          <div className="chip-row">
+            <select value={forecastModel} onChange={e=>setForecastModel(e.target.value)}>
+              <option value="chronos2">Chronos-2</option>
+              <option value="timer">Timer</option>
+            </select>
+            <button className="btn secondary" onClick={runForecast} disabled={forecastBusy}>{forecastBusy ? 'Forecasting…' : 'Forecast Temperature'}</button>
+          </div>
+          {forecast && <div style={{ marginTop: 12 }}>
+            {forecast.available ? (
+              <div className="mono" style={{ display:'grid', gridTemplateColumns:'repeat(6,minmax(0,1fr))', gap:8 }}>
+                {forecast.forecast.slice(0,12).map((v,i)=><div key={i} style={{ padding:8, background:'var(--panel-raised)', borderRadius:6 }}>{Number(v).toFixed(2)}<div style={{fontSize:10,color:'var(--text-faint)'}}>t+{i+1}</div></div>)}
+              </div>
+            ) : <div style={{color:'var(--text-faint)',fontSize:12}}>{forecast.reason || 'Forecast unavailable.'}</div>}
+          </div>}
+          <div style={{ marginTop: 9, color:'var(--text-faint)', fontSize:11 }}>Forecasts estimate future sensor values. They are evidence for degradation analysis, not failure probabilities.</div>
+        </div>
+      </div>
+
+      <div className="panel section-gap">
+        <div className="panel-header">
+          <span className="panel-title">Machine Safety Limits & Auto-Shutdown</span
           <span className={'badge ' + (safety?.enabled ? 'healthy' : 'neutral')}>{safety?.enabled ? 'Monitoring' : 'Off'}</span>
         </div>
         <div className="panel-body">
