@@ -257,6 +257,42 @@ def export_excel(db: Session = Depends(get_db)):
     )
 
 
+
+@router.get("/export/gemini-pdf")
+def export_gemini_pdf(db: Session = Depends(get_db)):
+    """Generate a detailed, evidence-grounded PDF with Gemini narrative when configured."""
+    machines = db.query(models.Machine).filter_by(archived=False).all()
+    facts = []
+    for m in machines:
+        faults = db.query(models.FaultRecord).filter_by(machine_id=m.id).order_by(models.FaultRecord.reported_date.desc()).limit(10).all()
+        work_orders = db.query(models.WorkOrder).filter_by(machine_id=m.id).order_by(models.WorkOrder.created_at.desc()).limit(10).all()
+        maintenance = db.query(models.MaintenanceRecord).filter_by(machine_id=m.id).order_by(models.MaintenanceRecord.scheduled_date.desc()).limit(10).all()
+        alerts = db.query(models.Alert).filter_by(machine_id=m.id).order_by(models.Alert.created_at.desc()).limit(10).all()
+        readings = db.query(models.SensorReading).filter_by(machine_id=m.id).order_by(models.SensorReading.recorded_at.desc()).limit(100).all()
+        facts.append({
+            "machine": {"id":m.id,"code":m.machine_code,"name":m.name,"category":m.category,"location":m.location,"department":m.department,"health_score":m.health_score,"status":_enum_value(m.status),"criticality":_enum_value(m.criticality),"operating_hours":m.operating_hours},
+            "faults":[{"id":x.id,"description":x.description,"cause":x.cause,"severity":_enum_value(x.severity),"reported_date":x.reported_date} for x in faults],
+            "work_orders":[{"id":x.id,"problem":x.problem,"priority":_enum_value(x.priority),"status":_enum_value(x.status),"assigned_to":x.assigned_to,"created_at":x.created_at,"completed_at":x.completed_at,"resolution_notes":x.resolution_notes} for x in work_orders],
+            "maintenance":[{"id":x.id,"type":_enum_value(x.type),"description":x.description,"status":_enum_value(x.status),"scheduled_date":x.scheduled_date,"completed_date":x.completed_date,"performed_by":x.performed_by,"notes":x.notes} for x in maintenance],
+            "alerts":[{"id":x.id,"type":x.alert_type,"severity":_enum_value(x.severity),"message":x.message,"created_at":x.created_at,"acknowledged":x.acknowledged,"resolved":x.resolved} for x in alerts],
+            "recent_readings":[{"type":x.reading_type,"value":x.value,"unit":x.unit,"recorded_at":x.recorded_at} for x in reversed(readings)],
+        })
+
+    ai = None
+    try:
+        from ..ai.gemini_client import diagnose_with_gemini
+        ai = diagnose_with_gemini(
+            "Create an executive and technician maintenance report from the supplied evidence. Summarize observed conditions, open actions, historical failures, maintenance status, telemetry observations, and safety items. Do not invent measurements or diagnoses.",
+            {"report_scope":"all_machines","machines":facts},
+            db=db,
+        )
+    except Exception:
+        ai = None
+
+    from ..exports.gemini_pdf_report import build_gemini_pdf_report
+    pdf = build_gemini_pdf_report(db, facts, ai)
+    filename = f"maintain_ai_gemini_report_{datetime.utcnow().date()}.pdf"
+    return StreamingResponse(iter([pdf]), media_type="application/pdf", headers={"Content-Disposition":f"attachment; filename={filename}"})
 @router.get("/export/{dataset}.csv")
 def export_dataset_csv(dataset: str, db: Session = Depends(get_db)):
     allowed = {"machines","workorders","maintenance","faults","alerts","sensor_readings","components","safety","safety_events","spare_parts","notifications"}
