@@ -42,7 +42,19 @@ export default function MachineDetail() {
         setMaintenance(data.maintenance)
         setDeviceStatus(data.device_status)
       })
-      .catch((e) => setError(e.message))
+      .catch(() => Promise.all([
+        api.get(`/api/machines/${id}`),
+        api.get(`/api/machines/${id}/components`),
+        api.get(`/api/machines/${id}/readings?limit=20`),
+        api.get(`/api/maintenance?machine_id=${id}&limit=50`),
+        api.get(`/api/devices/${id}/status`),
+      ]).then(([m, c, r, mt, ds]) => {
+        setMachine(m)
+        setComponents(c)
+        setReadings(r)
+        setMaintenance(mt)
+        setDeviceStatus(ds)
+      }).catch((e) => setError(e.message)))
   }
 
   useEffect(() => {
