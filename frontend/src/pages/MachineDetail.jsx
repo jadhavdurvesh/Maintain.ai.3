@@ -1,11 +1,10 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import api from '../api/client.js'
+import api, { getToken, clearApiCache } from '../api/client.js'
 import { formatDateTime, formatDate } from '../utils/dates.js'
 import StatusBadge from '../components/StatusBadge.jsx'
 import { Loading, ErrorState } from './Dashboard.jsx'
 import { usePageHeader } from '../PageHeaderContext.jsx'
-import { getToken, clearApiCache } from '../api/client.js'
 
 export default function MachineDetail() {
   const { id } = useParams()
