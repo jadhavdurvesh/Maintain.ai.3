@@ -169,3 +169,8 @@ the Reports page's buttons:
 - http://localhost:8000/api/reports/export/csv
 - http://localhost:8000/api/reports/export/pdf
 - http://localhost:8000/api/reports/export/excel
+
+
+## 7. Supabase Realtime configuration
+
+Set backend `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and backend-only `SUPABASE_SECRET_KEY`. Set frontend `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`. Telemetry is persisted in Neon first, then published to private organization-scoped Supabase Realtime topics (`org:<organization_id>:telemetry`). Never expose the secret key to frontend or desktop.
