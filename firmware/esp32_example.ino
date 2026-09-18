@@ -50,6 +50,17 @@ const char* WS_HOST = "192.168.1.42";
 const uint16_t WS_PORT = 8000;
 const char* WS_PATH = "/api/devices/ws";
 
+// OPTIONAL SAFETY OUTPUT. Connect this to a properly rated safety relay/contactor
+// interface, never directly to mains. Choose the polarity for your relay module.
+const int SAFETY_RELAY_PIN = 26;
+const bool SAFETY_RELAY_ACTIVE_HIGH = true;
+bool machineShutdownLatched = false;
+
+void setMachinePower(bool on) {
+  bool output = SAFETY_RELAY_ACTIVE_HIGH ? on : !on;
+  digitalWrite(SAFETY_RELAY_PIN, output ? HIGH : LOW);
+}
+
 // ---- Sensor wiring ----
 #define DHTPIN 4
 #define DHTTYPE DHT22
@@ -288,6 +299,8 @@ void setup() {
   delay(1000);
 
   dht.begin();
+  pinMode(SAFETY_RELAY_PIN, OUTPUT);
+  setMachinePower(true);
   connectWiFi();
   lastSendTime = millis() - SEND_INTERVAL_MS;
 }
@@ -319,6 +332,15 @@ void loop() {
 }
 
 /*
+ * SAFETY OUTPUT
+ * ------------
+ * The backend can send shutdown/shutdown_test commands over the authenticated
+ * device WebSocket. This example latches the safety output OFF. Wire the pin
+ * to a certified relay/contactor or safety-rated controller appropriate for
+ * the machine. The ESP32/GPIO must not be the sole protection for hazardous
+ * equipment. The application setting controls whether the backend sends the
+ * automatic command; the physical interlock should fail safe independently.
+ *
  * ADAPTING THIS FOR OTHER SENSORS
  * --------------------------------
  * Vibration (e.g., ADXL345 accelerometer over I2C):
