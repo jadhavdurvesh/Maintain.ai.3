@@ -30,7 +30,7 @@ export default function History() {
   const [error, setError] = useState(null)
 
   const load = () => {
-    const query = filter ? `?entity_type=${filter}&limit=200` : '?limit=200'
+    const query = filter ? `?entity_type=${filter}&limit=50` : '?limit=50'
     Promise.all([api.get(`/api/audit-log${query}`), api.get('/api/audit-log/count')])
       .then(([e, c]) => { setEntries(e); setCount(c.total_events) })
       .catch((e) => setError(e.message))
