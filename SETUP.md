@@ -109,6 +109,8 @@ The normal backend does not require PyTorch or pretrained models. For local/desk
 cd maintain-ai
 python3 -m pip install -r backend/requirements-ml.txt
 python3 scripts/install_pretrained_models.py
+# Optional: also cache Timer + Chronos-2 zero-shot forecasting models
+python3 scripts/install_pretrained_models.py --with-forecasts
 ```
 
 This installs the bundled **TimeRadar** checkpoint from the public project into:
@@ -118,6 +120,8 @@ backend/app/ml/artifacts/pretrained/TimeRadar/
 ```
 
 The application uses TimeRadar in **zero-shot anomaly-detection mode**. It does not train or modify the pretrained weights. The Machine Detail page exposes the resulting anomaly signal when supported telemetry is available.
+
+Set `MAINTAIN_PRETRAINED_FORECASTS=1` in the backend environment to enable the optional zero-shot Timer and Chronos-2 forecasting endpoints. These models forecast future signal values; they do not produce calibrated failure probabilities.
 
 The anomaly score is deliberately **not presented as a failure probability**. Calibrated 24h/48h/7d failure risk will be added only after MAINTAIN AI has sufficient point-in-time telemetry and technician-confirmed outcomes.
 
