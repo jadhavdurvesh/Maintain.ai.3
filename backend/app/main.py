@@ -39,82 +39,17 @@ def ensure_user_work_order_schema():
 
 
 def ensure_lab_ml_schema():
-    """Create Lab ML tables and repair the early telemetry-window constraint."""
-    inspector = inspect(engine)
-    tables = set(inspector.get_table_names())
-    missing = {"ml_behaviour_states", "ml_anomaly_events", "ml_telemetry_windows"} - tables
-    if missing:
+    """Create additive Lab ML tables without blocking application startup."""
+    try:
         Base.metadata.create_all(bind=engine)
-
-    # The first Lab version accidentally made (machine_id, window_end) unique,
-    # which prevented storing 5m/15m/1h windows at the same timestamp.
-    # Repair that constraint without deleting existing window data.
-    if "ml_telemetry_windows" in inspect(engine).get_table_names():
-        dialect = engine.dialect.name
-        with engine.begin() as connection:
-            if dialect == "sqlite":
-                sql = connection.execute(text(
-                    "SELECT sql FROM sqlite_master WHERE type='table' AND name='ml_telemetry_windows'"
-                )).scalar()
-                if sql and "uq_ml_window_machine_end" in sql:
-                    connection.execute(text("ALTER TABLE ml_telemetry_windows RENAME TO ml_telemetry_windows_old"))
-                    connection.execute(text("""
-                        CREATE TABLE ml_telemetry_windows (
-                            id INTEGER NOT NULL PRIMARY KEY,
-                            machine_id INTEGER NOT NULL,
-                            window_end DATETIME NOT NULL,
-                            window_seconds INTEGER NOT NULL,
-                            sample_count INTEGER NOT NULL DEFAULT 0,
-                            feature_json TEXT NOT NULL,
-                            created_at DATETIME NOT NULL,
-                            FOREIGN KEY(machine_id) REFERENCES machines (id)
-                        )
-                    """))
-                    connection.execute(text("""
-                        INSERT INTO ml_telemetry_windows
-                        (id, machine_id, window_end, window_seconds, sample_count, feature_json, created_at)
-                        SELECT id, machine_id, window_end, window_seconds, sample_count, feature_json, created_at
-                        FROM ml_telemetry_windows_old
-                    """))
-                    connection.execute(text("DROP TABLE ml_telemetry_windows_old"))
-                    connection.execute(text(
-                        "CREATE UNIQUE INDEX IF NOT EXISTS uq_ml_window_machine_end "
-                        "ON ml_telemetry_windows (machine_id, window_end, window_seconds)"
-                    ))
-                    connection.execute(text(
-                        "CREATE INDEX IF NOT EXISTS ix_ml_telemetry_windows_machine_end "
-                        "ON ml_telemetry_windows (machine_id, window_end)"
-                    ))
-            elif dialect == "postgresql":
-                connection.execute(text(
-                    "ALTER TABLE ml_telemetry_windows DROP CONSTRAINT IF EXISTS uq_ml_window_machine_end"
-                ))
-                connection.execute(text(
-                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_ml_window_machine_end "
-                    "ON ml_telemetry_windows (machine_id, window_end, window_seconds)"
-                ))
-
-
-
-def ensure_performance_indexes():
-    """Add indexes needed by high-volume history and telemetry queries."""
-    statements = [
-        "CREATE INDEX IF NOT EXISTS ix_sensor_readings_machine_recorded ON sensor_readings (machine_id, recorded_at, id)",
-        "CREATE INDEX IF NOT EXISTS ix_work_orders_created ON work_orders (created_at, id)",
-        "CREATE INDEX IF NOT EXISTS ix_faults_reported ON fault_records (reported_date, id)",
-        "CREATE INDEX IF NOT EXISTS ix_maintenance_scheduled ON maintenance_records (scheduled_date, id)",
-    ]
-    with engine.begin() as connection:
-        for statement in statements:
-            try:
-                connection.execute(text(statement))
-            except Exception:
-                pass
+    except Exception:
+        # Serverless cold starts must remain available even if a legacy
+        # database needs a separate migration.
+        pass
 
 ensure_ai_conversation_schema()
 ensure_user_work_order_schema()
 ensure_lab_ml_schema()
-ensure_performance_indexes()
 ensure_bootstrap_organization()
 
 if os.getenv("SEED_DEMO_DATA", "").lower() == "true":
