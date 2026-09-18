@@ -96,6 +96,55 @@ def get_org_machine(
     return machine
 
 
+APPLICATIONS = {"engineering", "android", "workforce"}
+
+
+def _applications(db: Session, user_id: int) -> list[str]:
+    rows = db.query(models.UserApplicationAccess).filter(
+        models.UserApplicationAccess.user_id == user_id,
+        models.UserApplicationAccess.enabled.is_(True),
+    ).all()
+    return [row.application for row in rows]
+
+
+@router.get("/members", response_model=List[schemas.OrganizationMemberOut])
+def list_members(current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    require_admin(current)
+    users = db.query(models.User).filter(
+        models.User.organization_id == current.organization_id
+    ).order_by(models.User.full_name.asc(), models.User.username.asc()).all()
+    return [
+        {"user_id": u.id, "username": u.username, "full_name": u.full_name,
+         "email": u.email, "role": u.role.value, "applications": _applications(db, u.id)}
+        for u in users
+    ]
+
+
+@router.post("/{user_id}/applications/{application}")
+def set_application_access(
+    user_id: int,
+    application: str,
+    enabled: bool = True,
+    current: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_admin(current)
+    if application not in APPLICATIONS:
+        raise HTTPException(400, "invalid application")
+    user = get_org_user(user_id, current, db)
+    row = db.query(models.UserApplicationAccess).filter(
+        models.UserApplicationAccess.user_id == user.id,
+        models.UserApplicationAccess.application == application,
+    ).first()
+    if not row:
+        row = models.UserApplicationAccess(user_id=user.id, application=application, enabled=enabled)
+        db.add(row)
+    else:
+        row.enabled = enabled
+    db.commit()
+    return {"user_id": user.id, "application": application, "enabled": enabled}
+
+
 @router.get(
     "",
     response_model=List[UserOut],
