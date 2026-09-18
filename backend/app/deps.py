@@ -112,10 +112,22 @@ def get_current_user(
     authorization: str | None = Header(
         default=None,
     ),
+    x_maintain_application: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ) -> CurrentUser:
     supabase_user = _supabase_user_from_token(authorization, db)
-    if supabase_user: return supabase_user
+    if supabase_user:
+        application = (x_maintain_application or "engineering").strip().lower()
+        if application not in {"engineering", "android", "workforce"}:
+            raise HTTPException(status_code=400, detail="invalid application context")
+        access = db.query(models.UserApplicationAccess).filter(
+            models.UserApplicationAccess.user_id == supabase_user.id,
+            models.UserApplicationAccess.application == application,
+            models.UserApplicationAccess.enabled.is_(True),
+        ).first()
+        if not access:
+            raise HTTPException(status_code=403, detail=f"account is not enabled for the {application} application")
+        return supabase_user
     if authorization and authorization.startswith("Bearer "):
         return _user_from_token(
             authorization,
