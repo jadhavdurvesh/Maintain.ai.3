@@ -422,6 +422,19 @@ class MLSequenceSample(Base):
 
 
 
+class MLDegradationSnapshot(Base):
+    """Point-in-time machine degradation evidence derived from online telemetry."""
+    __tablename__ = "ml_degradation_snapshots"
+    id = Column(Integer, primary_key=True, index=True)
+    machine_id = Column(Integer, ForeignKey("machines.id"), nullable=False, index=True)
+    recorded_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    degradation_score = Column(Float, nullable=False, default=0.0)
+    trend_score = Column(Float, nullable=False, default=0.0)
+    active_signal_count = Column(Integer, nullable=False, default=0)
+    evidence_json = Column(Text, nullable=True)
+    source = Column(String, nullable=False, default="online_behaviour")
+
+
 class MachineSafetyPolicy(Base):
     """Per-machine warning and automatic-shutdown interlock configuration."""
     __tablename__ = "machine_safety_policies"
