@@ -1,0 +1,32 @@
+# Reproducible first training configuration.
+sequence_hours: 24
+window_hours: 1
+prediction_horizons_hours: [24, 48, 168]
+batch_size: 128
+epochs: 50
+learning_rate: 0.0003
+weight_decay: 0.0001
+seed: 42
+split: asset
+categories:
+  - induction_motor
+  - pump
+  - compressor
+  - conveyor
+  - other
+datasets:
+  ims_bearings:
+    enabled: true
+    task: degradation_rul
+  paderborn_bearing:
+    enabled: true
+    task: bearing_condition
+  cwru_bearing:
+    enabled: true
+    task: bearing_condition
+  nasa_cmapss:
+    enabled: true
+    task: degradation_rul_pretraining
+  pump_crompton_greaves:
+    enabled: true
+    task: pump_condition
