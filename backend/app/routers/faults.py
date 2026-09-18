@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from .. import models, schemas, audit
@@ -36,7 +36,7 @@ def _get_machine(machine_id: int, current: CurrentUser, db: Session) -> models.M
 
 
 @router.get("", response_model=List[schemas.FaultRecordOut])
-def list_faults(machine_id: int | None = None, unresolved_only: bool = False, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+def list_faults(machine_id: int | None = None, unresolved_only: bool = False, limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0), current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     query = db.query(models.FaultRecord).join(models.Machine).filter(models.Machine.organization_id == current.organization_id)
     if _is_worker(current):
         query = query.join(models.UserMachineAssignment, models.UserMachineAssignment.machine_id == models.Machine.id).filter(models.UserMachineAssignment.user_id == current.id)
@@ -44,7 +44,7 @@ def list_faults(machine_id: int | None = None, unresolved_only: bool = False, cu
         query = query.filter(models.FaultRecord.machine_id == machine_id)
     if unresolved_only:
         query = query.filter(models.FaultRecord.resolved_date.is_(None))
-    return query.order_by(models.FaultRecord.reported_date.desc()).all()
+    return query.order_by(models.FaultRecord.reported_date.desc(), models.FaultRecord.id.desc()).offset(offset).limit(limit).all()
 
 
 @router.post("", response_model=schemas.FaultRecordOut)
