@@ -128,6 +128,7 @@ class FaultRecord(Base):
 
 class SensorReading(Base):
     __tablename__ = "sensor_readings"
+    __table_args__ = (Index("ix_sensor_readings_machine_recorded", "machine_id", "recorded_at", "id"),)
     id = Column(Integer, primary_key=True, index=True)
     machine_id = Column(Integer, ForeignKey("machines.id"))
     reading_type = Column(String, nullable=False)
