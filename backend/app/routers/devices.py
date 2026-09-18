@@ -154,7 +154,7 @@ class IngestPayload(BaseModel):
     recorded_at: datetime | None = None
 
 
-async def _evaluate_safety_policy(db: Session, machine: models.Machine, reading: models.SensorReading):
+def _evaluate_safety_policy(db: Session, machine: models.Machine, reading: models.SensorReading):
     policy = db.query(models.MachineSafetyPolicy).filter_by(machine_id=machine.id).first()
     if not policy or not policy.enabled or reading.reading_type != policy.monitored_reading_type:
         return None
@@ -197,26 +197,12 @@ async def _evaluate_safety_policy(db: Session, machine: models.Machine, reading:
         ))
         db.commit()
 
-    device_command_sent = False
-    if shutdown_requested:
-        policy.last_trip_at = datetime.utcnow()
-        policy.last_trip_value = value
-        policy.last_trip_reason = message
-        db.commit()
-        client = _device_command_clients.get(machine.id)
-        if client:
-            try:
-                await client.send_json({
-                    "type": "shutdown", "machine_id": machine.id, "reason": message,
-                    "reading_type": reading.reading_type, "value": value, "threshold": threshold, "event_id": event.id,
-                })
-                device_command_sent = True
-            except Exception:
-                _device_command_clients.pop(machine.id, None)
+    device_command_available = machine.id in _device_command_clients
+
 
     return {
         "event_id": event.id, "type": event_type, "shutdown_requested": shutdown_requested,
-        "device_command_sent": device_command_sent, "message": message,
+        "device_command_available": device_command_available, "message": message,
     }
 
 
@@ -245,8 +231,7 @@ def _process_reading(db: Session, machine: models.Machine, payload: IngestPayloa
 
     # Confirmed Lab anomalies are durable and deduplicated. A worker push is
     # emitted only the first time an event reaches high/critical severity.
-    import asyncio
-    safety = asyncio.run(_evaluate_safety_policy(db, machine, reading))
+    safety = _evaluate_safety_policy(db, machine, reading)
     anomaly_event = None
     if behaviour.get("persistent_change"):
         anomaly_message = (
