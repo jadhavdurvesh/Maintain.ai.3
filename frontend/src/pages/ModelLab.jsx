@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BrainCircuit, Radio, ShieldCheck, Timer, TrendingUp } from 'lucide-react'
+import { BrainCircuit, Radio, ShieldCheck, Timer, TrendingUp, ChevronRight } from 'lucide-react'
 import api from '../api/client.js'
 import { formatDateTime } from '../utils/dates.js'
 import { usePageHeader } from '../PageHeaderContext.jsx'
@@ -15,6 +15,9 @@ export default function ModelLab() {
   const [data, setData] = useState(null)
   const [evidence, setEvidence] = useState(null)
   const [error, setError] = useState(null)
+  const [selectedMachine, setSelectedMachine] = useState(null)
+  const [machineEvidence, setMachineEvidence] = useState(null)
+  const [machineBusy, setMachineBusy] = useState(false)
 
   const load = async () => {
     try {
@@ -31,6 +34,20 @@ export default function ModelLab() {
     const timer = window.setInterval(load, 15000)
     return () => window.clearInterval(timer)
   }, [])
+
+  const openMachine = async (machine) => {
+    setSelectedMachine(machine)
+    setMachineBusy(true)
+    try {
+      const [ev, intel, degradation] = await Promise.all([
+        api.get('/api/analytics/evidence-feed?machine_id=' + machine.machine_id + '&limit=120'),
+        api.get('/api/analytics/machines/' + machine.machine_id + '/intelligence'),
+        api.get('/api/analytics/machines/' + machine.machine_id + '/degradation?limit=48'),
+      ])
+      setMachineEvidence({ ...ev, intelligence: intel, degradation: degradation.points || [] })
+    } catch (e) { setMachineEvidence({ error: e.message }) }
+    finally { setMachineBusy(false) }
+  }
 
   const cards = useMemo(() => {
     if (!data) return []
@@ -87,7 +104,7 @@ export default function ModelLab() {
       <div className="panel section-gap">
         <div className="panel-header"><span className="panel-title">Fleet Temporal Signals</span><span className="badge neutral">{data.fleet?.count || 0} machines</span></div>
         <table><thead><tr><th>Machine</th><th>Category</th><th>Health</th><th>Degradation</th><th>Trend</th><th>Signals</th><th>Evidence</th></tr></thead>
-          <tbody>{data.fleet?.machines?.map(m => <tr key={m.machine_id}><td>{m.machine_name}</td><td>{m.category || 'other'}</td><td>{m.health_score}/100</td><td className="mono">{fmt(m.degradation_score)}</td><td className="mono">{fmt(m.trend_score)}</td><td className="mono">{m.active_signal_count}</td><td style={{maxWidth:360}}>{(m.evidence || []).map((e,i)=><span key={i} className="badge neutral" style={{margin:'2px 4px 2px 0'}}>{e.reading_type} {fmt(e.anomaly_score)}</span>)}</td></tr>)}</tbody>
+          <tbody>{data.fleet?.machines?.map(m => <tr key={m.machine_id} onClick={() => openMachine(m)} style={{cursor:'pointer'}} title="Open machine evidence timeline"><td><button className="btn secondary" style={{padding:'4px 8px'}} onClick={(e)=>{e.stopPropagation();openMachine(m)}}>{m.machine_name} <ChevronRight size={13}/></button></td><td>{m.category || 'other'}</td><td>{m.health_score}/100</td><td className="mono">{fmt(m.degradation_score)}</td><td className="mono">{fmt(m.trend_score)}</td><td className="mono">{m.active_signal_count}</td><td style={{maxWidth:360}}>{(m.evidence || []).map((e,i)=><span key={i} className="badge neutral" style={{margin:'2px 4px 2px 0'}}>{e.reading_type} {fmt(e.anomaly_score)}</span>)}</td></tr>)}</tbody>
         </table>
       </div>
 
