@@ -31,23 +31,31 @@ export default function MachineDetail() {
     machine ? <StatusBadge status={machine.status} /> : null
   )
 
-  const load = () => {
+  const load = async () => {
     setError(null)
-    Promise.all([
-      api.get(`/api/machines/${id}`),
+    setMachine(null)
+    try {
+      // Load the critical machine record first so one slow optional endpoint
+      // can never keep the whole page on the skeleton.
+      const m = await api.get(`/api/machines/${id}`)
+      setMachine(m)
+    } catch (e) {
+      setError(e.message)
+      return
+    }
+
+    const optional = await Promise.allSettled([
       api.get(`/api/machines/${id}/components`),
       api.get(`/api/machines/${id}/readings?limit=20`),
       api.get(`/api/maintenance?machine_id=${id}&limit=50`),
       api.get(`/api/devices/${id}/status`),
     ])
-      .then(([m, c, r, mt, ds]) => {
-        setMachine(m)
-        setComponents(c)
-        setReadings(r)
-        setMaintenance(mt)
-        setDeviceStatus(ds)
-      })
-      .catch((e) => setError(e.message))
+
+    const [componentsResult, readingsResult, maintenanceResult, deviceResult] = optional
+    if (componentsResult.status === 'fulfilled') setComponents(componentsResult.value)
+    if (readingsResult.status === 'fulfilled') setReadings(readingsResult.value)
+    if (maintenanceResult.status === 'fulfilled') setMaintenance(maintenanceResult.value)
+    if (deviceResult.status === 'fulfilled') setDeviceStatus(deviceResult.value)
   }
 
   useEffect(() => {
