@@ -233,6 +233,7 @@ def _process_reading(db: Session, machine: models.Machine, payload: IngestPayloa
     evaluate_machine(db, machine)
     _check_sensor_anomaly(db, machine, reading)
     behaviour = update_online_state(db, machine, reading)
+    degradation = process_telemetry(db, machine.id, reading.recorded_at)
     try:
         materialize_windows(db, machine.id, reading.recorded_at)
     except Exception:
@@ -271,10 +272,10 @@ def _process_reading(db: Session, machine: models.Machine, payload: IngestPayloa
             anomaly_event.notified = True
             db.commit()
 
-    return reading, behaviour, safety
+    return reading, behaviour, safety, degradation
 
 
-async def _publish_reading(machine, reading, behaviour, safety=None):
+async def _publish_reading(machine, reading, behaviour, safety=None, degradation=None):
     await telemetry_stream.broadcast({
         "type": "telemetry", "machine_id": machine.id, "machine": machine.name,
         "reading_id": reading.id, "reading_type": reading.reading_type,
@@ -282,6 +283,7 @@ async def _publish_reading(machine, reading, behaviour, safety=None):
         "recorded_at": reading.recorded_at.isoformat() if reading.recorded_at else None,
         "behaviour": behaviour,
         "safety": safety,
+        "degradation": degradation,
     })
 
 
@@ -366,7 +368,7 @@ async def ingest_reading(
     machine = db.query(models.Machine).filter_by(device_key=x_device_key).first()
     if not machine or not machine.iot_enabled:
         raise HTTPException(401, "invalid or disabled device key")
-    reading, behaviour, safety = _process_reading(db, machine, payload)
+    reading, behaviour, safety, degradation = _process_reading(db, machine, payload)
     if safety and safety.get("shutdown_requested"):
         client = _device_command_clients.get(machine.id)
         if client:
@@ -389,6 +391,7 @@ async def ingest_reading(
         "recorded_at": reading.recorded_at,
         "behaviour": behaviour,
         "safety": safety,
+        "degradation": degradation,
     }
 
 
@@ -475,8 +478,8 @@ async def device_websocket(websocket: WebSocket):
                 await websocket.close(code=1008)
                 return
 
-            reading, behaviour, safety = _process_reading(db, machine, payload)
-            await _publish_reading(machine, reading, behaviour)
+            reading, behaviour, safety, degradation = _process_reading(db, machine, payload)
+            await _publish_reading(machine, reading, behaviour, safety, degradation)
             await websocket.send_json({
                 "type": "reading_accepted",
                 "reading_id": reading.id,
