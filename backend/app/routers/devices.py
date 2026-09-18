@@ -159,7 +159,11 @@ def _process_reading(db: Session, machine: models.Machine, payload: IngestPayloa
     evaluate_machine(db, machine)
     _check_sensor_anomaly(db, machine, reading)
     behaviour = update_online_state(db, machine, reading)
-    materialize_windows(db, machine.id, reading.recorded_at)
+    try:
+        materialize_windows(db, machine.id, reading.recorded_at)
+    except Exception:
+        # Feature materialization must never take down telemetry ingestion.
+        db.rollback()
 
     # Confirmed Lab anomalies are durable and deduplicated. A worker push is
     # emitted only the first time an event reaches high/critical severity.
