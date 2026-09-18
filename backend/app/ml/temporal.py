@@ -1,8 +1,8 @@
-"""MAINTAIN AI V1 shared temporal bootstrap artifact loader.
+"""MAINTAIN AI V1.1 shared temporal bootstrap artifact loader.
 
 V1 is trained on NASA C-MAPSS FD001-FD004 for bootstrap RUL representation.
 It is not calibrated for MAINTAIN AI industrial sensor semantics. The 24h,
-48h and 7d risk heads exist architecturally but were not trained in V1.
+48h and 7d risk heads exist architecturally but were not trained in V1.1.
 
 The checkpoint is stored as a base64 text blob because the repository workflow
 uses text-safe GitHub Contents/Git Data operations.
@@ -15,7 +15,7 @@ import json
 from functools import lru_cache
 from pathlib import Path
 
-ARTIFACT_DIR = Path(__file__).resolve().parent / "artifacts" / "maintain_ai_shared_temporal_v1"
+ARTIFACT_DIR = Path(__file__).resolve().parent / "artifacts" / "maintain_ai_shared_temporal_v1_1"
 MODEL_B64_PATH = ARTIFACT_DIR / "model.pt.b64"
 METADATA_PATH = ARTIFACT_DIR / "model_metadata.json"
 METRICS_PATH = ARTIFACT_DIR / "metrics.json"
@@ -23,8 +23,8 @@ METRICS_PATH = ARTIFACT_DIR / "metrics.json"
 CATEGORIES = ("induction_motor", "pump", "compressor", "conveyor", "other")
 CATEGORY_TO_ID = {name: index for index, name in enumerate(CATEGORIES)}
 SEQUENCE_LENGTH = 24
-INPUT_CHANNELS = 28
-MODEL_VERSION = "shared-temporal-v1"
+INPUT_CHANNELS = 24
+MODEL_VERSION = "shared-temporal-v1.1"
 
 
 def _load_json(path: Path) -> dict:
