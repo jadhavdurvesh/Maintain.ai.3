@@ -7,7 +7,7 @@ from datetime import timedelta
 from sqlalchemy.orm import Session
 from .. import models
 
-HORIZONS = (24 * 3600, 48 * 3600, 7 * 24 * 3600)
+HORIZONS = (24 * 3600, 48 * 3600, 7 * 24 * 3600, 30 * 24 * 3600)
 
 def label_window(db: Session, machine_id: int, window_end, window_seconds: int):
     labels = []
