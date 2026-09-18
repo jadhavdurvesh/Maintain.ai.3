@@ -19,6 +19,8 @@ export default function Dashboard() {
   const [recentActivity, setRecentActivity] = useState([])
   const [riskPredictions, setRiskPredictions] = useState(null)
   const [pretrainedStatus, setPretrainedStatus] = useState(null)
+  const [fleetIntelligence, setFleetIntelligence] = useState(null)
+  const [riskReadiness, setRiskReadiness] = useState(null)
   const [error, setError] = useState(null)
 
   useEffect(() => {
@@ -32,10 +34,12 @@ export default function Dashboard() {
       api.get('/api/reports/recent-activity'),
       api.get('/api/analytics/risk-predictions'),
       api.get('/api/analytics/pretrained-model-status'),
+      api.get('/api/analytics/fleet-intelligence'),
+      api.get('/api/analytics/risk-readiness'),
     ])
-      .then(([s, m, a, u, r, rf, ra, risk, pretrained]) => {
+      .then(([s, m, a, u, r, rf, ra, risk, pretrained, fleet, readiness]) => {
         setSummary(s); setMachines(m); setAlerts(a); setUpcoming(u); setReliability(r)
-        setRecentFaults(rf); setRecentActivity(ra); setRiskPredictions(risk); setPretrainedStatus(pretrained)
+        setRecentFaults(rf); setRecentActivity(ra); setRiskPredictions(risk); setPretrainedStatus(pretrained); setFleetIntelligence(fleet); setRiskReadiness(readiness)
       })
       .catch((e) => setError(e.message))
   }, [])
@@ -173,6 +177,58 @@ export default function Dashboard() {
               )}
             </div>
           )}
+        </div>
+      </div>
+
+      <div className="panel section-gap">
+        <div className="panel-header">
+          <span className="panel-title">Fleet Degradation Intelligence</span>
+          <span className="badge neutral">Live evidence</span>
+        </div>
+        <div className="panel-body">
+          {fleetIntelligence?.machines?.length ? (
+            <table>
+              <thead><tr><th>Machine</th><th>Category</th><th>Degradation</th><th>Trend</th><th>Signals</th></tr></thead>
+              <tbody>
+                {fleetIntelligence.machines.slice(0, 12).map((m) => (
+                  <tr key={m.machine_id} className="clickable" onClick={() => navigate(`/machines/${m.machine_id}`)}>
+                    <td title={m.machine_name}>{m.machine_name}</td>
+                    <td>{m.category}</td>
+                    <td className="mono">{Number(m.degradation_score).toFixed(3)}</td>
+                    <td className="mono">{Number(m.trend_score).toFixed(3)}</td>
+                    <td className="mono">{m.active_signal_count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : <div className="empty-state">Collecting live telemetry for fleet intelligence…</div>}
+          <div style={{marginTop:10,color:'var(--text-faint)',fontSize:11}}>
+            Current evidence is shown for operational visibility. It is not a failure probability and is not used to rank model quality.
+          </div>
+        </div>
+      </div>
+
+      <div className="panel section-gap">
+        <div className="panel-header">
+          <span className="panel-title">Future Failure-Risk Readiness</span>
+          <span className="badge neutral">Calibration pending</span>
+        </div>
+        <div className="panel-body">
+          <div style={{color:'var(--text-faint)',fontSize:12,marginBottom:10}}>{riskReadiness?.message || 'Collecting leakage-safe outcomes…'}</div>
+          <table>
+            <thead><tr><th>Horizon</th><th>Complete labels</th><th>Positive outcomes</th><th>Negative outcomes</th><th>Status</th></tr></thead>
+            <tbody>
+              {Object.entries(riskReadiness?.horizons || {}).map(([h, v]) => (
+                <tr key={h}>
+                  <td className="mono">{h}</td>
+                  <td className="mono">{v.complete_labels}</td>
+                  <td className="mono">{v.positive_outcomes}</td>
+                  <td className="mono">{v.negative_outcomes}</td>
+                  <td><span className="badge neutral">Not calibrated</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 
