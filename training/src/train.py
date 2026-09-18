@@ -11,14 +11,14 @@ def main():
     if not path.exists(): raise SystemExit(f"Prepared real dataset not found: {path}")
     payload=torch.load(path,map_location="cpu")
     model=SharedTemporalModel()
-    ds=TensorDataset(payload["x"],payload["category_id"],payload["risk_target"],payload["rul_target"],payload["rul_mask"])
+    ds=TensorDataset(payload["x"],payload["category_id"],payload["risk_target"],payload["rul_target"],payload["rul_mask"],payload.get("risk_mask",torch.zeros_like(payload["risk_target"])))
     dl=DataLoader(ds,batch_size=a.batch_size,shuffle=True)
     opt=torch.optim.AdamW(model.parameters(),lr=3e-4,weight_decay=1e-4); bce=nn.BCEWithLogitsLoss(); mse=nn.SmoothL1Loss()
     model.train()
     for epoch in range(a.epochs):
         total=0.0
-        for x,c,y,r,m in dl:
-            opt.zero_grad(); out=model(x,c); loss=bce(out["risk_logits"],y)
+        for x,c,y,r,m,rm in dl:
+            opt.zero_grad(); out=model(x,c); loss=torch.zeros((),device=x.device)\n            if rm.any(): loss=loss+bce(out["risk_logits"][rm],y[rm])
             if m.any(): loss=loss+0.25*mse(out["rul_hours"][m],r[m])
             loss.backward(); opt.step(); total+=float(loss.detach())
         print(f"epoch={epoch+1} loss={total/max(1,len(dl)):.5f}")
