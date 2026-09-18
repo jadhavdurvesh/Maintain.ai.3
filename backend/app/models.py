@@ -376,3 +376,25 @@ class MLTelemetryWindow(Base):
     sample_count = Column(Integer, nullable=False, default=0)
     feature_json = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class MLTrainingLabel(Base):
+    """Point-in-time outcome labels derived only from events after a telemetry window."""
+    __tablename__ = "ml_training_labels"
+    __table_args__ = (
+        UniqueConstraint(
+            "machine_id", "window_end", "window_seconds", "horizon_seconds",
+            name="uq_ml_training_label_point",
+        ),
+        Index("ix_ml_training_labels_machine_window", "machine_id", "window_end"),
+    )
+    id = Column(Integer, primary_key=True, index=True)
+    machine_id = Column(Integer, ForeignKey("machines.id"), nullable=False, index=True)
+    window_end = Column(DateTime, nullable=False, index=True)
+    window_seconds = Column(Integer, nullable=False)
+    horizon_seconds = Column(Integer, nullable=False)
+    fault_within_horizon = Column(Boolean, nullable=False, default=False)
+    breakdown_work_order_within_horizon = Column(Boolean, nullable=False, default=False)
+    fault_id = Column(Integer, ForeignKey("fault_records.id"), nullable=True, index=True)
+    work_order_id = Column(Integer, ForeignKey("work_orders.id"), nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
