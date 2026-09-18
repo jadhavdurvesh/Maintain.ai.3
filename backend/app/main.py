@@ -39,20 +39,60 @@ def ensure_user_work_order_schema():
 
 
 def ensure_lab_ml_schema():
-    """Create Lab ML tables on already-running databases.
-
-    Base.metadata.create_all handles new databases, while this compatibility
-    path makes the additive Lab schema available to existing deployments.
-    """
+    """Create Lab ML tables and repair the early telemetry-window constraint."""
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
-    missing = {
-        "ml_behaviour_states",
-        "ml_anomaly_events",
-        "ml_telemetry_windows",
-    } - tables
+    missing = {"ml_behaviour_states", "ml_anomaly_events", "ml_telemetry_windows"} - tables
     if missing:
         Base.metadata.create_all(bind=engine)
+
+    # The first Lab version accidentally made (machine_id, window_end) unique,
+    # which prevented storing 5m/15m/1h windows at the same timestamp.
+    # Repair that constraint without deleting existing window data.
+    if "ml_telemetry_windows" in inspect(engine).get_table_names():
+        dialect = engine.dialect.name
+        with engine.begin() as connection:
+            if dialect == "sqlite":
+                sql = connection.execute(text(
+                    "SELECT sql FROM sqlite_master WHERE type='table' AND name='ml_telemetry_windows'"
+                )).scalar()
+                if sql and "uq_ml_window_machine_end" in sql:
+                    connection.execute(text("ALTER TABLE ml_telemetry_windows RENAME TO ml_telemetry_windows_old"))
+                    connection.execute(text("""
+                        CREATE TABLE ml_telemetry_windows (
+                            id INTEGER NOT NULL PRIMARY KEY,
+                            machine_id INTEGER NOT NULL,
+                            window_end DATETIME NOT NULL,
+                            window_seconds INTEGER NOT NULL,
+                            sample_count INTEGER NOT NULL DEFAULT 0,
+                            feature_json TEXT NOT NULL,
+                            created_at DATETIME NOT NULL,
+                            FOREIGN KEY(machine_id) REFERENCES machines (id)
+                        )
+                    """))
+                    connection.execute(text("""
+                        INSERT INTO ml_telemetry_windows
+                        (id, machine_id, window_end, window_seconds, sample_count, feature_json, created_at)
+                        SELECT id, machine_id, window_end, window_seconds, sample_count, feature_json, created_at
+                        FROM ml_telemetry_windows_old
+                    """))
+                    connection.execute(text("DROP TABLE ml_telemetry_windows_old"))
+                    connection.execute(text(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS uq_ml_window_machine_end "
+                        "ON ml_telemetry_windows (machine_id, window_end, window_seconds)"
+                    ))
+                    connection.execute(text(
+                        "CREATE INDEX IF NOT EXISTS ix_ml_telemetry_windows_machine_end "
+                        "ON ml_telemetry_windows (machine_id, window_end)"
+                    ))
+            elif dialect == "postgresql":
+                connection.execute(text(
+                    "ALTER TABLE ml_telemetry_windows DROP CONSTRAINT IF EXISTS uq_ml_window_machine_end"
+                ))
+                connection.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_ml_window_machine_end "
+                    "ON ml_telemetry_windows (machine_id, window_end, window_seconds)"
+                ))
 
 
 
