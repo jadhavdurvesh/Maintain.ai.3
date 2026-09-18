@@ -66,6 +66,13 @@ export default function SettingsPage() {
 
   const loadMembers = () => api.get('/api/users/members').then(setMembers).catch(() => {})
 
+  const sendInvitation = async (e) => {
+    e.preventDefault(); setInviting(true)
+    try { await api.post('/api/users/invitations', inviteForm); setInviteForm({email:'',role:'technician',application:'workforce'}); await load(); await loadMembers(); setToast({type:'success',message:'Invitation sent.'}) }
+    catch (e) { setToast({type:'error',message:`Could not send invitation: ${e.message}`}) }
+    finally { setInviting(false) }
+  }
+
   const setApplication = async (userId, application, enabled) => {
     setAppSaving(userId + application)
     try { await api.post(`/api/users/${userId}/applications/${application}?enabled=${enabled}`); await loadMembers(); setToast({type:'success', message:'Application access updated.'}) }
@@ -564,6 +571,19 @@ export default function SettingsPage() {
         <div className="panel-body">
           <p style={{color:'var(--text-dim)',fontSize:13,marginBottom:14}}>Control which Maintain.ai client each organization member can use. Engineering access stays in the main application; workforce access is for technician operations.</p>
           {members && <div style={{overflowX:'auto'}}><table><thead><tr><th>User</th><th>Engineering</th><th>Android</th><th>Workforce</th></tr></thead><tbody>{members.map(m=><tr key={m.user_id}><td><strong>{m.full_name || m.username}</strong><div className="mono" style={{fontSize:11,color:'var(--text-faint)'}}>{m.email || '@'+m.username}</div></td>{['engineering','android','workforce'].map(app=>{const on=m.applications.includes(app); const busy=appSaving===m.user_id+app; return <td key={app}><button className={on?'btn':'btn secondary'} disabled={busy} onClick={()=>setApplication(m.user_id,app,!on)}>{busy?'…':on?'Enabled':'Enable'}</button></td>})}</tr>)}</tbody></table></div>}
+        </div>
+      </div>
+
+      <div className="panel section-gap">
+        <div className="panel-header"><span className="panel-title">Invite Organization Member</span></div>
+        <div className="panel-body">
+          <p style={{color:'var(--text-dim)',fontSize:13,marginBottom:14}}>Send a Supabase Auth invitation from the engineering control center. The recipient creates their own password and then receives only the application access and machine assignments granted here.</p>
+          <form className="user-form-grid" onSubmit={sendInvitation}>
+            <div className="field"><label>Email</label><input required type="email" value={inviteForm.email} onChange={e=>setInviteForm({...inviteForm,email:e.target.value})} placeholder="technician@company.com" /></div>
+            <div className="field"><label>Role</label><select value={inviteForm.role} onChange={e=>setInviteForm({...inviteForm,role:e.target.value})}><option value="admin">Administrator</option><option value="technician">Technician</option><option value="viewer">Viewer</option></select></div>
+            <div className="field"><label>Primary application</label><select value={inviteForm.application} onChange={e=>setInviteForm({...inviteForm,application:e.target.value})}><option value="engineering">Engineering Control Center</option><option value="android">Operations Android</option><option value="workforce">Workforce Client</option></select></div>
+            <div className="user-form-actions"><button className="btn" type="submit" disabled={inviting}>{inviting?'Sending…':'Send Invitation'}</button></div>
+          </form>
         </div>
       </div>
 
