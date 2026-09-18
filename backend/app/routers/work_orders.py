@@ -42,6 +42,32 @@ def _get_work_order(wo_id: int, current: CurrentUser, db: Session) -> models.Wor
     return work_order
 
 
+def _capture_work_order_outcome(db: Session, work_order: models.WorkOrder, current: CurrentUser):
+    """Create one initial ML outcome automatically when a work order is completed.
+
+    This is intentionally conservative: a linked fault becomes a confirmed-failure
+    training candidate; an unlinked order is recorded as unknown until a technician
+    provides stronger evidence in the Fault Log.
+    """
+    existing = db.query(models.MLOutcomeFeedback).filter_by(work_order_id=work_order.id).first()
+    if existing:
+        return existing
+
+    outcome_type = "confirmed_failure" if work_order.fault_id else "unknown"
+    fault = db.get(models.FaultRecord, work_order.fault_id) if work_order.fault_id else None
+    feedback = models.MLOutcomeFeedback(
+        machine_id=work_order.machine_id,
+        fault_id=work_order.fault_id,
+        work_order_id=work_order.id,
+        outcome_type=outcome_type,
+        corrective_action=work_order.resolution_notes,
+        notes="Automatically captured from completed work order; technician can refine the outcome in Fault Log.",
+        created_by=current.username,
+    )
+    db.add(feedback)
+    return feedback
+
+
 @router.get("", response_model=List[schemas.WorkOrderOut])
 def list_work_orders(status: str | None = None, limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0), current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     query = db.query(models.WorkOrder).join(models.Machine).filter(models.Machine.organization_id == current.organization_id)
@@ -124,6 +150,7 @@ def update_work_order(wo_id: int, payload: schemas.WorkOrderUpdate, current: Cur
         if not work_order.resolution_notes:
             raise HTTPException(400, "resolution notes are required when completing a work order")
         work_order.completed_at = datetime.utcnow()
+        _capture_work_order_outcome(db, work_order, current)
         db.add(models.MaintenanceRecord(
             machine_id=work_order.machine_id,
             type=models.MaintenanceType.corrective,
