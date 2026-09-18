@@ -34,6 +34,6 @@ def main():
             xs.append(vectors[start:end+1]);cs.append(CATEGORY.get(str(g.iloc[end]["category"]),4));rs.append(float(target));rm.append(1.0)
     if not xs: raise SystemExit("No usable real sequences found.")
     out=Path(a.out);out.parent.mkdir(parents=True,exist_ok=True)
-    torch.save({"x":torch.tensor(np.stack(xs),dtype=torch.float32),"category_id":torch.tensor(cs,dtype=torch.long),"risk_target":torch.zeros((len(xs),3),dtype=torch.float32),"rul_target":torch.tensor(rs,dtype=torch.float32),"rul_mask":torch.tensor(rm,dtype=torch.bool)},out)
+    torch.save({"x":torch.tensor(np.stack(xs),dtype=torch.float32),"category_id":torch.tensor(cs,dtype=torch.long),"risk_target":torch.zeros((len(xs),3),dtype=torch.float32),"rul_target":torch.tensor(rs,dtype=torch.float32),"rul_mask":torch.tensor(rm,dtype=torch.bool),"risk_mask":torch.zeros((len(xs),3),dtype=torch.bool)},out)
     print(f"sequences={len(xs)} assets={df.asset_id.nunique()} output={out}")
 if __name__=="__main__":main()
