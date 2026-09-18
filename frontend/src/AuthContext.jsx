@@ -43,7 +43,7 @@ export function AuthProvider({ children }) {
   }, [])
 
   const login = async (email, password) => {
-    if (supabaseAuth.enabled) { const s = await supabaseAuth.signIn(email, password); setToken(s.access_token); await loadMe(); return }
+    if (supabaseAuth.enabled) { const s = await supabaseAuth.signIn(email, password); setToken(s.access_token); await api.post('/api/auth/supabase/sync', {}); await loadMe(); return }
     const r = await api.post('/api/auth/login', { email, password }); setToken(r.access_token); await loadMe()
   }
   const register = async (organization_name, username, email, password, full_name) => {
