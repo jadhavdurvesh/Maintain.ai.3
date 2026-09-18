@@ -21,6 +21,8 @@ def train_model(db: Session = Depends(get_db)):
 
 @router.get("/risk-predictions")
 def get_risk_predictions(db: Session = Depends(get_db)):
+    # Prediction requests are automatic-safe: the model layer may train or
+    # refresh a compatible batch model when its automatic policy says it is due.
     return risk_model.predict_risk(db)
 
 
@@ -30,3 +32,30 @@ def get_machine_behaviour(machine_id: int, db: Session = Depends(get_db)):
     if db.get(models.Machine, machine_id) is None:
         raise HTTPException(404, "machine not found")
     return score_machine(db, machine_id)
+
+
+@router.get("/live-behaviour")
+def get_live_behaviour(db: Session = Depends(get_db)):
+    """Return online behavioural state for every active machine.
+
+    This endpoint is intentionally lightweight and uses the same online model
+    updated by every sensor reading, so the frontend can poll it for a live
+    monitoring view without loading scikit-learn.
+    """
+    machines = (
+        db.query(models.Machine)
+        .filter_by(archived=False)
+        .order_by(models.Machine.id.asc())
+        .all()
+    )
+    results = []
+    for machine in machines:
+        behaviour = score_machine(db, machine.id)
+        results.append({
+            "machine_id": machine.id,
+            "machine_name": machine.name,
+            "health_score": machine.health_score,
+            "status": machine.status.value if hasattr(machine.status, "value") else machine.status,
+            "behaviour": behaviour,
+        })
+    return {"machines": results}
