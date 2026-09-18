@@ -9,3 +9,4 @@ torch>=2.1,<3
 transformers>=4.45,<5
 torch-frft>=0.8.1
 safetensors>=0.7.0
+chronos-forecasting>=2.0
