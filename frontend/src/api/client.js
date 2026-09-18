@@ -1,4 +1,4 @@
-const BASE_URL = import.meta.env.VITE_API_URL || ''
+const BASE_URL = import.meta.env.VITE_API_URL || ''\nconst DESKTOP_BASE_URL = typeof window !== 'undefined' && window.maintainAI ? window.maintainAI.backendUrl() : null\nconst API_BASE_URL = DESKTOP_BASE_URL || BASE_URL
 const TOKEN_KEY = 'maintain-ai-token'
 
 export function getToken() {
@@ -38,7 +38,7 @@ async function request(path, options = {}) {
 
   const controller = new AbortController()
   const timeout = window.setTimeout(() => controller.abort(), 12000)
-  const fetchPromise = fetch(`${BASE_URL}${path}`, { ...options, headers, signal: controller.signal })
+  const fetchPromise = fetch(`${API_BASE_URL}${path}`, { ...options, headers, signal: controller.signal })
     .finally(() => window.clearTimeout(timeout))
   if (isGet) getInFlight.set(path, fetchPromise)
   const res = await fetchPromise
