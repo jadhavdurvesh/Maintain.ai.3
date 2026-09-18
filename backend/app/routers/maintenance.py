@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from .. import models, schemas, audit
@@ -14,6 +14,8 @@ router = APIRouter(prefix="/api/maintenance", tags=["maintenance"])
 @router.get("", response_model=List[schemas.MaintenanceRecordOut])
 def list_maintenance(
     machine_id: int | None = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     current: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -24,7 +26,7 @@ def list_maintenance(
     )
     if machine_id:
         q = q.filter(models.MaintenanceRecord.machine_id == machine_id)
-    return q.order_by(models.MaintenanceRecord.scheduled_date.asc()).all()
+    return q.order_by(models.MaintenanceRecord.scheduled_date.desc(), models.MaintenanceRecord.id.desc()).offset(offset).limit(limit).all()
 
 
 @router.post("/{machine_id}", response_model=schemas.MaintenanceRecordOut)
