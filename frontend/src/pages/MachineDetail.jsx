@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import api from '../api/client.js'
 import { formatDateTime, formatDate } from '../utils/dates.js'
 import StatusBadge from '../components/StatusBadge.jsx'
 import { Loading, ErrorState } from './Dashboard.jsx'
 import { usePageHeader } from '../PageHeaderContext.jsx'
+import { getToken } from '../api/client.js'
 
 export default function MachineDetail() {
   const { id } = useParams()
@@ -19,6 +20,9 @@ export default function MachineDetail() {
   const [deviceStatus, setDeviceStatus] = useState(null)
   const [deviceBusy, setDeviceBusy] = useState(false)
   const [revealedKey, setRevealedKey] = useState(null)
+  const [liveReadings, setLiveReadings] = useState({})
+  const [liveHistory, setLiveHistory] = useState({})
+  const [liveConnected, setLiveConnected] = useState(false)
 
   usePageHeader(
     <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -40,7 +44,35 @@ export default function MachineDetail() {
       .catch((e) => setError(e.message))
   }
 
-  useEffect(() => { load() }, [id])
+  useEffect(() => {
+    let socket, retry, stopped = false
+    const connect = () => {
+      const base = import.meta.env.VITE_API_URL || window.location.origin
+      const wsBase = base.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:')
+      const token = getToken()
+      const url = wsBase + '/api/devices/stream' + (token ? '?token=' + encodeURIComponent(token) : '')
+      socket = new WebSocket(url)
+      socket.onopen = () => setLiveConnected(true)
+      socket.onclose = () => { setLiveConnected(false); if (!stopped) retry = window.setTimeout(connect, 3000) }
+      socket.onerror = () => setLiveConnected(false)
+      socket.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data)
+          if (message.type !== 'telemetry' || String(message.machine_id) !== String(id)) return
+          const reading = { value: Number(message.value), unit: message.unit || '', recorded_at: message.recorded_at }
+          setLiveReadings(prev => ({ ...prev, [message.reading_type]: reading }))
+          setLiveHistory(prev => ({ ...prev, [message.reading_type]: [...(prev[message.reading_type] || []), reading.value].slice(-24) }))
+        } catch { /* ignore malformed stream messages */ }
+      }
+    }
+    connect()
+    return () => { stopped = true; window.clearTimeout(retry); if (socket) socket.close() }
+  }, [id])
+
+  const liveSensors = useMemo(() => ([
+    ['temperature', 'Temperature', '°C'], ['vibration', 'Vibration', 'g'],
+    ['current', 'Current', 'A'], ['load', 'Load', '%'], ['humidity', 'Humidity', '%']
+  ].map(([key, label, fallbackUnit]) => ({ key, label, reading: liveReadings[key], unit: liveReadings[key]?.unit || fallbackUnit, history: liveHistory[key] || [] }))), [liveReadings, liveHistory])
 
   const addReading = async (e) => {
     e.preventDefault()
@@ -184,6 +216,24 @@ export default function MachineDetail() {
           </div>
         </div>
 
+        <div className="panel" style={{ border: '1px solid var(--accent)', boxShadow: '0 0 24px rgba(0, 200, 255, 0.08)' }}>
+          <div className="panel-header">
+            <span className="panel-title">Live Readings <span style={{ color: 'var(--text-faint)', fontWeight: 400 }}>(Real-time)</span></span>
+            <span className={'badge ' + (liveConnected ? 'healthy' : 'warning')}>
+              <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: 'currentColor', marginRight: 5 }} />
+              {liveConnected ? 'Live' : 'Reconnecting'}
+            </span>
+          </div>
+          <div className="panel-body">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+              {liveSensors.map(sensor => <LiveSensorCard key={sensor.key} {...sensor} />)}
+            </div>
+            <div style={{ marginTop: 12, fontSize: 11, color: 'var(--text-faint)', textAlign: 'right' }}>
+              {Object.keys(liveReadings).length ? 'Live telemetry received' : 'Waiting for device telemetry…'}
+            </div>
+          </div>
+        </div>
+
         <div className="panel">
           <div className="panel-header"><span className="panel-title">Maintenance History</span></div>
           <table>
@@ -198,6 +248,22 @@ export default function MachineDetail() {
         </div>
       </div>
     </>
+  )
+}
+
+function LiveSensorCard({ label, reading, unit, history }) {
+  const latest = reading?.value
+  const previous = history.length > 1 ? history[history.length - 2] : null
+  const delta = latest != null && previous != null ? latest - previous : null
+  const direction = delta == null || Math.abs(delta) < 0.000001 ? '→' : delta > 0 ? '↑' : '↓'
+  return (
+    <div style={{ padding: 12, borderRadius: 10, background: 'var(--panel-raised)', border: '1px solid var(--border)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 7 }}><span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{label}</span><span style={{ color: 'var(--accent)' }}>{direction}</span></div>
+      <div className="mono" style={{ fontSize: 20, fontWeight: 700 }}>{latest == null || Number.isNaN(latest) ? '—' : latest + ' ' + unit}</div>
+      <div style={{ height: 22, display: 'flex', alignItems: 'end', gap: 2, marginTop: 8 }}>
+        {history.length ? history.slice(-16).map((value, index, arr) => { const min=Math.min(...arr), max=Math.max(...arr), range=max-min||1; return <span key={index} style={{ flex: 1, height: (5 + ((value-min)/range)*17) + 'px', borderRadius: 2, background: 'var(--accent)', opacity: 0.35 + index/arr.length*0.65 }} /> }) : <span style={{ color: 'var(--text-faint)', fontSize: 10 }}>No live samples yet</span>}
+      </div>
+    </div>
   )
 }
 
