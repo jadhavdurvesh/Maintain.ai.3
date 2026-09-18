@@ -24,7 +24,7 @@ export default function Faults() {
   usePageHeader('Fault Log', <button className="btn" onClick={() => setShowForm((v) => !v)}>{showForm ? 'Cancel' : '+ Log Fault'}</button>)
 
   const load = () => Promise.all([
-    api.get('/api/faults'), api.get('/api/machines'), api.get('/api/work-orders'), api.get('/api/users'),
+    api.get('/api/faults?limit=50'), api.get('/api/machines'), api.get('/api/work-orders?limit=50'), api.get('/api/users'),
   ]).then(([f, m, o, u]) => { setFaults(f); setMachines(m); setOrders(o); setUsers(u) }).catch((e) => setError(e.message))
 
   useEffect(() => { load() }, [])
