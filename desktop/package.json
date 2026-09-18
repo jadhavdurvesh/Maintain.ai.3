@@ -1,11 +1,11 @@
 {
   "name": "maintain-ai-desktop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "main": "main.js",
   "scripts": {
     "dev": "electron .",
-    "dist": "electron-builder"
+    "dist": "electron-builder --publish never"
   },
   "devDependencies": {
     "electron": "^32.1.2",
@@ -19,7 +19,6 @@
       "package.json"
     ],
     "extraResources": [
-      { "from": "../backend/dist/maintain-ai-backend", "to": "backend/maintain-ai-backend" },
       { "from": "../frontend/dist", "to": "frontend" }
     ],
     "win": { "target": "nsis" },
