@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import api, { getToken } from '../api/client.js'
+import { formatDateTime } from '../utils/dates.js'
 import { GenericBarChart } from '../components/Charts.jsx'
 import { Loading, ErrorState } from './Dashboard.jsx'
 import { usePageHeader } from '../PageHeaderContext.jsx'
@@ -111,7 +112,7 @@ export default function Reports() {
           </p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
             {modelStatus?.trained ? (
-              <span className="badge healthy">Trained on {modelStatus.n_samples} machines · {new Date(modelStatus.trained_at + 'Z').toLocaleString()}</span>
+              <span className="badge healthy">Trained on {modelStatus.n_samples} machines · {formatDateTime(modelStatus.trained_at)}</span>
             ) : (
               <span className="badge neutral">Not trained yet</span>
             )}
