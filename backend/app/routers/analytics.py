@@ -48,6 +48,22 @@ def get_pretrained_anomaly(machine_id: int, db: Session = Depends(get_db)):
     return score_pretrained_machine(db, machine_id)
 
 
+@router.get("/machines/{machine_id}/intelligence")
+def get_machine_intelligence(machine_id: int, db: Session = Depends(get_db)):
+    """Combine online behavioural evidence with optional pretrained anomaly evidence."""
+    if db.get(models.Machine, machine_id) is None:
+        raise HTTPException(404, "machine not found")
+    behaviour = score_machine(db, machine_id)
+    pretrained = score_pretrained_machine(db, machine_id)
+    return {
+        "machine_id": machine_id,
+        "online_behaviour": behaviour,
+        "pretrained_anomaly": pretrained,
+        "failure_probability": None,
+        "failure_probability_status": "not_calibrated",
+    }
+
+
 @router.get("/machines/{machine_id}/behaviour")
 def get_machine_behaviour(machine_id: int, db: Session = Depends(get_db)):
     """Return the Lab online learner's current behavioural evidence."""
