@@ -5,7 +5,7 @@ REST ingestion remains backwards compatible. The Lab branch additionally
 supports a long-lived WebSocket connection for continuous telemetry.
 """
 import secrets
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Header, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ValidationError
@@ -149,7 +149,7 @@ def _process_reading(db: Session, machine: models.Machine, payload: IngestPayloa
         value=payload.value,
         unit=payload.unit,
         source="sensor",
-        recorded_at=(payload.recorded_at.replace(tzinfo=None) if payload.recorded_at else datetime.utcnow()),
+        recorded_at=(payload.recorded_at.astimezone(timezone.utc).replace(tzinfo=None) if payload.recorded_at and payload.recorded_at.tzinfo else (payload.recorded_at if payload.recorded_at else datetime.utcnow())),
     )
     db.add(reading)
     db.commit()
