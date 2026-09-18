@@ -254,3 +254,27 @@ class MLOutcomeFeedbackOut(MLOutcomeFeedbackIn):
     id: int
     created_by: Optional[str]
     created_at: datetime
+
+
+class OrganizationInvitationIn(BaseModel):
+    email: EmailStr
+    role: str = "technician"
+    application: str = "workforce"
+
+
+class OrganizationInvitationOut(BaseModel):
+    id: int
+    email: str
+    role: str
+    application: str
+    status: str
+    created_at: datetime
+
+
+class OrganizationMemberOut(BaseModel):
+    user_id: int
+    username: str
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    role: str
+    applications: List[str]
