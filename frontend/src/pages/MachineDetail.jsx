@@ -26,6 +26,7 @@ export default function MachineDetail() {
   const [safety, setSafety] = useState(null)
   const [safetyForm, setSafetyForm] = useState({ enabled: false, monitored_reading_type: 'temperature', unit: '°C', warning_low: '', warning_high: '', shutdown_low: '', shutdown_high: '', auto_shutdown_enabled: false })
   const [safetyBusy, setSafetyBusy] = useState(false)
+  const [safetyEvent, setSafetyEvent] = useState(null)
   const [forecast, setForecast] = useState(null)
   const [forecastModel, setForecastModel] = useState('chronos2')
   const [forecastBusy, setForecastBusy] = useState(false)
@@ -97,6 +98,7 @@ export default function MachineDetail() {
           const reading = { value: Number(message.value), unit: message.unit || '', recorded_at: message.recorded_at }
           setLiveReadings(prev => ({ ...prev, [message.reading_type]: reading }))
           setLiveHistory(prev => ({ ...prev, [message.reading_type]: [...(prev[message.reading_type] || []), reading.value].slice(-24) }))
+          if (message.safety) setSafetyEvent(message.safety)
         } catch { /* ignore malformed stream messages */ }
       }
     }
@@ -270,6 +272,7 @@ export default function MachineDetail() {
             </div>
           </form>
           <div style={{ marginTop: 10, color: 'var(--text-faint)', fontSize: 11 }}>The app sends a shutdown command to the authenticated IoT safety channel when a hard limit is crossed. For real equipment, the ESP32 should drive a properly rated relay/contactor or independent safety interlock locally; do not use a hobby GPIO as the sole protection for mains or hazardous machinery.</div>
+          {safetyEvent && <div style={{ marginTop: 10, padding: 10, borderRadius: 8, background: safetyEvent.shutdown_requested ? 'rgba(255,70,70,.10)' : 'rgba(255,180,0,.10)', color: safetyEvent.shutdown_requested ? 'var(--critical)' : 'var(--warning)', fontSize: 12 }}>{safetyEvent.message}{safetyEvent.shutdown_requested ? ' · Shutdown command issued.' : ' · Warning notification issued.'}</div>}
         </div>
       </div>
       <div className="panel section-gap">
