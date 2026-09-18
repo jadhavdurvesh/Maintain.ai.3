@@ -30,6 +30,7 @@ export default function MachineDetail() {
   const [forecast, setForecast] = useState(null)
   const [forecastModel, setForecastModel] = useState('chronos2')
   const [forecastBusy, setForecastBusy] = useState(false)
+  const [degradationTimeline, setDegradationTimeline] = useState([])
 
   usePageHeader(
     <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -65,6 +66,7 @@ export default function MachineDetail() {
     if (maintenanceResult.status === 'fulfilled') setMaintenance(maintenanceResult.value)
     if (deviceResult.status === 'fulfilled') setDeviceStatus(deviceResult.value)
     try { setIntelligence(await api.get(`/api/analytics/machines/${id}/intelligence`)) } catch { setIntelligence(null) }
+    try { const d = await api.get(`/api/analytics/machines/${id}/degradation?limit=48`); setDegradationTimeline(d.points || []) } catch { setDegradationTimeline([]) }
     try { const s = await api.get(`/api/devices/${id}/safety`); setSafety(s); if (s.configured) setSafetyForm({ ...s, warning_low: s.warning_low ?? '', warning_high: s.warning_high ?? '', shutdown_low: s.shutdown_low ?? '', shutdown_high: s.shutdown_high ?? '' }) } catch { setSafety(null) }
   }
 
@@ -99,6 +101,7 @@ export default function MachineDetail() {
           setLiveReadings(prev => ({ ...prev, [message.reading_type]: reading }))
           setLiveHistory(prev => ({ ...prev, [message.reading_type]: [...(prev[message.reading_type] || []), reading.value].slice(-24) }))
           if (message.safety) setSafetyEvent(message.safety)
+          if (message.degradation) setDegradationTimeline(prev => [...prev, message.degradation].slice(-48))
         } catch { /* ignore malformed stream messages */ }
       }
     }
@@ -243,6 +246,31 @@ export default function MachineDetail() {
             ) : <div style={{color:'var(--text-faint)',fontSize:12}}>{forecast.reason || 'Forecast unavailable.'}</div>}
           </div>}
           <div style={{ marginTop: 9, color:'var(--text-faint)', fontSize:11 }}>Forecasts estimate future sensor values. They are evidence for degradation analysis, not failure probabilities.</div>
+        </div>
+      </div>
+
+      <div className="panel section-gap">
+        <div className="panel-header">
+          <span className="panel-title">Degradation Timeline</span>
+          <span className="badge neutral">Online evidence · not failure probability</span>
+        </div>
+        <div className="panel-body">
+          {degradationTimeline.length ? (
+            <>
+              <div style={{display:'flex',alignItems:'end',gap:3,height:120}}>
+                {degradationTimeline.slice(-48).map((p,i) => (
+                  <div key={p.recorded_at + i} title={`${p.recorded_at} · score ${Number(p.degradation_score).toFixed(3)}`} style={{flex:1,minWidth:2,height:`${8 + Number(p.degradation_score)*100}px`,maxHeight:110,borderRadius:2,background:'var(--accent)',opacity:0.25 + Number(p.degradation_score)*0.75}} />
+                ))}
+              </div>
+              <div style={{display:'flex',justifyContent:'space-between',marginTop:8,color:'var(--text-faint)',fontSize:11}}>
+                <span>{formatDateTime(degradationTimeline[0].recorded_at)}</span>
+                <span>Latest: {Number(degradationTimeline[degradationTimeline.length-1].degradation_score).toFixed(3)}</span>
+              </div>
+              <div style={{marginTop:10,color:'var(--text-faint)',fontSize:11}}>
+                Evidence combines live sensor anomaly deviation and multi-sensor agreement. It is intentionally not presented as a calibrated failure risk.
+              </div>
+            </>
+          ) : <div className="empty-state">Collecting telemetry for the first degradation points…</div>}
         </div>
       </div>
 
