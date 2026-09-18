@@ -9,29 +9,55 @@ export function setToken(token) {
   else localStorage.removeItem(TOKEN_KEY)
 }
 
+const GET_CACHE_TTL_MS = 15000
+const getCache = new Map()
+const getInFlight = new Map()
+
+export function clearApiCache(pathPrefix = '') {
+  for (const key of getCache.keys()) if (!pathPrefix || key.startsWith(pathPrefix)) getCache.delete(key)
+}
+
 let unauthorizedHandler = null
 export function onUnauthorized(fn) {
   unauthorizedHandler = fn
 }
 
 async function request(path, options = {}) {
+  const method = (options.method || 'GET').toUpperCase()
+  const isGet = method === 'GET'
+  const now = Date.now()
+  if (isGet) {
+    const cached = getCache.get(path)
+    if (cached && now - cached.time < GET_CACHE_TTL_MS) return cached.data
+    const pending = getInFlight.get(path)
+    if (pending) return pending
+  }
   const token = getToken()
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) }
   if (token) headers['Authorization'] = `Bearer ${token}`
 
-  const res = await fetch(`${BASE_URL}${path}`, { ...options, headers })
+  const fetchPromise = fetch(`${BASE_URL}${path}`, { ...options, headers })
+  if (isGet) getInFlight.set(path, fetchPromise)
+  const res = await fetchPromise
 
   if (res.status === 401) {
     setToken(null)
     if (unauthorizedHandler) unauthorizedHandler()
   }
+  if (isGet) getInFlight.delete(path)
   if (!res.ok) {
     const body = await res.text()
     throw new Error(`${res.status} ${res.statusText}: ${body}`)
   }
   const contentType = res.headers.get('content-type') || ''
-  if (contentType.includes('application/json')) return res.json()
-  return res.text()
+  if (contentType.includes('application/json')) {
+    const data = await res.json()
+    if (isGet) getCache.set(path, { time: Date.now(), data })
+    return data
+  }
+  const data = await res.text()
+  if (isGet) getCache.set(path, { time: Date.now(), data })
+  return data
 }
 
 export const api = {
