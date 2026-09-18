@@ -21,4 +21,5 @@ google-generativeai==0.8.3
 # dependency set. Install backend/requirements-ml.txt in the desktop/local ML
 # environment when RandomForest training is needed.
 
-# Supabase JWT signature verification for asymmetric signing keys.\ncryptography==43.0.1\n
+# Supabase JWT signature verification for asymmetric signing keys.
+cryptography==43.0.1
