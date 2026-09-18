@@ -263,6 +263,7 @@ class User(Base):
     full_name = Column(String)
     role = Column(Enum(UserRole), default=UserRole.technician)
     email = Column(String, unique=True, index=True, nullable=True)
+    supabase_user_id = Column(String, unique=True, index=True, nullable=True)
     password_hash = Column(String, nullable=True)
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
     active = Column(Boolean, default=True, nullable=False)
