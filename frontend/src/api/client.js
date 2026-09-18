@@ -36,7 +36,10 @@ async function request(path, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) }
   if (token) headers['Authorization'] = `Bearer ${token}`
 
-  const fetchPromise = fetch(`${BASE_URL}${path}`, { ...options, headers })
+  const controller = new AbortController()
+  const timeout = window.setTimeout(() => controller.abort(), 12000)
+  const fetchPromise = fetch(`${BASE_URL}${path}`, { ...options, headers, signal: controller.signal })
+    .finally(() => window.clearTimeout(timeout))
   if (isGet) getInFlight.set(path, fetchPromise)
   const res = await fetchPromise
 
