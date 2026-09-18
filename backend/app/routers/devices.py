@@ -264,13 +264,14 @@ def _process_reading(db: Session, machine: models.Machine, payload: IngestPayloa
     return reading, behaviour, safety
 
 
-async def _publish_reading(machine, reading, behaviour):
+async def _publish_reading(machine, reading, behaviour, safety=None):
     await telemetry_stream.broadcast({
         "type": "telemetry", "machine_id": machine.id, "machine": machine.name,
         "reading_id": reading.id, "reading_type": reading.reading_type,
         "value": reading.value, "unit": reading.unit,
         "recorded_at": reading.recorded_at.isoformat() if reading.recorded_at else None,
         "behaviour": behaviour,
+        "safety": safety,
     })
 
 
