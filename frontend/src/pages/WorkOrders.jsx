@@ -20,7 +20,7 @@ export default function WorkOrders() {
 
   usePageHeader('Work Orders', <button className="btn" onClick={() => setShowForm((s) => !s)}>{showForm ? 'Cancel' : '+ New Work Order'}</button>)
 
-  const load = () => Promise.all([api.get('/api/work-orders'), api.get('/api/machines'), api.get('/api/users')])
+  const load = () => Promise.all([api.get('/api/work-orders?limit=50'), api.get('/api/machines'), api.get('/api/users')])
     .then(([o, m, u]) => { setOrders(o); setMachines(m); setUsers(u) })
     .catch((e) => setError(e.message))
 
