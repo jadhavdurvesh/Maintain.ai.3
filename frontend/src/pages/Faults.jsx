@@ -20,6 +20,8 @@ export default function Faults() {
   const [filter, setFilter] = useState('all')
   const [busy, setBusy] = useState(false)
   const [toast, setToast] = useState(null)
+  const [feedbackFault, setFeedbackFault] = useState(null)
+  const [feedback, setFeedback] = useState({ outcome_type: 'confirmed_failure', confirmed_root_cause: '', failed_component: '', corrective_action: '', downtime_minutes: '', false_alarm: false, notes: '' })
 
   usePageHeader('Fault Log', <button className="btn" onClick={() => setShowForm((v) => !v)}>{showForm ? 'Cancel' : '+ Log Fault'}</button>)
 
@@ -95,6 +97,37 @@ export default function Faults() {
   return <>
     {toast && <div className="ui-toast-stack" aria-live="polite"><div className={`ui-toast ${toast.type}`}>{toast.message}</div></div>}
 
+    {feedbackFault && <div className="panel section-gap">
+      <div className="panel-header"><span className="panel-title">Record AI / Maintenance Outcome · Fault #{feedbackFault.id}</span><button className="btn secondary" onClick={() => setFeedbackFault(null)}>Cancel</button></div>
+      <form className="panel-body grid-2" onSubmit={async (e) => {
+        e.preventDefault(); setBusy(true)
+        try {
+          await api.post('/api/faults/outcome-feedback', {
+            machine_id: feedbackFault.machine_id,
+            fault_id: feedbackFault.id,
+            outcome_type: feedback.outcome_type,
+            confirmed_root_cause: feedback.confirmed_root_cause || null,
+            failed_component: feedback.failed_component || null,
+            corrective_action: feedback.corrective_action || null,
+            downtime_minutes: feedback.downtime_minutes === '' ? null : Number(feedback.downtime_minutes),
+            false_alarm: feedback.false_alarm,
+            notes: feedback.notes || null,
+          })
+          setFeedbackFault(null); setToast({type:'success',message:'Outcome saved for future predictive-model development.'})
+        } catch (e) { setToast({type:'error',message:`Could not save outcome: ${e.message}`}) }
+        finally { setBusy(false) }
+      }}>
+        <div className="field"><label>Outcome</label><select value={feedback.outcome_type} onChange={e=>setFeedback({...feedback,outcome_type:e.target.value})}><option value="confirmed_failure">Confirmed failure</option><option value="preventive_finding">Preventive finding</option><option value="false_alarm">False alarm</option><option value="no_issue">No issue found</option><option value="unknown">Unknown</option></select></div>
+        <div className="field"><label>Failed component</label><input value={feedback.failed_component} onChange={e=>setFeedback({...feedback,failed_component:e.target.value})} placeholder="Bearing, seal, motor…" /></div>
+        <div className="field"><label>Confirmed root cause</label><input value={feedback.confirmed_root_cause} onChange={e=>setFeedback({...feedback,confirmed_root_cause:e.target.value})} placeholder="Bearing wear…" /></div>
+        <div className="field"><label>Downtime (minutes)</label><input type="number" min="0" value={feedback.downtime_minutes} onChange={e=>setFeedback({...feedback,downtime_minutes:e.target.value})} /></div>
+        <div className="field" style={{gridColumn:'span 2'}}><label>Corrective action</label><textarea value={feedback.corrective_action} onChange={e=>setFeedback({...feedback,corrective_action:e.target.value})} placeholder="What was inspected/replaced/repaired?" /></div>
+        <div className="field" style={{gridColumn:'span 2'}}><label>Notes</label><textarea value={feedback.notes} onChange={e=>setFeedback({...feedback,notes:e.target.value})} /></div>
+        <label><input type="checkbox" checked={feedback.false_alarm} onChange={e=>setFeedback({...feedback,false_alarm:e.target.checked})} /> Mark as false alarm</label>
+        <button className="btn" type="submit" disabled={busy} style={{gridColumn:'span 2'}}>{busy ? 'Saving…' : 'Save Outcome'}</button>
+      </form>
+    </div>}
+
     {showForm && <div className="panel section-gap">
       <form className="panel-body grid-2" onSubmit={create}>
         <div className="field"><label>Machine</label><select required value={form.machine_id} onChange={(e) => setForm({ ...form, machine_id: e.target.value })}><option value="">Select machine…</option>{machines.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></div>
@@ -140,6 +173,7 @@ export default function Faults() {
             </div>
             <div className="chip-row" style={{ marginTop: 12 }}>
               {!f.resolved_date && <button className="btn secondary" disabled={busy} onClick={() => resolve(f)}>Resolve</button>}
+              {f.resolved_date && <button className="btn secondary" disabled={busy} onClick={() => setFeedbackFault(f)}>Record Outcome</button>
               {!f.resolved_date && (activeOrder ? <span className="badge healthy">Work Order #{activeOrder.id} · {activeOrder.status.replace('_', ' ')}</span> : <button className="btn secondary" disabled={busy} onClick={() => openWorkOrder(f)}>Create Work Order</button>)}
               <span className="text-faint" style={{ fontSize: 11 }}>{formatDateTime(f.reported_date)}{f.resolved_date ? ` · resolved ${formatDateTime(f.resolved_date)}` : ''}</span>
             </div>
