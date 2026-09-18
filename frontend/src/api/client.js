@@ -45,6 +45,7 @@ async function request(path, options = {}) {
     if (unauthorizedHandler) unauthorizedHandler()
   }
   if (isGet) getInFlight.delete(path)
+  if (!isGet) clearApiCache()
   if (!res.ok) {
     const body = await res.text()
     throw new Error(`${res.status} ${res.statusText}: ${body}`)
