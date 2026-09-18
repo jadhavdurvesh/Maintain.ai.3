@@ -1,4 +1,5 @@
 import { Routes, Route, NavLink } from 'react-router-dom'\nimport { useEffect, useState } from 'react'
+import { useTelemetryStream } from './realtime.js'
 import {
   LayoutDashboard, Factory, Wrench, ClipboardList, Bot,
   AlertTriangle, Package, BarChart3, Settings as SettingsIcon, History as HistoryIcon, Info, Bug, BrainCircuit,
@@ -45,8 +46,8 @@ function Topbar({ theme, setTheme }) {
   return <div className="topbar-glass"><div className="topbar-inner"><div className="topbar-title">{title}</div><div className="topbar-actions">{actions}<ThemeToggle theme={theme} setTheme={setTheme} /></div></div></div>
 }
 
-function Sidebar() {\n  const [desktopStatus, setDesktopStatus] = useState(null)\n  useEffect(() => {\n    if (!window.maintainAI) return\n    window.maintainAI.getConnectionStatus().then(setDesktopStatus)\n    return window.maintainAI.onConnectionStatus(setDesktopStatus)\n  }, [])
-  return <div className="sidebar-glass"><div className="sidebar-inner"><div className="brand"><span className={`brand-status-dot${desktopStatus?.state === "offline" ? " offline" : ""}`} title={desktopStatus ? `Backend: ${desktopStatus.state}` : "Backend connection"} /><div><div className="brand-mark">MAINTAIN AI</div><div className="brand-sub">predictive maintenance</div></div></div><nav className="nav-group">{NAV.map(({ to, label, icon: Icon, end }) => <NavLink key={to} to={to} end={end} className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}><Icon size={16} strokeWidth={1.75} />{label}</NavLink>)}</nav></div></div>
+function Sidebar() {\n  const { status: streamStatus } = useTelemetryStream()\n  const [desktopStatus, setDesktopStatus] = useState(null)\n  useEffect(() => {\n    if (!window.maintainAI) return\n    window.maintainAI.getConnectionStatus().then(setDesktopStatus)\n    return window.maintainAI.onConnectionStatus(setDesktopStatus)\n  }, [])
+  return <div className="sidebar-glass"><div className="sidebar-inner"><div className="brand"><span className={`brand-status-dot${streamStatus === "offline" || streamStatus === "reconnecting" ? " offline" : ""}`} title={`Live telemetry: ${streamStatus}`} /><div><div className="brand-mark">MAINTAIN AI</div><div className="brand-sub">predictive maintenance</div></div></div><nav className="nav-group">{NAV.map(({ to, label, icon: Icon, end }) => <NavLink key={to} to={to} end={end} className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}><Icon size={16} strokeWidth={1.75} />{label}</NavLink>)}</nav></div></div>
 }
 
 export default function App() {
