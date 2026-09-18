@@ -101,6 +101,28 @@ cd maintain-ai/backend && python3 -m uvicorn app.main:app --reload
 cd maintain-ai/frontend && npm run dev
 ```
 
+## 5. (Optional) Enable pretrained time-series intelligence
+
+The normal backend does not require PyTorch or pretrained models. For local/desktop predictive-maintenance development, install the heavier ML stack separately:
+
+```bash
+cd maintain-ai
+python3 -m pip install -r backend/requirements-ml.txt
+python3 scripts/install_pretrained_models.py
+```
+
+This installs the bundled **TimeRadar** checkpoint from the public project into:
+
+```text
+backend/app/ml/artifacts/pretrained/TimeRadar/
+```
+
+The application uses TimeRadar in **zero-shot anomaly-detection mode**. It does not train or modify the pretrained weights. The Machine Detail page exposes the resulting anomaly signal when supported telemetry is available.
+
+The anomaly score is deliberately **not presented as a failure probability**. Calibrated 24h/48h/7d failure risk will be added only after MAINTAIN AI has sufficient point-in-time telemetry and technician-confirmed outcomes.
+
+If the optional ML stack or checkpoint is missing, the rest of MAINTAIN AI continues to work normally and the Machine Detail page reports that the pretrained signal is unavailable.
+
 ## Troubleshooting
 
 **"Address already in use" on port 8000 or 5173**
