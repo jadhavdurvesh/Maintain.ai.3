@@ -37,6 +37,8 @@ export default function Reports() {
       const match = disposition.match(/filename="?([^\"]+)"?/i)
 
       const extension =
+        format === 'gemini-pdf' ? 'pdf' :
+        format === 'all' ? 'zip' :
         format === 'pdf' ? 'pdf' :
         format === 'excel' ? 'xlsx' :
         'csv'
@@ -57,6 +59,8 @@ export default function Reports() {
       alert(`Export failed: ${error.message}`)
     }
   }
+
+  const downloadGeminiPdf = () => downloadExport('gemini-pdf')
 
   const exportDatasets = [
     ['all', 'Everything (ZIP)'], ['workorders', 'Work Orders'], ['maintenance', 'Maintenance'], ['faults', 'Faults'], ['alerts', 'Alerts'],
@@ -83,6 +87,7 @@ export default function Reports() {
       <button className="btn secondary" onClick={() => downloadExport('csv')}>Summary CSV</button>
       <button className="btn secondary" onClick={() => downloadExport('excel')}>Excel Report</button>
       <button className="btn" onClick={() => downloadExport('pdf')}>PDF Report</button>
+      <button className="btn" onClick={downloadGeminiPdf}>✨ Gemini Detailed PDF</button>
     </div>
   ))
 
@@ -120,7 +125,21 @@ export default function Reports() {
     <>
       <div className="panel section-gap">
         <div className="panel-header">
-          <span className="panel-title">Export Data</span>
+          <span className="panel-title">AI Detailed Report</span>
+          <span className="badge neutral">Gemini + MAINTAIN AI evidence</span>
+        </div>
+        <div className="panel-body">
+          <p style={{color:'var(--text-dim)',fontSize:13,marginBottom:10}}>
+            Generate a detailed PDF combining machine condition, telemetry evidence, faults, maintenance, work orders, alerts and Gemini's evidence-grounded narrative, procedures and possible causes.
+          </p>
+          <button className="btn" onClick={downloadGeminiPdf}>Generate Gemini Detailed PDF</button>
+          <p style={{color:'var(--text-faint)',fontSize:11,marginTop:9}}>Gemini is advisory: the report distinguishes supplied evidence from unconfirmed AI analysis and does not replace technician verification or safety procedures.</p>
+        </div>
+      </div>
+
+      <div className="panel section-gap">
+        <div className="panel-header">
+          <span className="panel-title">Export Data</span
           <span className="badge neutral">CSV / ZIP</span>
         </div>
         <div className="panel-body">
