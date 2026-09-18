@@ -195,7 +195,7 @@ export default function MachineDetail() {
       <div className="panel section-gap">
         <div className="panel-header">
           <span className="panel-title">Pretrained AI Signal</span>
-          <span className={'badge ' + (pretrained?.available ? 'healthy' : 'warning')}>
+          <span className={'badge ' + (intelligence?.pretrained_anomaly?.available ? 'healthy' : 'warning')}>
             {intelligence?.pretrained_anomaly?.available ? 'Zero-shot' : 'Not ready'}
           </span>
         </div>
