@@ -266,6 +266,15 @@ The original certificate identifies the tested target, test date, Grade A result
                            Assistant
 ```
 
+## 📚 Project Documentation
+
+The implementation is documented in two living documents:
+
+- [`docs/FEATURES_AND_ARCHITECTURE.md`](docs/FEATURES_AND_ARCHITECTURE.md) — every major feature, data flow, current model layer, limitations, and current status.
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — next implementation phases, real predictive-risk model plan, evaluation criteria, RUL conditions, and deployment direction.
+
+These documents distinguish implemented functionality from experimental/optional model integrations and future work.
+
 ## 🛠️ Technology Stack
 
 | Layer | Technology |
