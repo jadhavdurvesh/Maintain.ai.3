@@ -5,6 +5,7 @@ REST ingestion remains backwards compatible. The Lab branch additionally
 supports a long-lived WebSocket connection for continuous telemetry.
 """
 import secrets
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Header, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ValidationError
@@ -18,6 +19,32 @@ from ..ml.anomaly_events import create_anomaly_event
 from ..notification_service import notify_machine_workers
 
 router = APIRouter(prefix="/api/devices", tags=["devices"])
+
+
+class TelemetryStream:
+    """Process-local fan-out from device ingestion to live dashboard clients."""
+    def __init__(self):
+        self._clients = set()
+
+    async def connect(self, websocket):
+        await websocket.accept()
+        self._clients.add(websocket)
+
+    def disconnect(self, websocket):
+        self._clients.discard(websocket)
+
+    async def broadcast(self, event):
+        stale = []
+        for client in tuple(self._clients):
+            try:
+                await client.send_json(event)
+            except Exception:
+                stale.append(client)
+        for client in stale:
+            self.disconnect(client)
+
+
+telemetry_stream = TelemetryStream()
 
 
 def _check_sensor_anomaly(db: Session, machine: models.Machine, reading: models.SensorReading):
@@ -111,6 +138,7 @@ class IngestPayload(BaseModel):
     reading_type: str
     value: float
     unit: str | None = None
+    recorded_at: datetime | None = None
 
 
 def _process_reading(db: Session, machine: models.Machine, payload: IngestPayload):
@@ -121,6 +149,7 @@ def _process_reading(db: Session, machine: models.Machine, payload: IngestPayloa
         value=payload.value,
         unit=payload.unit,
         source="sensor",
+        recorded_at=(payload.recorded_at.replace(tzinfo=None) if payload.recorded_at else datetime.utcnow()),
     )
     db.add(reading)
     db.commit()
@@ -162,6 +191,55 @@ def _process_reading(db: Session, machine: models.Machine, payload: IngestPayloa
             db.commit()
 
     return reading, behaviour
+
+
+async def _publish_reading(machine, reading, behaviour):
+    await telemetry_stream.broadcast({
+        "type": "telemetry", "machine_id": machine.id, "machine": machine.name,
+        "reading_id": reading.id, "reading_type": reading.reading_type,
+        "value": reading.value, "unit": reading.unit,
+        "recorded_at": reading.recorded_at.isoformat() if reading.recorded_at else None,
+        "behaviour": behaviour,
+    })
+
+
+@router.websocket("/stream")
+async def telemetry_stream_websocket(websocket: WebSocket):
+    """Live dashboard stream; JWT is supplied as ?token= for browser WebSockets."""
+    from ..auth import decode_access_token
+    from ..bootstrap import BOOTSTRAP_ORG_ID
+    from ..deps import auth_required
+    token = websocket.query_params.get("token")
+    db = SessionLocal()
+    try:
+        if token:
+            payload = decode_access_token(token)
+            if not payload:
+                await websocket.close(code=1008, reason="invalid or expired token"); return
+            try:
+                user_id, organization_id = int(payload["sub"]), int(payload["org"])
+            except (KeyError, TypeError, ValueError):
+                await websocket.close(code=1008, reason="invalid authentication token"); return
+            user = db.get(models.User, user_id)
+            if not user or not user.active or user.organization_id != organization_id:
+                await websocket.close(code=1008, reason="unauthorized"); return
+        elif auth_required():
+            await websocket.close(code=1008, reason="authentication required"); return
+        else:
+            organization_id = BOOTSTRAP_ORG_ID
+        await telemetry_stream.connect(websocket)
+        await websocket.send_json({"type":"stream_connected","protocol":"maintain-ai","version":1,"organization_id":organization_id})
+        while True:
+            message = await websocket.receive_json()
+            if message.get("type") == "ping":
+                await websocket.send_json({"type":"pong"})
+            else:
+                await websocket.send_json({"type":"error","message":"unsupported message type"})
+    except WebSocketDisconnect:
+        pass
+    finally:
+        telemetry_stream.disconnect(websocket)
+        db.close()
 
 
 @router.get("/{machine_id}/status", response_model=DeviceStatusOut)
@@ -283,6 +361,7 @@ async def device_websocket(websocket: WebSocket):
                 return
 
             reading, behaviour = _process_reading(db, machine, payload)
+            await _publish_reading(machine, reading, behaviour)
             await websocket.send_json({
                 "type": "reading_accepted",
                 "reading_id": reading.id,
