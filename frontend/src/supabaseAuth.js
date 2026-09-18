@@ -45,7 +45,7 @@ export const supabaseAuth = {
   getSession: async () => { scheduleRefresh(); return session },
   onAuthStateChange: (fn) => { listeners.add(fn); return () => listeners.delete(fn) },
   signIn: async (email, password) => save(await request('/auth/v1/token?grant_type=password', { method: 'POST', body: JSON.stringify({ email, password }) })),
-  signUp: async (email, password, metadata) => save(await request('/auth/v1/signup', { method: 'POST', body: JSON.stringify({ email, password, data: metadata }) })),
+  signUp: async (email, password, metadata) => save(await request('/auth/v1/signup', { method: 'POST', body: JSON.stringify({ email, password, data: metadata, redirect_to: typeof window !== 'undefined' ? window.location.origin : undefined }) })),
   refreshSession: async () => {
     if (!session?.refresh_token) return null
     return save(await request('/auth/v1/token?grant_type=refresh_token', { method: 'POST', body: JSON.stringify({ refresh_token: session.refresh_token }) }))
