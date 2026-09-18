@@ -137,6 +137,7 @@ export default function Reports() {
         </div>
       </div>
 
+      {/* Keep explicit JSX closing tags here; this block is part of the Vercel build fix. */}
       <div className="panel section-gap">
         <div className="panel-header">
           <span className="panel-title">Export Data</span>
