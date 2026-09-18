@@ -234,3 +234,23 @@ class MachineDetailOut(BaseModel):
     readings: List[SensorReadingOut]
     maintenance: List[MaintenanceRecordOut]
     device_status: dict
+
+
+class MLOutcomeFeedbackIn(BaseModel):
+    machine_id: int
+    fault_id: Optional[int] = None
+    work_order_id: Optional[int] = None
+    outcome_type: str
+    confirmed_root_cause: Optional[str] = None
+    failed_component: Optional[str] = None
+    corrective_action: Optional[str] = None
+    downtime_minutes: Optional[float] = None
+    false_alarm: bool = False
+    notes: Optional[str] = None
+
+
+class MLOutcomeFeedbackOut(MLOutcomeFeedbackIn):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    created_by: Optional[str]
+    created_at: datetime
