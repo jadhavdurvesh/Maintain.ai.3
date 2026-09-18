@@ -269,6 +269,30 @@ class User(Base):
     active = Column(Boolean, default=True, nullable=False)
 
 
+class UserApplicationAccess(Base):
+    __tablename__ = "user_application_access"
+    __table_args__ = (UniqueConstraint("user_id", "application", name="uq_user_application_access"),)
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    application = Column(String, nullable=False, index=True)
+    enabled = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class OrganizationInvitation(Base):
+    __tablename__ = "organization_invitations"
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
+    email = Column(String, nullable=False, index=True)
+    role = Column(Enum(UserRole), default=UserRole.technician, nullable=False)
+    application = Column(String, nullable=False, default="workforce")
+    supabase_user_id = Column(String, nullable=True, index=True)
+    status = Column(String, nullable=False, default="pending")
+    created_by = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    accepted_at = Column(DateTime, nullable=True)
+
+
 class UserMachineAssignment(Base):
     __tablename__ = "user_machine_assignments"
     __table_args__ = (UniqueConstraint("user_id", "machine_id", name="uq_user_machine_assignment"),)
