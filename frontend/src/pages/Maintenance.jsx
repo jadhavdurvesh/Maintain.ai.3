@@ -15,7 +15,7 @@ export default function Maintenance() {
   const load = () => {
     Promise.all([
       api.get('/api/maintenance/due/upcoming'),
-      api.get('/api/maintenance'),
+      api.get('/api/maintenance?limit=50'),
       api.get('/api/machines'),
     ]).then(([u, r, m]) => { setUpcoming(u); setRecords(r); setMachines(m) })
       .catch((e) => setError(e.message))
