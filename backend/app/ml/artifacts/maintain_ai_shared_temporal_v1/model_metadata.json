@@ -1,13 +1,22 @@
 {
-  "model_version": "shared-temporal-v1",
-  "architecture": "TemporalConv1D + GRU + category embedding",
-  "input_channels": 28,
+  "model_version": "shared-temporal-v1.1",
+  "architecture": "TemporalConv1D + 2-layer GRU + category embedding",
+  "input_channels": 24,
   "sequence_length": 24,
   "category_count": 5,
   "categories": ["induction_motor", "pump", "compressor", "conveyor", "other"],
   "bootstrap_datasets": ["NASA C-MAPSS FD001", "NASA C-MAPSS FD002", "NASA C-MAPSS FD003", "NASA C-MAPSS FD004"],
   "training_objective": "Remaining Useful Life (RUL)",
   "risk_outputs": ["24h", "48h", "7d"],
-  "risk_status": "Not trained yet",
-  "note": "Bootstrap RUL model. 24h/48h/7d failure-risk heads require real MAINTAIN AI telemetry and technician-confirmed future failure labels."
+  "risk_status": "not_trained",
+  "best_validation_loss": 34.39039982059097,
+  "internal_test_mae": 34.222023010253906,
+  "internal_test_rmse": 50.87088394165039,
+  "official_nasa_test_mae": 25.117116928100586,
+  "official_nasa_test_rmse": 36.36524200439453,
+  "training_assets": 485,
+  "validation_assets": 116,
+  "internal_test_assets": 108,
+  "normalization": "training-assets-only",
+  "note": "Bootstrap RUL model. 24 steps are C-MAPSS cycles, not hours. 24h/48h/7d failure-risk heads require real MAINTAIN AI telemetry and technician-confirmed future failure labels."
 }
