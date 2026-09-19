@@ -4,6 +4,7 @@ const STORAGE_KEY = 'maintain-ai-supabase-session'
 const PKCE_VERIFIER_KEY = 'maintain-ai-supabase-pkce-verifier'
 const PKCE_STATE_KEY = 'maintain-ai-supabase-pkce-state'
 const PKCE_VERIFIER_FALLBACK_KEY = 'maintain-ai-supabase-pkce-verifier-fallback'
+const OAUTH_REGISTRATION_KEY = 'maintain-ai-oauth-registration'
 const enabled = Boolean(SUPABASE_URL && SUPABASE_KEY)
 let session = null
 let refreshTimer = null
@@ -217,8 +218,14 @@ export const supabaseAuth = {
   isOAuthOnboardingPending: () =>
     localStorage.getItem('maintain-ai-oauth-pending') === '1',
 
-  clearOAuthOnboardingPending: () =>
-    localStorage.removeItem('maintain-ai-oauth-pending'),
+  isOAuthRegistrationPending: () =>
+    localStorage.getItem(OAUTH_REGISTRATION_KEY) === '1',
+
+  clearOAuthOnboardingPending: () => {
+    localStorage.removeItem('maintain-ai-oauth-pending')
+    localStorage.removeItem(OAUTH_REGISTRATION_KEY)
+    localStorage.removeItem(OAUTH_REGISTRATION_KEY)
+  },
 
   signUp: async (email, password, metadata) =>
     save(await hydrateUser(await request('/auth/v1/signup', {
