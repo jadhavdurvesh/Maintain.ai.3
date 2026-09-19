@@ -1,3 +1,4 @@
+import importlib
 import os
 
 from dotenv import load_dotenv
@@ -10,24 +11,11 @@ from sqlalchemy import inspect, text
 from . import models
 from .bootstrap import ensure_bootstrap_organization
 from .database import Base, engine
-from .routers import (
-    auth,
-    machines,
-    maintenance,
-    work_orders,
-    alerts,
-    faults,
-    spare_parts,
-    reports,
-    users,
-    settings,
-    audit_log,
-    devices,
-)
+from .routers import auth
 
 # Database initialization is deliberately best-effort at import time.
 # Vercel/serverless must be able to import FastAPI even if an old database
-# needs a separate migration.
+# needs a separate migration. API requests can then report the real DB error.
 def _initialize_database():
     try:
         Base.metadata.create_all(bind=engine)
@@ -54,22 +42,18 @@ def ensure_user_auth_schema():
     inspector = inspect(engine)
     if not inspector.has_table("users"):
         return
-
     user_columns = {column["name"] for column in inspector.get_columns("users")}
     additions = []
-
     if "supabase_user_id" not in user_columns:
         additions.append("ALTER TABLE users ADD COLUMN supabase_user_id VARCHAR")
     if "active" not in user_columns:
         additions.append("ALTER TABLE users ADD COLUMN active BOOLEAN DEFAULT TRUE")
-
     if additions:
         with engine.begin() as connection:
             for statement in additions:
                 connection.execute(text(statement))
             if "active" not in user_columns:
                 connection.execute(text("UPDATE users SET active = TRUE WHERE active IS NULL"))
-
     Base.metadata.create_all(bind=engine)
 
 
@@ -77,8 +61,8 @@ def ensure_user_work_order_schema():
     inspector = inspect(engine)
     if not inspector.has_table("work_orders"):
         return
-    work_order_columns = {column["name"] for column in inspector.get_columns("work_orders")}
-    if "fault_id" not in work_order_columns:
+    columns = {column["name"] for column in inspector.get_columns("work_orders")}
+    if "fault_id" not in columns:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE work_orders ADD COLUMN fault_id INTEGER"))
 
@@ -112,43 +96,47 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Core application routers are required and are loaded explicitly. Previously
-# these were imported through a broad try/except loop, which could silently
-# remove a router and turn valid API calls into unexplained 404 responses.
+# Authentication is mandatory and must never be hidden by an optional-router
+# import failure.
 app.include_router(auth.router)
-app.include_router(machines.router)
-app.include_router(maintenance.router)
-app.include_router(work_orders.router)
-app.include_router(alerts.router)
-app.include_router(faults.router)
-app.include_router(spare_parts.router)
-app.include_router(reports.router)
-app.include_router(users.router)
-app.include_router(settings.router)
-app.include_router(audit_log.router)
-app.include_router(devices.router)
 
-# Heavy/optional services are isolated so an unavailable ML dependency does not
-# prevent the core maintenance API and dashboard from starting.
-try:
-    from .routers import analytics
-    app.include_router(analytics.router)
-except Exception:
-    pass
+# Feature routers are isolated. A single optional dependency/import problem
+# must not crash the Vercel Python function and take authentication down with it.
+_ROUTER_NAMES = (
+    "machines",
+    "maintenance",
+    "work_orders",
+    "alerts",
+    "faults",
+    "notifications",
+    "spare_parts",
+    "ai_assistant",
+    "reports",
+    "users",
+    "settings",
+    "audit_log",
+    "analytics",
+    "devices",
+)
 
-try:
-    from .routers import ai_assistant
-    app.include_router(ai_assistant.router)
-except Exception:
-    pass
+_ROUTER_LOAD_ERRORS = {}
 
-try:
-    from .routers import notifications
-    app.include_router(notifications.router)
-except Exception:
-    pass
+for _router_name in _ROUTER_NAMES:
+    try:
+        _module = importlib.import_module(f"{__package__}.routers.{_router_name}")
+        app.include_router(_module.router)
+    except Exception as _exc:
+        _ROUTER_LOAD_ERRORS[_router_name] = f"{type(_exc).__name__}: {_exc}"
 
 
 @app.get("/")
 def root():
     return {"status": "ok", "service": "MAINTAIN AI backend"}
+
+
+@app.get("/api/system/router-status")
+def router_status():
+    return {
+        "loaded": [name for name in _ROUTER_NAMES if name not in _ROUTER_LOAD_ERRORS],
+        "failed": _ROUTER_LOAD_ERRORS,
+    }
