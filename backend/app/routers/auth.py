@@ -43,6 +43,10 @@ class SupabaseSyncIn(BaseModel):
     organization_name: str | None = None
     username: str | None = None
     full_name: str | None = None
+    # True when the OAuth button was clicked from "New organization".
+    # This survives the provider redirect and prevents an existing account
+    # from being silently treated as a normal sign-in.
+    registration_mode: bool = False
 
 
 class AuthOut(BaseModel):
