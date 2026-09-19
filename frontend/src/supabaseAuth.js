@@ -1,6 +1,8 @@
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || ''
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || ''
 const STORAGE_KEY = 'maintain-ai-supabase-session'
+const PKCE_VERIFIER_KEY = 'maintain-ai-supabase-pkce-verifier'
+const PKCE_STATE_KEY = 'maintain-ai-supabase-pkce-state'
 const enabled = Boolean(SUPABASE_URL && SUPABASE_KEY)
 let session = null
 let refreshTimer = null
@@ -27,6 +29,24 @@ const request = async (path, options = {}) => {
     throw new Error(String(raw))
   }
   return body
+}
+
+const base64Url = (bytes) => {
+  let binary = ''
+  bytes.forEach(byte => { binary += String.fromCharCode(byte) })
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+}
+
+const randomString = (length = 32) => {
+  const bytes = new Uint8Array(length)
+  crypto.getRandomValues(bytes)
+  return base64Url(bytes)
+}
+
+const createPkce = async () => {
+  const verifier = randomString(48)
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))
+  return { verifier, challenge: base64Url(new Uint8Array(digest)) }
 }
 
 const hydrateUser = async (next) => {
@@ -70,20 +90,62 @@ const save = (next) => {
   return next
 }
 
-const hydrateStoredSession = async () => {
-  if (!session?.access_token || session.user) return session
-  return save(await hydrateUser(session))
+const saveTokenResponse = async (tokens) => {
+  const next = {
+    ...tokens,
+    expires_at: Number(tokens.expires_at || (Math.floor(Date.now() / 1000) + Number(tokens.expires_in || 3600))),
+  }
+  return save(await hydrateUser(next))
 }
 
-try {
-  const hash = typeof window !== 'undefined'
-    ? new URLSearchParams(window.location.hash.replace(/^#/, ''))
-    : null
-  const accessToken = hash?.get('access_token')
-  const refreshToken = hash?.get('refresh_token')
+const clearOAuthParams = () => {
+  if (typeof window === 'undefined') return
+  window.history.replaceState({}, document.title, window.location.pathname + window.location.hash)
+}
 
+const consumeOAuthCallback = async () => {
+  if (typeof window === 'undefined') return null
+  const params = new URLSearchParams(window.location.search)
+  const error = params.get('error')
+  if (error) {
+    const description = params.get('error_description') || error
+    clearOAuthParams()
+    throw new Error(description)
+  }
+
+  const code = params.get('code')
+  if (code) {
+    const expectedState = sessionStorage.getItem(PKCE_STATE_KEY)
+    const returnedState = params.get('state')
+    if (expectedState && returnedState && expectedState !== returnedState) {
+      clearOAuthParams()
+      sessionStorage.removeItem(PKCE_VERIFIER_KEY)
+      sessionStorage.removeItem(PKCE_STATE_KEY)
+      throw new Error('OAuth security check failed. Please start Google or Apple sign-in again.')
+    }
+
+    const verifier = sessionStorage.getItem(PKCE_VERIFIER_KEY)
+    if (!verifier) {
+      clearOAuthParams()
+      throw new Error('The Google/Apple sign-in session expired. Please start sign-in again.')
+    }
+
+    const tokens = await request('/auth/v1/token?grant_type=pkce', {
+      method: 'POST',
+      body: JSON.stringify({ auth_code: code, code_verifier: verifier }),
+    })
+
+    sessionStorage.removeItem(PKCE_VERIFIER_KEY)
+    sessionStorage.removeItem(PKCE_STATE_KEY)
+    clearOAuthParams()
+    return saveTokenResponse(tokens)
+  }
+
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+  const accessToken = hash.get('access_token')
+  const refreshToken = hash.get('refresh_token')
   if (accessToken && refreshToken) {
-    session = {
+    const tokens = {
       access_token: accessToken,
       refresh_token: refreshToken,
       expires_in: Number(hash.get('expires_in') || 3600),
@@ -91,18 +153,24 @@ try {
       token_type: hash.get('token_type') || 'bearer',
       user: null,
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(session))
-    if (typeof window !== 'undefined') {
-      window.history.replaceState({}, document.title, window.location.pathname + window.location.search)
-    }
+    window.history.replaceState({}, document.title, window.location.pathname + window.location.search)
+    return saveTokenResponse(tokens)
   }
-} catch {}
+
+  return null
+}
+
+const hydrateStoredSession = async () => {
+  if (!session?.access_token || session.user) return session
+  return save(await hydrateUser(session))
+}
 
 export const supabaseAuth = {
   enabled,
 
   getSession: async () => {
-    const current = await hydrateStoredSession()
+    const callbackSession = await consumeOAuthCallback()
+    const current = callbackSession || await hydrateStoredSession()
     scheduleRefresh()
     return current
   },
@@ -120,13 +188,22 @@ export const supabaseAuth = {
 
   signInWithProvider: async (provider) => {
     if (!['google', 'apple'].includes(provider)) throw new Error('Unsupported sign-in provider')
+    if (typeof window === 'undefined') return
+
+    const { verifier, challenge } = await createPkce()
+    const state = randomString(24)
+    sessionStorage.setItem(PKCE_VERIFIER_KEY, verifier)
+    sessionStorage.setItem(PKCE_STATE_KEY, state)
     localStorage.setItem('maintain-ai-oauth-pending', '1')
-    const redirectTo = typeof window !== 'undefined'
-      ? window.location.origin + window.location.pathname
-      : ''
+
+    const redirectTo = window.location.origin + window.location.pathname
     const url = new URL(SUPABASE_URL + '/auth/v1/authorize')
     url.searchParams.set('provider', provider)
     url.searchParams.set('redirect_to', redirectTo)
+    url.searchParams.set('flow_type', 'pkce')
+    url.searchParams.set('code_challenge', challenge)
+    url.searchParams.set('code_challenge_method', 's256')
+    url.searchParams.set('state', state)
     window.location.assign(url.toString())
   },
 
@@ -160,6 +237,9 @@ export const supabaseAuth = {
     refreshTimer = null
     session = null
     localStorage.removeItem(STORAGE_KEY)
+    sessionStorage.removeItem(PKCE_VERIFIER_KEY)
+    sessionStorage.removeItem(PKCE_STATE_KEY)
+    localStorage.removeItem('maintain-ai-oauth-pending')
     emit()
   },
 }
