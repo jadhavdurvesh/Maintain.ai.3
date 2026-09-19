@@ -70,6 +70,17 @@ export const supabaseAuth = {
   getSession: async () => { scheduleRefresh(); return session },
   onAuthStateChange: (fn) => { listeners.add(fn); return () => listeners.delete(fn) },
   signIn: async (email, password) => save(await request('/auth/v1/token?grant_type=password', { method: 'POST', body: JSON.stringify({ email, password }) })),
+  signInWithProvider: async (provider) => {
+    if (!['google', 'apple'].includes(provider)) throw new Error('Unsupported sign-in provider')
+    localStorage.setItem('maintain-ai-oauth-pending', '1')
+    const redirectTo = typeof window !== 'undefined' ? window.location.origin + window.location.pathname : ''
+    const url = new URL(SUPABASE_URL + '/auth/v1/authorize')
+    url.searchParams.set('provider', provider)
+    url.searchParams.set('redirect_to', redirectTo)
+    window.location.assign(url.toString())
+  },
+  isOAuthOnboardingPending: () => localStorage.getItem('maintain-ai-oauth-pending') === '1',
+  clearOAuthOnboardingPending: () => localStorage.removeItem('maintain-ai-oauth-pending'),
   signUp: async (email, password, metadata) => save(await request('/auth/v1/signup', { method: 'POST', body: JSON.stringify({ email, password, data: metadata, redirect_to: typeof window !== 'undefined' ? window.location.origin : undefined }) })),
   refreshSession: async () => {
     if (!session?.refresh_token) return null
