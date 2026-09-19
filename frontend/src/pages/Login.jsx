@@ -5,13 +5,14 @@ import { supabaseAuth } from '../supabaseAuth.js'
 const initial = { organization_name: '', username: '', full_name: '', email: '', password: '' }
 
 export default function Login() {
-  const { login, register, needsOnboarding, oauthProfile, completeOnboarding } = useAuth()
+  const { login, register, needsOnboarding, oauthProfile, completeOnboarding, authError } = useAuth()
   const [mode, setMode] = useState('login')
   const [form, setForm] = useState(initial)
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
   const [oauthBusy, setOauthBusy] = useState(null)
   const [onboarding, setOnboarding] = useState({ organization_name: '', username: '', full_name: '' })
+  const displayedError = error || authError
 
   useEffect(() => {
     if (needsOnboarding && oauthProfile) {
@@ -151,7 +152,7 @@ export default function Login() {
               </div>
             </div>
 
-            {error && <div className="auth-error"><span>!</span><div><strong>Authentication issue</strong><p>{error}</p></div></div>}
+            {displayedError && <div className="auth-error"><span>!</span><div><strong>Authentication issue</strong><p>{displayedError}</p></div></div>}
             <button className="auth-submit" type="submit" disabled={busy}><span>{busy ? 'Authenticating…' : mode === 'login' ? 'Enter Control Center' : 'Create Organization'}</span><span className="auth-arrow">→</span></button>
           </form>
 
