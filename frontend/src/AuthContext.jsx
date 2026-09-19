@@ -128,6 +128,7 @@ export function AuthProvider({ children }) {
     if (synced?.needs_onboarding) throw new Error('Organization and username are required.')
     setNeedsOnboarding(false)
     setOauthProfile(null)
+    supabaseAuth.clearOAuthOnboardingPending()
     await loadMe()
     return synced
   }
