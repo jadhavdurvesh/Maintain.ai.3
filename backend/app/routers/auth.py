@@ -282,6 +282,13 @@ def sync_supabase_user(
         if not user and email:
             user = db.query(models.User).filter_by(email=email).first()
 
+        if not user and (not payload.organization_name or not payload.username):
+            return {
+                "needs_onboarding": True,
+                "email": email,
+                "full_name": payload.full_name or claims.get("user_metadata", {}).get("full_name"),
+            }
+
         if not user:
             base = (payload.username or (email.split("@")[0] if email else "user")).strip() or "user"
             username = base
