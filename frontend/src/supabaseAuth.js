@@ -7,32 +7,16 @@ let refreshTimer = null
 const listeners = new Set()
 
 try { session = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null') } catch {}
-try {
-  const hash = typeof window !== 'undefined' ? new URLSearchParams(window.location.hash.replace(/^#/, '')) : null
-  const accessToken = hash?.get('access_token')
-  const refreshToken = hash?.get('refresh_token')
-  if (accessToken && refreshToken) {
-    session = {
-      access_token: accessToken,
-      refresh_token: refreshToken,
-      expires_in: Number(hash.get('expires_in') || 3600),
-      expires_at: Math.floor(Date.now() / 1000) + Number(hash.get('expires_in') || 3600),
-      token_type: hash.get('token_type') || 'bearer',
-      user: null,
-    }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(session))
-    if (typeof window !== 'undefined') window.history.replaceState({}, document.title, window.location.pathname + window.location.search)
-  }
-} catch {}
-
-
-const emit = () => {
-  listeners.forEach(fn => fn(session))
-  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('maintain-ai-auth-context', { detail: session ? { access_token: session.access_token || null } : null }))
-}
 
 const request = async (path, options = {}) => {
-  const res = await fetch(SUPABASE_URL + path, { ...options, headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json', ...(options.headers || {}) } })
+  const res = await fetch(SUPABASE_URL + path, {
+    ...options,
+    headers: {
+      apikey: SUPABASE_KEY,
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
+  })
   const body = await res.json().catch(() => ({}))
   if (!res.ok) {
     const raw = body.error_description || body.msg || body.message || body.error || 'Supabase Auth request failed'
@@ -43,6 +27,27 @@ const request = async (path, options = {}) => {
     throw new Error(String(raw))
   }
   return body
+}
+
+const hydrateUser = async (next) => {
+  if (!next?.access_token || next.user) return next
+  try {
+    const user = await request('/auth/v1/user', {
+      headers: { Authorization: 'Bearer ' + next.access_token },
+    })
+    return { ...next, user }
+  } catch {
+    return next
+  }
+}
+
+const emit = () => {
+  listeners.forEach(fn => fn(session))
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('maintain-ai-auth-context', {
+      detail: session ? { access_token: session.access_token || null } : null,
+    }))
+  }
 }
 
 const scheduleRefresh = () => {
@@ -65,28 +70,98 @@ const save = (next) => {
   return next
 }
 
+const hydrateStoredSession = async () => {
+  if (!session?.access_token || session.user) return session
+  return save(await hydrateUser(session))
+}
+
+try {
+  const hash = typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.hash.replace(/^#/, ''))
+    : null
+  const accessToken = hash?.get('access_token')
+  const refreshToken = hash?.get('refresh_token')
+
+  if (accessToken && refreshToken) {
+    session = {
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      expires_in: Number(hash.get('expires_in') || 3600),
+      expires_at: Math.floor(Date.now() / 1000) + Number(hash.get('expires_in') || 3600),
+      token_type: hash.get('token_type') || 'bearer',
+      user: null,
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(session))
+    if (typeof window !== 'undefined') {
+      window.history.replaceState({}, document.title, window.location.pathname + window.location.search)
+    }
+  }
+} catch {}
+
 export const supabaseAuth = {
   enabled,
-  getSession: async () => { scheduleRefresh(); return session },
-  onAuthStateChange: (fn) => { listeners.add(fn); return () => listeners.delete(fn) },
-  signIn: async (email, password) => save(await request('/auth/v1/token?grant_type=password', { method: 'POST', body: JSON.stringify({ email, password }) })),
+
+  getSession: async () => {
+    const current = await hydrateStoredSession()
+    scheduleRefresh()
+    return current
+  },
+
+  onAuthStateChange: (fn) => {
+    listeners.add(fn)
+    return () => listeners.delete(fn)
+  },
+
+  signIn: async (email, password) =>
+    save(await hydrateUser(await request('/auth/v1/token?grant_type=password', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    }))),
+
   signInWithProvider: async (provider) => {
     if (!['google', 'apple'].includes(provider)) throw new Error('Unsupported sign-in provider')
     localStorage.setItem('maintain-ai-oauth-pending', '1')
-    const redirectTo = typeof window !== 'undefined' ? window.location.origin + window.location.pathname : ''
+    const redirectTo = typeof window !== 'undefined'
+      ? window.location.origin + window.location.pathname
+      : ''
     const url = new URL(SUPABASE_URL + '/auth/v1/authorize')
     url.searchParams.set('provider', provider)
     url.searchParams.set('redirect_to', redirectTo)
     window.location.assign(url.toString())
   },
-  isOAuthOnboardingPending: () => localStorage.getItem('maintain-ai-oauth-pending') === '1',
-  clearOAuthOnboardingPending: () => localStorage.removeItem('maintain-ai-oauth-pending'),
-  signUp: async (email, password, metadata) => save(await request('/auth/v1/signup', { method: 'POST', body: JSON.stringify({ email, password, data: metadata, redirect_to: typeof window !== 'undefined' ? window.location.origin : undefined }) })),
+
+  isOAuthOnboardingPending: () =>
+    localStorage.getItem('maintain-ai-oauth-pending') === '1',
+
+  clearOAuthOnboardingPending: () =>
+    localStorage.removeItem('maintain-ai-oauth-pending'),
+
+  signUp: async (email, password, metadata) =>
+    save(await hydrateUser(await request('/auth/v1/signup', {
+      method: 'POST',
+      body: JSON.stringify({
+        email,
+        password,
+        data: metadata,
+        redirect_to: typeof window !== 'undefined' ? window.location.origin : undefined,
+      }),
+    }))),
+
   refreshSession: async () => {
     if (!session?.refresh_token) return null
-    return save(await request('/auth/v1/token?grant_type=refresh_token', { method: 'POST', body: JSON.stringify({ refresh_token: session.refresh_token }) }))
+    return save(await hydrateUser(await request('/auth/v1/token?grant_type=refresh_token', {
+      method: 'POST',
+      body: JSON.stringify({ refresh_token: session.refresh_token }),
+    })))
   },
-  signOut: async () => { if (refreshTimer) clearTimeout(refreshTimer); refreshTimer = null; session = null; localStorage.removeItem(STORAGE_KEY); emit() },
+
+  signOut: async () => {
+    if (refreshTimer) clearTimeout(refreshTimer)
+    refreshTimer = null
+    session = null
+    localStorage.removeItem(STORAGE_KEY)
+    emit()
+  },
 }
 
 scheduleRefresh()
