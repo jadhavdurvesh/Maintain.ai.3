@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import api from './api/client.js'
 import { getToken, setToken, onUnauthorized } from './api/client.js'
 import { supabaseAuth } from './supabaseAuth.js'
@@ -22,8 +22,8 @@ export function AuthProvider({ children }) {
       setOauthProfile(synced)
       return synced
     }
-    const refreshed = await supabaseAuth.refreshSession()
-    if (refreshed?.access_token) setToken(refreshed.access_token)
+    // Do not refresh here. refreshSession() emits auth-state-change, which
+    // would call syncSupabase() again and create a callback/sync loop.
     return synced
   }
 
