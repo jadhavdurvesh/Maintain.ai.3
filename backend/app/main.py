@@ -1,3 +1,4 @@
+import importlib
 import os
 
 from dotenv import load_dotenv
@@ -10,7 +11,7 @@ from sqlalchemy import inspect, text
 from . import models
 from .bootstrap import ensure_bootstrap_organization
 from .database import Base, engine
-from .routers import machines, maintenance, work_orders, alerts, spare_parts, ai_assistant, reports, users, settings, audit_log, analytics, devices, auth, faults, notifications
+from .routers import auth
 
 # Database initialization is deliberately best-effort at import time.
 # Vercel/serverless must be able to import FastAPI even if an old database
@@ -24,7 +25,6 @@ def _initialize_database():
         ensure_lab_ml_schema()
         ensure_bootstrap_organization()
     except Exception:
-        # Never make the whole ASGI function fail during a cold start.
         pass
 
 # Lightweight compatibility migrations for existing SQLite/Postgres databases.
@@ -52,19 +52,19 @@ def ensure_user_work_order_schema():
 
 
 def ensure_lab_ml_schema():
-    """Create additive Lab ML tables without blocking application startup."""
     try:
         Base.metadata.create_all(bind=engine)
     except Exception:
-        # Serverless cold starts must remain available even if a legacy
-        # database needs a separate migration.
         pass
 
 _initialize_database()
 
 if os.getenv("SEED_DEMO_DATA", "").lower() == "true":
-    from .seed_data import seed
-    seed()
+    try:
+        from .seed_data import seed
+        seed()
+    except Exception:
+        pass
 
 app = FastAPI(
     title="MAINTAIN AI",
@@ -79,21 +79,38 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Authentication is a hard dependency for the hosted app.
 app.include_router(auth.router)
-app.include_router(machines.router)
-app.include_router(maintenance.router)
-app.include_router(work_orders.router)
-app.include_router(alerts.router)
-app.include_router(faults.router)
-app.include_router(notifications.router)
-app.include_router(spare_parts.router)
-app.include_router(ai_assistant.router)
-app.include_router(reports.router)
-app.include_router(users.router)
-app.include_router(settings.router)
-app.include_router(audit_log.router)
-app.include_router(analytics.router)
-app.include_router(devices.router)
+
+# Optional feature routers are isolated so one optional dependency/import
+# cannot take down the entire Vercel ASGI function. This is particularly
+# important for the serverless deployment where the ML/notification stack
+# can differ from the desktop runtime.
+_OPTIONAL_ROUTERS = (
+    "machines",
+    "maintenance",
+    "work_orders",
+    "alerts",
+    "faults",
+    "notifications",
+    "spare_parts",
+    "ai_assistant",
+    "reports",
+    "users",
+    "settings",
+    "audit_log",
+    "analytics",
+    "devices",
+)
+
+for _router_name in _OPTIONAL_ROUTERS:
+    try:
+        _module = importlib.import_module(f"{__package__}.routers.{_router_name}")
+        app.include_router(_module.router)
+    except Exception:
+        # Keep authentication and the ASGI app available. A failing optional
+        # router can be diagnosed independently without causing FUNCTION_INVOCATION_FAILED.
+        continue
 
 
 @app.get("/")
