@@ -1,4 +1,3 @@
-import importlib
 import os
 
 from dotenv import load_dotenv
@@ -11,12 +10,24 @@ from sqlalchemy import inspect, text
 from . import models
 from .bootstrap import ensure_bootstrap_organization
 from .database import Base, engine
-from .routers import auth
+from .routers import (
+    auth,
+    machines,
+    maintenance,
+    work_orders,
+    alerts,
+    faults,
+    spare_parts,
+    reports,
+    users,
+    settings,
+    audit_log,
+    devices,
+)
 
 # Database initialization is deliberately best-effort at import time.
 # Vercel/serverless must be able to import FastAPI even if an old database
-# needs a separate migration. API requests can then report the real DB error
-# instead of failing the entire function invocation.
+# needs a separate migration.
 def _initialize_database():
     try:
         Base.metadata.create_all(bind=engine)
@@ -28,7 +39,7 @@ def _initialize_database():
     except Exception:
         pass
 
-# Lightweight compatibility migrations for existing SQLite/Postgres databases.
+
 def ensure_ai_conversation_schema():
     inspector = inspect(engine)
     if not inspector.has_table("ai_diagnostic_sessions"):
@@ -49,7 +60,6 @@ def ensure_user_auth_schema():
 
     if "supabase_user_id" not in user_columns:
         additions.append("ALTER TABLE users ADD COLUMN supabase_user_id VARCHAR")
-
     if "active" not in user_columns:
         additions.append("ALTER TABLE users ADD COLUMN active BOOLEAN DEFAULT TRUE")
 
@@ -60,9 +70,6 @@ def ensure_user_auth_schema():
             if "active" not in user_columns:
                 connection.execute(text("UPDATE users SET active = TRUE WHERE active IS NULL"))
 
-    # UserApplicationAccess is created by SQLAlchemy when it is missing.
-    # Keep this separate from the ALTER statements so legacy databases can
-    # receive the new auth column without needing a destructive migration.
     Base.metadata.create_all(bind=engine)
 
 
@@ -70,7 +77,6 @@ def ensure_user_work_order_schema():
     inspector = inspect(engine)
     if not inspector.has_table("work_orders"):
         return
-
     work_order_columns = {column["name"] for column in inspector.get_columns("work_orders")}
     if "fault_id" not in work_order_columns:
         with engine.begin() as connection:
@@ -82,6 +88,7 @@ def ensure_lab_ml_schema():
         Base.metadata.create_all(bind=engine)
     except Exception:
         pass
+
 
 _initialize_database()
 
@@ -105,34 +112,41 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Authentication is a hard dependency for the hosted app.
+# Core application routers are required and are loaded explicitly. Previously
+# these were imported through a broad try/except loop, which could silently
+# remove a router and turn valid API calls into unexplained 404 responses.
 app.include_router(auth.router)
+app.include_router(machines.router)
+app.include_router(maintenance.router)
+app.include_router(work_orders.router)
+app.include_router(alerts.router)
+app.include_router(faults.router)
+app.include_router(spare_parts.router)
+app.include_router(reports.router)
+app.include_router(users.router)
+app.include_router(settings.router)
+app.include_router(audit_log.router)
+app.include_router(devices.router)
 
-# Optional feature routers are isolated so one optional dependency/import
-# cannot take down the entire Vercel ASGI function.
-_OPTIONAL_ROUTERS = (
-    "machines",
-    "maintenance",
-    "work_orders",
-    "alerts",
-    "faults",
-    "notifications",
-    "spare_parts",
-    "ai_assistant",
-    "reports",
-    "users",
-    "settings",
-    "audit_log",
-    "analytics",
-    "devices",
-)
+# Heavy/optional services are isolated so an unavailable ML dependency does not
+# prevent the core maintenance API and dashboard from starting.
+try:
+    from .routers import analytics
+    app.include_router(analytics.router)
+except Exception:
+    pass
 
-for _router_name in _OPTIONAL_ROUTERS:
-    try:
-        _module = importlib.import_module(f"{__package__}.routers.{_router_name}")
-        app.include_router(_module.router)
-    except Exception:
-        continue
+try:
+    from .routers import ai_assistant
+    app.include_router(ai_assistant.router)
+except Exception:
+    pass
+
+try:
+    from .routers import notifications
+    app.include_router(notifications.router)
+except Exception:
+    pass
 
 
 @app.get("/")
