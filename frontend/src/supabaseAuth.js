@@ -34,7 +34,14 @@ const emit = () => {
 const request = async (path, options = {}) => {
   const res = await fetch(SUPABASE_URL + path, { ...options, headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json', ...(options.headers || {}) } })
   const body = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(body.error_description || body.msg || body.message || 'Supabase Auth request failed')
+  if (!res.ok) {
+    const raw = body.error_description || body.msg || body.message || body.error || 'Supabase Auth request failed'
+    const normalized = String(raw).toLowerCase()
+    if (res.status === 429 || normalized.includes('rate limit') || normalized.includes('rate_limit')) {
+      throw new Error('Supabase email sending is temporarily rate-limited. The built-in email service allows only a small number of emails per hour. Wait before trying another registration, or configure custom SMTP for the project.')
+    }
+    throw new Error(String(raw))
+  }
   return body
 }
 
