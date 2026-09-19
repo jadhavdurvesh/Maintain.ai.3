@@ -265,42 +265,99 @@ def sync_supabase_user(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    if not supabase_auth_enabled(): raise HTTPException(status_code=503, detail="Supabase Auth is not configured")
-    if not authorization or not authorization.startswith("Bearer "): raise HTTPException(status_code=401, detail="Supabase access token required")
-    claims = verify_access_token(authorization.removeprefix("Bearer ").strip())
-    if not claims or not claims.get("sub"): raise HTTPException(status_code=401, detail="invalid Supabase access token")
-    sid, email = str(claims["sub"]), claims.get("email")
-    user = db.query(models.User).filter_by(supabase_user_id=sid).first()
-    if not user and email: user = db.query(models.User).filter_by(email=email).first()
-    if not user:
-        base = (payload.username or (email.split("@")[0] if email else "user")).strip() or "user"; username = base; suffix = 2
-        while db.query(models.User).filter_by(username=username).first(): username = f"{base}{suffix}"; suffix += 1
-        organization = models.Organization(name=(payload.organization_name or "My Organization").strip()); db.add(organization); db.commit(); db.refresh(organization)
-        user = models.User(username=username, full_name=payload.full_name, email=email, supabase_user_id=sid, organization_id=organization.id, role=models.UserRole.admin, active=True)
-        db.add(user); db.commit(); db.refresh(user)
-    else:
-        user.supabase_user_id = sid
-        if payload.full_name: user.full_name = payload.full_name
-        db.commit()
-    organization = db.get(models.Organization, user.organization_id)
-    existing_access = db.query(models.UserApplicationAccess).filter(
-        models.UserApplicationAccess.user_id == user.id,
-        models.UserApplicationAccess.enabled.is_(True),
-    ).first()
-    if not existing_access:
-        application = "engineering" if user.role in {models.UserRole.admin, models.UserRole.viewer} else "workforce"
-        db.add(models.UserApplicationAccess(user_id=user.id, application=application, enabled=True))
-        db.commit()
-    elif user.role == models.UserRole.admin:
-        access = db.query(models.UserApplicationAccess).filter(
-            models.UserApplicationAccess.user_id == user.id,
-            models.UserApplicationAccess.application == "engineering",
-        ).first()
-        if not access:
-            db.add(models.UserApplicationAccess(user_id=user.id, application="engineering", enabled=True))
+    if not supabase_auth_enabled():
+        raise HTTPException(status_code=503, detail="Supabase Auth is not configured on the backend")
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Supabase access token required")
+
+    token = authorization.removeprefix("Bearer ").strip()
+    claims = verify_access_token(token)
+    if not claims or not claims.get("sub"):
+        raise HTTPException(status_code=401, detail="Supabase access token is invalid or expired")
+
+    try:
+        sid = str(claims["sub"])
+        email = claims.get("email")
+        user = db.query(models.User).filter_by(supabase_user_id=sid).first()
+        if not user and email:
+            user = db.query(models.User).filter_by(email=email).first()
+
+        if not user:
+            base = (payload.username or (email.split("@")[0] if email else "user")).strip() or "user"
+            username = base
+            suffix = 2
+            while db.query(models.User).filter_by(username=username).first():
+                username = f"{base}{suffix}"
+                suffix += 1
+
+            organization = models.Organization(
+                name=(payload.organization_name or "My Organization").strip()
+            )
+            db.add(organization)
+            db.flush()
+
+            user = models.User(
+                username=username,
+                full_name=payload.full_name,
+                email=email,
+                supabase_user_id=sid,
+                organization_id=organization.id,
+                role=models.UserRole.admin,
+                active=True,
+            )
+            db.add(user)
+            db.flush()
+            db.add(models.UserApplicationAccess(
+                user_id=user.id,
+                application="engineering",
+                enabled=True,
+            ))
             db.commit()
-    sync_organization_claim(sid, user.organization_id)
-    return {"user_id": user.id, "username": user.username, "organization_id": user.organization_id, "organization_name": organization.name if organization else None, "role": user.role.value}
+        else:
+            user.supabase_user_id = sid
+            if payload.full_name:
+                user.full_name = payload.full_name
+            db.commit()
+
+        organization = db.get(models.Organization, user.organization_id)
+        if not organization:
+            raise HTTPException(status_code=500, detail="Your account is not linked to an organization")
+
+        existing_access = db.query(models.UserApplicationAccess).filter(
+            models.UserApplicationAccess.user_id == user.id,
+            models.UserApplicationAccess.enabled.is_(True),
+        ).first()
+        if not existing_access:
+            application = "engineering" if user.role in {models.UserRole.admin, models.UserRole.viewer} else "workforce"
+            db.add(models.UserApplicationAccess(
+                user_id=user.id,
+                application=application,
+                enabled=True,
+            ))
+            db.commit()
+
+        # Organization claim refresh is deliberately non-fatal. The Neon
+        # organization remains the application authorization source.
+        try:
+            sync_organization_claim(sid, user.organization_id)
+        except Exception:
+            pass
+
+        return {
+            "user_id": user.id,
+            "username": user.username,
+            "organization_id": user.organization_id,
+            "organization_name": organization.name,
+            "role": user.role.value,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=503,
+            detail=f"Account synchronization could not be completed: {type(exc).__name__}",
+        ) from exc
 
 @router.get("/me")
 def me(
