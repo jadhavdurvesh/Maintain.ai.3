@@ -24,6 +24,7 @@ export default function Dashboard() {
   const [error, setError] = useState(null)
 
   useEffect(() => {
+    const optional = (path, fallback) => api.get(path).catch(() => fallback)
     Promise.all([
       api.get('/api/reports/dashboard'),
       api.get('/api/machines'),
@@ -32,10 +33,10 @@ export default function Dashboard() {
       api.get('/api/reports/reliability'),
       api.get('/api/reports/recent-faults'),
       api.get('/api/reports/recent-activity'),
-      api.get('/api/analytics/risk-predictions'),
-      api.get('/api/analytics/pretrained-model-status'),
-      api.get('/api/analytics/fleet-intelligence'),
-      api.get('/api/analytics/risk-readiness'),
+      optional('/api/analytics/risk-predictions', { available: false, reason: 'Risk predictions are not available on this deployment yet.' }),
+      optional('/api/analytics/pretrained-model-status', { configured: false, model: 'TimeRadar' }),
+      optional('/api/analytics/fleet-intelligence', { machines: [] }),
+      optional('/api/analytics/risk-readiness', { horizons: {}, message: 'Risk-readiness analytics are not available on this deployment yet.' }),
     ])
       .then(([s, m, a, u, r, rf, ra, risk, pretrained, fleet, readiness]) => {
         setSummary(s); setMachines(m); setAlerts(a); setUpcoming(u); setReliability(r)
