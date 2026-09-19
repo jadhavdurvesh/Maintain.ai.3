@@ -7,6 +7,24 @@ let refreshTimer = null
 const listeners = new Set()
 
 try { session = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null') } catch {}
+try {
+  const hash = typeof window !== 'undefined' ? new URLSearchParams(window.location.hash.replace(/^#/, '')) : null
+  const accessToken = hash?.get('access_token')
+  const refreshToken = hash?.get('refresh_token')
+  if (accessToken && refreshToken) {
+    session = {
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      expires_in: Number(hash.get('expires_in') || 3600),
+      expires_at: Math.floor(Date.now() / 1000) + Number(hash.get('expires_in') || 3600),
+      token_type: hash.get('token_type') || 'bearer',
+      user: null,
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(session))
+    if (typeof window !== 'undefined') window.history.replaceState({}, document.title, window.location.pathname + window.location.search)
+  }
+} catch {}
+
 
 const emit = () => {
   listeners.forEach(fn => fn(session))
