@@ -4,18 +4,14 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import APIRouter, Depends, FastAPI
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text
-from sqlalchemy.orm import Session
 
 from . import models
 from .bootstrap import ensure_bootstrap_organization
 from .database import Base, engine
 from .routers import auth
-from . import schemas
-from .database import get_db
-from .deps import CurrentUser, get_current_user
 
 # Database initialization is deliberately best-effort at import time.
 # Vercel/serverless must be able to import FastAPI even if an old database
@@ -137,30 +133,6 @@ for _router_name in _ROUTER_NAMES:
 def root():
     return {"status": "ok", "service": "MAINTAIN AI backend"}
 
-
-
-# If the full Machines router cannot import because of an optional dependency,
-# keep the core list endpoint available so the application does not degrade to
-# a misleading 404. The normal router remains authoritative when it loads.
-if "machines" in _ROUTER_LOAD_ERRORS:
-    _machines_fallback = APIRouter(prefix="/api/machines", tags=["machines-fallback"])
-
-    @_machines_fallback.get("", response_model=list[schemas.MachineOut])
-    def fallback_list_machines(
-        current: CurrentUser = Depends(get_current_user),
-        db: Session = Depends(get_db),
-    ):
-        return (
-            db.query(models.Machine)
-            .filter(
-                models.Machine.organization_id == current.organization_id,
-                models.Machine.archived.is_(False),
-            )
-            .order_by(models.Machine.name.asc())
-            .all()
-        )
-
-    app.include_router(_machines_fallback)
 
 
 @app.get("/api/system/router-status")
