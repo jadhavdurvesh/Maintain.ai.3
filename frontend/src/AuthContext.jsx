@@ -10,9 +10,12 @@ export function AuthProvider({ children }) {
   const [authRequired, setAuthRequired] = useState(null)
   const [user, setUser] = useState(null)
   const [checking, setChecking] = useState(true)
+  const [needsOnboarding, setNeedsOnboarding] = useState(false)
+  const [oauthProfile, setOauthProfile] = useState(null)
   const syncSupabase = async (metadata = {}) => {
     if (!supabaseAuth.enabled) return null
     const synced = await api.post('/api/auth/supabase/sync', metadata)
+    if (synced?.needs_onboarding) { setNeedsOnboarding(true); setOauthProfile(synced); return synced }
     const refreshed = await supabaseAuth.refreshSession()
     if (refreshed?.access_token) setToken(refreshed.access_token)
     return synced
@@ -37,21 +40,21 @@ export function AuthProvider({ children }) {
         setAuthRequired(status.auth_required || supabaseAuth.enabled)
         if (supabaseAuth.enabled) {
           const current = await supabaseAuth.getSession()
-          if (current?.access_token) { setToken(current.access_token); await syncSupabase(current.user?.user_metadata || {}); await loadMe() }
+          if (current?.access_token) { setToken(current.access_token); const synced = await syncSupabase(current.user?.user_metadata || {}); if (!synced?.needs_onboarding) await loadMe() }
         } else if (status.auth_required && getToken()) await loadMe()
       } catch { if (mounted) setAuthRequired(supabaseAuth.enabled) }
       finally { if (mounted) setChecking(false) }
     }
     boot()
     const unsubscribe = supabaseAuth.enabled ? supabaseAuth.onAuthStateChange(async (next) => {
-      if (next?.access_token) { setToken(next.access_token); await syncSupabase(next.user?.user_metadata || {}); await loadMe() } else { setToken(null); setUser(null); setRealtimeOrganizationId(null) }
+      if (next?.access_token) { setToken(next.access_token); const synced = await syncSupabase(next.user?.user_metadata || {}); if (!synced?.needs_onboarding) await loadMe() } else { setToken(null); setUser(null); setRealtimeOrganizationId(null) }
     }) : null
     onUnauthorized(() => setUser(null))
     return () => { mounted = false; unsubscribe?.() }
   }, [])
 
   const login = async (email, password) => {
-    if (supabaseAuth.enabled) { const s = await supabaseAuth.signIn(email, password); setToken(s.access_token); await syncSupabase(s.user?.user_metadata || {}); await loadMe(); return }
+    if (supabaseAuth.enabled) { const s = await supabaseAuth.signIn(email, password); setToken(s.access_token); const synced = await syncSupabase(s.user?.user_metadata || {}); if (!synced?.needs_onboarding) await loadMe(); return }
     const r = await api.post('/api/auth/login', { email, password }); setToken(r.access_token); await loadMe()
   }
   const register = async (organization_name, username, email, password, full_name) => {
@@ -62,8 +65,13 @@ export function AuthProvider({ children }) {
     }
     const r = await api.post('/api/auth/register', { organization_name, username, email, password, full_name }); setToken(r.access_token); await loadMe()
   }
+  const completeOnboarding = async (organization_name, username, full_name) => {
+    const synced = await syncSupabase({ organization_name, username, full_name })
+    if (synced?.needs_onboarding) throw new Error('Organization and username are required.')
+    setNeedsOnboarding(false); setOauthProfile(null); await loadMe(); return synced
+  }
   const logout = async () => { if (supabaseAuth.enabled) await supabaseAuth.signOut(); setToken(null); setUser(null); setRealtimeOrganizationId(null) }
   const needsLogin = authRequired === true && !user
-  return <AuthContext.Provider value={{ authRequired, user, checking, needsLogin, login, register, logout }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ authRequired, user, checking, needsLogin, needsOnboarding, oauthProfile, login, register, completeOnboarding, logout }}>{children}</AuthContext.Provider>
 }
 export function useAuth() { return useContext(AuthContext) }
