@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../AuthContext.jsx'
+import { supabaseAuth } from '../supabaseAuth.js'
 
 const initial = { organization_name: '', username: '', full_name: '', email: '', password: '' }
 
@@ -9,6 +10,8 @@ export default function Login() {
   const [form, setForm] = useState(initial)
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [oauthBusy, setOauthBusy] = useState(null)
+  const [oauthOnboarding, setOauthOnboarding] = useState(false)
 
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }))
 
@@ -27,6 +30,11 @@ export default function Login() {
     } finally {
       setBusy(false)
     }
+  }
+
+  const signInProvider = async (provider) => {
+    setError(null); setOauthBusy(provider)
+    try { await supabaseAuth.signInWithProvider(provider) } catch (err) { setOauthBusy(null); setError(err.message) }
   }
 
   const switchMode = () => {
@@ -81,6 +89,16 @@ export default function Login() {
             <button type="button" className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setError(null) }}>Sign in</button>
             <button type="button" className={mode === 'register' ? 'active' : ''} onClick={() => { setMode('register'); setError(null) }}>New organization</button>
           </div>
+
+          {mode === 'login' && (
+            <>
+              <div className="auth-social">
+                <button type="button" disabled={oauthBusy !== null} onClick={() => signInProvider('google')}><span className="provider-google">G</span>{oauthBusy === 'google' ? 'Connecting…' : 'Continue with Google'}</button>
+                <button type="button" disabled={oauthBusy !== null} onClick={() => signInProvider('apple')}><span className="provider-apple">●</span>{oauthBusy === 'apple' ? 'Connecting…' : 'Continue with Apple'}</button>
+              </div>
+              <div className="auth-divider"><span>or continue with email</span></div>
+            </>
+          )}
 
           <form onSubmit={submit} className="auth-form">
             {mode === 'register' && (
