@@ -117,7 +117,7 @@ const consumeOAuthCallback = async () => {
   if (code) {
     const expectedState = sessionStorage.getItem(PKCE_STATE_KEY)
     const returnedState = params.get('state')
-    if (expectedState && returnedState && expectedState !== returnedState) {
+    if (!expectedState || !returnedState || expectedState !== returnedState) {
       clearOAuthParams()
       sessionStorage.removeItem(PKCE_VERIFIER_KEY)
       sessionStorage.removeItem(PKCE_STATE_KEY)
