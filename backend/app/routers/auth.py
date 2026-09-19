@@ -330,15 +330,21 @@ def sync_supabase_user(
         if not organization:
             raise HTTPException(status_code=500, detail="Your account is not linked to an organization")
 
-        existing_access = db.query(models.UserApplicationAccess).filter(
+        # This frontend is the Engineering application. Ensure the signed-in
+        # Supabase account is explicitly enabled for Engineering regardless of
+        # the user's role; role and application access are separate concerns.
+        engineering_access = db.query(models.UserApplicationAccess).filter(
             models.UserApplicationAccess.user_id == user.id,
-            models.UserApplicationAccess.enabled.is_(True),
+            models.UserApplicationAccess.application == "engineering",
         ).first()
-        if not existing_access:
-            application = "engineering" if user.role in {models.UserRole.admin, models.UserRole.viewer} else "workforce"
+        if engineering_access:
+            if not engineering_access.enabled:
+                engineering_access.enabled = True
+                db.commit()
+        else:
             db.add(models.UserApplicationAccess(
                 user_id=user.id,
-                application=application,
+                application="engineering",
                 enabled=True,
             ))
             db.commit()
