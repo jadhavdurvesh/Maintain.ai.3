@@ -16,7 +16,10 @@ export function AuthProvider({ children }) {
 
   const syncSupabase = async (metadata = {}) => {
     if (!supabaseAuth.enabled) return null
-    const synced = await api.post('/api/auth/supabase/sync', metadata)
+    const synced = await api.post('/api/auth/supabase/sync', {
+      ...metadata,
+      registration_mode: supabaseAuth.isOAuthRegistrationPending(),
+    })
     if (synced?.needs_onboarding) {
       setNeedsOnboarding(true)
       setOauthProfile(synced)
