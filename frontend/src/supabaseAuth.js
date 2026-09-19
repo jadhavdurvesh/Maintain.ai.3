@@ -3,6 +3,7 @@ const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || ''
 const STORAGE_KEY = 'maintain-ai-supabase-session'
 const PKCE_VERIFIER_KEY = 'maintain-ai-supabase-pkce-verifier'
 const PKCE_STATE_KEY = 'maintain-ai-supabase-pkce-state'
+const PKCE_VERIFIER_FALLBACK_KEY = 'maintain-ai-supabase-pkce-verifier-fallback'
 const enabled = Boolean(SUPABASE_URL && SUPABASE_KEY)
 let session = null
 let refreshTimer = null
@@ -115,16 +116,18 @@ const consumeOAuthCallback = async () => {
 
   const code = params.get('code')
   if (code) {
-    const expectedState = sessionStorage.getItem(PKCE_STATE_KEY)
+    const expectedState = sessionStorage.getItem(PKCE_STATE_KEY) || localStorage.getItem(PKCE_STATE_KEY)
     const returnedState = params.get('state')
-    if (!expectedState || !returnedState || expectedState !== returnedState) {
+    if (returnedState && expectedState && returnedState !== expectedState) {
       clearOAuthParams()
       sessionStorage.removeItem(PKCE_VERIFIER_KEY)
       sessionStorage.removeItem(PKCE_STATE_KEY)
+      localStorage.removeItem(PKCE_STATE_KEY)
+      localStorage.removeItem(PKCE_VERIFIER_FALLBACK_KEY)
       throw new Error('OAuth security check failed. Please start Google or Apple sign-in again.')
     }
 
-    const verifier = sessionStorage.getItem(PKCE_VERIFIER_KEY)
+    const verifier = sessionStorage.getItem(PKCE_VERIFIER_KEY) || localStorage.getItem(PKCE_VERIFIER_FALLBACK_KEY)
     if (!verifier) {
       clearOAuthParams()
       throw new Error('The Google/Apple sign-in session expired. Please start sign-in again.')
@@ -137,6 +140,8 @@ const consumeOAuthCallback = async () => {
 
     sessionStorage.removeItem(PKCE_VERIFIER_KEY)
     sessionStorage.removeItem(PKCE_STATE_KEY)
+    localStorage.removeItem(PKCE_VERIFIER_FALLBACK_KEY)
+    localStorage.removeItem(PKCE_STATE_KEY)
     clearOAuthParams()
     return saveTokenResponse(tokens)
   }
@@ -194,6 +199,8 @@ export const supabaseAuth = {
     const state = randomString(24)
     sessionStorage.setItem(PKCE_VERIFIER_KEY, verifier)
     sessionStorage.setItem(PKCE_STATE_KEY, state)
+    localStorage.setItem(PKCE_VERIFIER_FALLBACK_KEY, verifier)
+    localStorage.setItem(PKCE_STATE_KEY, state)
     localStorage.setItem('maintain-ai-oauth-pending', '1')
 
     const redirectTo = window.location.origin + window.location.pathname
@@ -239,6 +246,8 @@ export const supabaseAuth = {
     localStorage.removeItem(STORAGE_KEY)
     sessionStorage.removeItem(PKCE_VERIFIER_KEY)
     sessionStorage.removeItem(PKCE_STATE_KEY)
+    localStorage.removeItem(PKCE_VERIFIER_FALLBACK_KEY)
+    localStorage.removeItem(PKCE_STATE_KEY)
     localStorage.removeItem('maintain-ai-oauth-pending')
     emit()
   },
