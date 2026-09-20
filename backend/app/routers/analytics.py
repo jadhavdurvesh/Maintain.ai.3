@@ -33,20 +33,20 @@ def _scoped_machine(db: Session, machine_id: int, current: CurrentUser):
 
 
 @router.get("/model-status")
-def get_model_status(db: Session = Depends(get_db)):
+def get_model_status(current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     return risk_model.model_status(db)
 
 
 @router.post("/train")
-def train_model(db: Session = Depends(get_db)):
-    return risk_model.train(db)
+def train_model(current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    return risk_model.train(db, _visible_machine_ids(db, current))
 
 
 @router.get("/risk-predictions")
-def get_risk_predictions(db: Session = Depends(get_db)):
+def get_risk_predictions(current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     # Prediction requests are automatic-safe: the model layer may train or
     # refresh a compatible batch model when its automatic policy says it is due.
-    return risk_model.predict_risk(db)
+    return risk_model.predict_risk(db, _visible_machine_ids(db, current))
 
 
 @router.get("/temporal-model-status")
