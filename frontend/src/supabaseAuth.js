@@ -226,11 +226,10 @@ export const supabaseAuth = {
   clearOAuthOnboardingPending: () => {
     localStorage.removeItem('maintain-ai-oauth-pending')
     localStorage.removeItem(OAUTH_REGISTRATION_KEY)
-    localStorage.removeItem(OAUTH_REGISTRATION_KEY)
   },
 
-  signUp: async (email, password, metadata) =>
-    save(await hydrateUser(await request('/auth/v1/signup', {
+  signUp: async (email, password, metadata) => {
+    const response = await request('/auth/v1/signup', {
       method: 'POST',
       body: JSON.stringify({
         email,
@@ -238,7 +237,21 @@ export const supabaseAuth = {
         data: metadata,
         redirect_to: typeof window !== 'undefined' ? window.location.origin : undefined,
       }),
-    }))),
+    })
+    if (response?.access_token) return save(await hydrateUser(response))
+    return response
+  },
+
+  resendSignupConfirmation: async (email) => {
+    return request('/auth/v1/resend', {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'signup',
+        email,
+        redirect_to: typeof window !== 'undefined' ? window.location.origin : undefined,
+      }),
+    })
+  },
 
   refreshSession: async () => {
     if (!session?.refresh_token) return null
