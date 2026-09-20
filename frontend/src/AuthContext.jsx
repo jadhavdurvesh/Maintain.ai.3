@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import api from './api/client.js'
-import { getToken, setToken, onUnauthorized } from './api/client.js'
+import { getToken, setToken, onUnauthorized, clearApiCache } from './api/client.js'
 import { supabaseAuth } from './supabaseAuth.js'
 import { setRealtimeOrganizationId } from './realtime.js'
 
@@ -80,13 +80,17 @@ export function AuthProvider({ children }) {
       try {
         if (next?.access_token) {
           setAuthError(null)
+          clearApiCache()
           setToken(next.access_token)
+          window.dispatchEvent(new CustomEvent('maintain-ai-auth-context'))
           const synced = await syncSupabase(next.user?.user_metadata || {})
           if (!synced?.needs_onboarding) await loadMe()
         } else {
+          clearApiCache()
           setToken(null)
           setUser(null)
           setRealtimeOrganizationId(null)
+          window.dispatchEvent(new CustomEvent('maintain-ai-auth-context'))
         }
       } catch (error) {
         setAuthError(error?.message || 'Authentication could not be completed.')
@@ -173,6 +177,7 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     if (supabaseAuth.enabled) await supabaseAuth.signOut()
+    clearApiCache()
     setToken(null)
     setUser(null)
     setRealtimeOrganizationId(null)
