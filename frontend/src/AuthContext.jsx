@@ -181,6 +181,7 @@ export function AuthProvider({ children }) {
     setToken(null)
     setUser(null)
     setRealtimeOrganizationId(null)
+    window.dispatchEvent(new CustomEvent('maintain-ai-auth-context'))
   }
 
   const needsLogin = authRequired === true && !user
