@@ -11,7 +11,7 @@ def log_event(db: Session, entity_type: str, entity_id, action: str, description
             organization_id = int(entity_id) if entity_id is not None else 1
         elif entity_type == "user" and entity_id is not None:
             row = db.get(models.User, entity_id)
-            organization_id = row.organization_id if row else 1
+            organization_id = row.organization_id if row else None
         elif entity_id is not None:
             model_by_type = {
                 "machine": models.Machine,
@@ -25,9 +25,11 @@ def log_event(db: Session, entity_type: str, entity_id, action: str, description
             row = db.get(entity_model, entity_id) if entity_model else None
             organization_id = getattr(getattr(row, "machine", None), "organization_id", None) or (
                 row.organization_id if row is not None and hasattr(row, "organization_id") else None
-            ) or 1
+            )
+    if organization_id is None:
+        raise ValueError(f"Cannot determine organization for audit event: {entity_type}#{entity_id}")
     entry = models.AuditLog(
-        organization_id=organization_id or 1,
+        organization_id=organization_id,
         entity_type=entity_type,
         entity_id=entity_id,
         action=action,
