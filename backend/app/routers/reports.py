@@ -302,7 +302,7 @@ def export_gemini_pdf(db: Session = Depends(get_db), current: CurrentUser = Depe
         ai = diagnose_with_gemini(
             "Create an executive and technician maintenance report from the supplied evidence. Summarize observed conditions, open actions, historical failures, maintenance status, telemetry observations, and safety items. Do not invent measurements or diagnoses.",
             {"report_scope":"all_machines","machines":facts},
-            db=db,
+            db=db, organization_id=current.organization_id,
         )
     except Exception:
         ai = None
