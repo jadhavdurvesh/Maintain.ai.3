@@ -39,7 +39,7 @@ def _unavailable():
     }
 
 
-def train(db: Session, machine_ids=None) -> dict:
+def train(db: Session, machine_ids=None, organization_id=None) -> dict:
     joblib, RandomForestRegressor = _ml_backend()
     if joblib is None or RandomForestRegressor is None:
         return _unavailable()
@@ -69,7 +69,10 @@ def train(db: Session, machine_ids=None) -> dict:
     joblib.dump(model, buffer)
     artifact = buffer.getvalue()
 
-    existing = db.query(models.MLModelArtifact).order_by(models.MLModelArtifact.id.desc()).first()
+    artifact_query = db.query(models.MLModelArtifact)
+    if organization_id is not None:
+        artifact_query = artifact_query.filter(models.MLModelArtifact.organization_id == organization_id)
+    existing = artifact_query.order_by(models.MLModelArtifact.id.desc()).first()
     if existing:
         existing.model_version = MODEL_VERSION
         existing.feature_names = json.dumps(FEATURE_NAMES)
@@ -79,6 +82,7 @@ def train(db: Session, machine_ids=None) -> dict:
     else:
         db.add(models.MLModelArtifact(
             model_version=MODEL_VERSION,
+            organization_id=organization_id or 1,
             feature_names=json.dumps(FEATURE_NAMES),
             trained_at=datetime.utcnow(),
             n_samples=len(X),
@@ -103,12 +107,15 @@ def train(db: Session, machine_ids=None) -> dict:
     }
 
 
-def _load(db: Session):
+def _load(db: Session, organization_id=None):
     joblib, _ = _ml_backend()
     if joblib is None:
         return None
 
-    saved = db.query(models.MLModelArtifact).order_by(models.MLModelArtifact.id.desc()).first()
+    artifact_query = db.query(models.MLModelArtifact)
+    if organization_id is not None:
+        artifact_query = artifact_query.filter(models.MLModelArtifact.organization_id == organization_id)
+    saved = artifact_query.order_by(models.MLModelArtifact.id.desc()).first()
     if not saved:
         return None
     try:
@@ -132,11 +139,11 @@ def _is_compatible(saved: dict) -> bool:
     )
 
 
-def model_status(db: Session) -> dict:
+def model_status(db: Session, organization_id=None) -> dict:
     if _ml_backend()[0] is None:
         return _unavailable() | {"endpoint": "batch_risk_model"}
 
-    saved = _load(db)
+    saved = _load(db, organization_id)
     if not saved:
         return {"trained": False, "reason": "Model hasn't been trained yet."}
     if not _is_compatible(saved):
@@ -154,19 +161,19 @@ def model_status(db: Session) -> dict:
     }
 
 
-def predict_risk(db: Session, machine_ids=None) -> dict:
+def predict_risk(db: Session, machine_ids=None, organization_id=None) -> dict:
     if _ml_backend()[0] is None:
         return _unavailable()
 
-    saved = _load(db)
+    saved = _load(db, organization_id)
     if not saved:
         return {"available": False, "reason": "Model hasn't been trained yet — use the Retrain button."}
 
     if not _is_compatible(saved):
-        result = train(db, machine_ids)
+        result = train(db, machine_ids, organization_id)
         if not result.get("trained"):
             return {"available": False, **result}
-        saved = _load(db)
+        saved = _load(db, organization_id)
         if not saved:
             return {"available": False, "reason": "Model was trained but could not be loaded from the database."}
 
