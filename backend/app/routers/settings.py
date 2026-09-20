@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from .. import settings_store
 from ..database import get_db
+from ..deps import get_current_user, CurrentUser
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -15,8 +16,8 @@ class ApiKeyIn(BaseModel):
 
 
 @router.get("/gemini-key")
-def get_gemini_key_status(db: Session = Depends(get_db)):
-    value = settings_store.get_setting(db, GEMINI_KEY_NAME)
+def get_gemini_key_status(current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    value = settings_store.get_setting(db, GEMINI_KEY_NAME, current.organization_id)
     return {
         "configured": bool(value),
         "last4": value[-4:] if value else None,
@@ -24,12 +25,12 @@ def get_gemini_key_status(db: Session = Depends(get_db)):
 
 
 @router.post("/gemini-key")
-def set_gemini_key(payload: ApiKeyIn, db: Session = Depends(get_db)):
-    settings_store.set_setting(db, GEMINI_KEY_NAME, payload.api_key.strip())
+def set_gemini_key(payload: ApiKeyIn, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    settings_store.set_setting(db, GEMINI_KEY_NAME, payload.api_key.strip(), current.organization_id)
     return {"saved": True}
 
 
 @router.delete("/gemini-key")
-def clear_gemini_key(db: Session = Depends(get_db)):
-    settings_store.delete_setting(db, GEMINI_KEY_NAME)
+def clear_gemini_key(current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    settings_store.delete_setting(db, GEMINI_KEY_NAME, current.organization_id)
     return {"deleted": True}
