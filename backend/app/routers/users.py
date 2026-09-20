@@ -19,6 +19,8 @@ class InvitationIn(BaseModel):
     email: str
     role: str = "technician"
     application: str = "workforce"
+    username: str | None = None
+    full_name: str | None = None
 
 
 class UserIn(BaseModel):
@@ -144,13 +146,13 @@ def invite_member(
         invited = invite_user_by_email(
             email,
             redirect_to=None,
-            metadata={"organization_id": str(current.organization_id), "application": payload.application},
+            metadata={"organization_id": str(current.organization_id), "application": payload.application, "username": username, "full_name": (payload.full_name or "").strip()},
         )
     except RuntimeError as exc:
         raise HTTPException(502, str(exc))
 
     supabase_id = str(invited.get("id") or "")
-    username_base = email.split("@")[0][:40] or "user"
+    username_base = (payload.username or email.split("@")[0])[:40].strip() or "user"
     username = username_base
     suffix = 2
     while db.query(models.User).filter(models.User.username == username).first():
@@ -169,6 +171,7 @@ def invite_member(
             supabase_user_id=supabase_id or None,
             organization_id=current.organization_id,
             role=models.UserRole(payload.role),
+            full_name=(payload.full_name or "").strip() or None,
             active=True,
         )
         db.add(user)
