@@ -53,7 +53,7 @@ def dashboard_summary(current: CurrentUser = Depends(get_current_user), db: Sess
 def reliability_report(current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     """Failure counts and completion stats per machine — feeds the
     'Most Frequently Failing Machines' and 'Maintenance Completion Rate' dashboard sections."""
-    machines = db.query(models.Machine).filter_by(archived=False, organization_id=current.organization_id).all()
+    machines = _visible_machines(db, current)
     rows = []
     for m in machines:
         faults = db.query(models.FaultRecord).filter_by(machine_id=m.id).count()
@@ -84,13 +84,14 @@ def failure_analysis(current: CurrentUser = Depends(get_current_user), db: Sessi
 
 @router.get("/recent-faults")
 def recent_faults(limit: int = 6, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    visible_ids = [m.id for m in _visible_machines(db, current)]
     faults = (
-        db.query(models.FaultRecord).join(models.Machine).filter(models.Machine.organization_id == current.organization_id)
+        db.query(models.FaultRecord).join(models.Machine).filter(models.Machine.id.in_(visible_ids))
         .order_by(models.FaultRecord.reported_date.desc())
         .limit(limit)
         .all()
     )
-    machines = {m.id: m for m in db.query(models.Machine).all()}
+    machines = {m.id: m for m in _visible_machines(db, current)}
     return [
         {
             "id": f.id,
@@ -229,7 +230,7 @@ def _export_dataset(db, dataset, current=None):
 
 @router.get("/export/csv")
 def export_machines_csv(db: Session = Depends(get_db), current: CurrentUser = Depends(get_current_user)):
-    machines = db.query(models.Machine).filter_by(archived=False).all()
+    machines = _visible_machines(db, current)
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow([
@@ -252,7 +253,7 @@ def export_machines_csv(db: Session = Depends(get_db), current: CurrentUser = De
 
 @router.get("/export/pdf")
 def export_pdf(db: Session = Depends(get_db), current: CurrentUser = Depends(get_current_user)):
-    pdf_bytes = build_pdf_report(db)
+    pdf_bytes = build_pdf_report(db, organization_id=current.organization_id)
     filename = f"maintain_ai_report_{datetime.utcnow().date()}.pdf"
     return StreamingResponse(
         iter([pdf_bytes]),
@@ -263,7 +264,7 @@ def export_pdf(db: Session = Depends(get_db), current: CurrentUser = Depends(get
 
 @router.get("/export/excel")
 def export_excel(db: Session = Depends(get_db), current: CurrentUser = Depends(get_current_user)):
-    xlsx_bytes = build_excel_report(db)
+    xlsx_bytes = build_excel_report(db, organization_id=current.organization_id)
     filename = f"maintain_ai_report_{datetime.utcnow().date()}.xlsx"
     return StreamingResponse(
         iter([xlsx_bytes]),
@@ -276,7 +277,7 @@ def export_excel(db: Session = Depends(get_db), current: CurrentUser = Depends(g
 @router.get("/export/gemini-pdf")
 def export_gemini_pdf(db: Session = Depends(get_db), current: CurrentUser = Depends(get_current_user)):
     """Generate a detailed, evidence-grounded PDF with Gemini narrative when configured."""
-    machines = db.query(models.Machine).filter_by(archived=False).all()
+    machines = _visible_machines(db, current)
     facts = []
     for m in machines:
         faults = db.query(models.FaultRecord).filter_by(machine_id=m.id).order_by(models.FaultRecord.reported_date.desc()).limit(10).all()
