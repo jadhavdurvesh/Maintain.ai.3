@@ -87,6 +87,10 @@ def ensure_tenant_schema():
         columns = {column["name"] for column in inspector.get_columns("spare_parts")}
         if "organization_id" not in columns:
             additions.append(("spare_parts", "organization_id", "INTEGER"))
+    if inspector.has_table("ml_model_artifacts"):
+        columns = {column["name"] for column in inspector.get_columns("ml_model_artifacts")}
+        if "organization_id" not in columns:
+            additions.append(("ml_model_artifacts", "organization_id", "INTEGER"))
     if inspector.has_table("audit_log"):
         columns = {column["name"] for column in inspector.get_columns("audit_log")}
         if "organization_id" not in columns:
