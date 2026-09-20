@@ -152,7 +152,7 @@ def diagnose(payload: schemas.DiagnoseRequest, current: CurrentUser = Depends(ge
     if payload.use_online_ai:
         result = gemini_client.diagnose_with_gemini(
             payload.problem_description, _machine_context(db, machine), payload.answers,
-            conversation_history=history, db=db,
+            conversation_history=history, db=db, organization_id=current.organization_id,
         )
     if result is None:
         result = offline_engine.diagnose(
