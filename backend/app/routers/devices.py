@@ -25,26 +25,35 @@ router = APIRouter(prefix="/api/devices", tags=["devices"])\n\ndef _get_scoped_m
 
 
 class TelemetryStream:
-    """Process-local fan-out from device ingestion to live dashboard clients."""
+    """Process-local fan-out partitioned by organization."""
     def __init__(self):
-        self._clients = set()
+        self._clients = {}
 
-    async def connect(self, websocket):
+    async def connect(self, websocket, organization_id: int):
         await websocket.accept()
-        self._clients.add(websocket)
+        self._clients.setdefault(organization_id, set()).add(websocket)
 
-    def disconnect(self, websocket):
-        self._clients.discard(websocket)
+    def disconnect(self, websocket, organization_id: int | None = None):
+        if organization_id is not None:
+            clients = self._clients.get(organization_id, set())
+            clients.discard(websocket)
+            if not clients:
+                self._clients.pop(organization_id, None)
+            return
+        for org_id, clients in list(self._clients.items()):
+            clients.discard(websocket)
+            if not clients:
+                self._clients.pop(org_id, None)
 
-    async def broadcast(self, event):
+    async def broadcast(self, organization_id: int, event):
         stale = []
-        for client in tuple(self._clients):
+        for client in tuple(self._clients.get(organization_id, set())):
             try:
                 await client.send_json(event)
             except Exception:
                 stale.append(client)
         for client in stale:
-            self.disconnect(client)
+            self.disconnect(client, organization_id)
 
 
 telemetry_stream = TelemetryStream()
@@ -287,7 +296,7 @@ async def _publish_reading(machine, reading, behaviour, safety=None, degradation
         "safety": safety,
         "degradation": degradation,
     }
-    await telemetry_stream.broadcast({**event, "organization_id": machine.organization_id})
+    await telemetry_stream.broadcast(machine.organization_id, {**event, "organization_id": machine.organization_id})
     await supabase_broadcast("org:" + str(machine.organization_id) + ":telemetry", "telemetry", event)
 
 
@@ -361,7 +370,7 @@ async def telemetry_stream_websocket(websocket: WebSocket):
 
         # This stream is organization-filtered at publication time and
         # additionally rejects arbitrary client-side machine subscriptions.
-        await telemetry_stream.connect(websocket)
+        await telemetry_stream.connect(websocket, organization_id)
         while True:
             message = await websocket.receive_json()
             if message.get("type") == "ping":
@@ -371,7 +380,7 @@ async def telemetry_stream_websocket(websocket: WebSocket):
     except WebSocketDisconnect:
         pass
     finally:
-        telemetry_stream.disconnect(websocket)
+        telemetry_stream.disconnect(websocket, organization_id if organization_id is not None else None)
         db.close()
 
 @router.get("/{machine_id}/status", response_model=DeviceStatusOut)
