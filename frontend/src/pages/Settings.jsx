@@ -27,6 +27,10 @@ export default function SettingsPage() {
 
   const [users, setUsers] = useState(null)
   const [machines, setMachines] = useState([])
+  const [members, setMembers] = useState([])
+  const [inviting, setInviting] = useState(false)
+  const [appSaving, setAppSaving] = useState(null)
+  const [inviteForm, setInviteForm] = useState({ email: '', role: 'technician', application: 'workforce' })
 
   const [error, setError] = useState(null)
   const [toast, setToast] = useState(null)
