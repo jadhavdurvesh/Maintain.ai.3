@@ -39,12 +39,12 @@ def _unavailable():
     }
 
 
-def train(db: Session) -> dict:
+def train(db: Session, machine_ids=None) -> dict:
     joblib, RandomForestRegressor = _ml_backend()
     if joblib is None or RandomForestRegressor is None:
         return _unavailable()
 
-    X, y, machine_ids = build_training_data(db)
+    X, y, trained_machine_ids = build_training_data(db, machine_ids)
 
     if len(X) < MIN_TRAINING_SAMPLES:
         return {
@@ -154,7 +154,7 @@ def model_status(db: Session) -> dict:
     }
 
 
-def predict_risk(db: Session) -> dict:
+def predict_risk(db: Session, machine_ids=None) -> dict:
     if _ml_backend()[0] is None:
         return _unavailable()
 
@@ -163,7 +163,7 @@ def predict_risk(db: Session) -> dict:
         return {"available": False, "reason": "Model hasn't been trained yet — use the Retrain button."}
 
     if not _is_compatible(saved):
-        result = train(db)
+        result = train(db, machine_ids)
         if not result.get("trained"):
             return {"available": False, **result}
         saved = _load(db)
@@ -171,7 +171,10 @@ def predict_risk(db: Session) -> dict:
             return {"available": False, "reason": "Model was trained but could not be loaded from the database."}
 
     model = saved["model"]
-    machines = db.query(models.Machine).filter_by(archived=False).all()
+    query = db.query(models.Machine).filter_by(archived=False)
+    if machine_ids is not None:
+        query = query.filter(models.Machine.id.in_(machine_ids))
+    machines = query.all()
     if not machines:
         return {"available": False, "reason": "No active machines to predict for."}
 
