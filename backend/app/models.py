@@ -189,7 +189,7 @@ class SparePart(Base):
     id = Column(Integer, primary_key=True, index=True)
     organization_id = Column(Integer, ForeignKey("organizations.id"), default=1, nullable=False, index=True)
     name = Column(String, nullable=False)
-    part_number = Column(String, unique=True, index=True)
+    part_number = Column(String, index=True)
     quantity = Column(Integer, default=0)
     minimum_stock = Column(Integer, default=1)
     compatible_machine_categories = Column(String, nullable=True)
@@ -211,6 +211,7 @@ class KnowledgeBaseEntry(Base):
 class AIDiagnosticSession(Base):
     __tablename__ = "ai_diagnostic_sessions"
     id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
     conversation_id = Column(Integer, ForeignKey("ai_conversations.id"), nullable=True, index=True)
     machine_id = Column(Integer, ForeignKey("machines.id"), nullable=True)
     problem_description = Column(Text)
@@ -228,6 +229,7 @@ class AIDiagnosticSession(Base):
 class AIConversation(Base):
     __tablename__ = "ai_conversations"
     id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
     conversation_key = Column(String, unique=True, index=True, nullable=False)
     machine_id = Column(Integer, ForeignKey("machines.id"), nullable=True, index=True)
     title = Column(String, nullable=True)
