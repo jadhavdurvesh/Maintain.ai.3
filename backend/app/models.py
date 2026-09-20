@@ -348,6 +348,7 @@ class AuditLog(Base):
 class MLModelArtifact(Base):
     __tablename__ = "ml_model_artifacts"
     id = Column(Integer, primary_key=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), default=1, nullable=False, index=True)
     model_version = Column(Integer, nullable=False)
     feature_names = Column(Text, nullable=False)
     trained_at = Column(DateTime, default=datetime.utcnow, nullable=False)
