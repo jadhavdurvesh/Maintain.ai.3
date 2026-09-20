@@ -71,8 +71,7 @@ def get_pretrained_anomaly(machine_id: int, current: CurrentUser = Depends(get_c
 @router.get("/machines/{machine_id}/intelligence")
 def get_machine_intelligence(machine_id: int, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     """Combine online behavioural evidence with optional pretrained anomaly evidence."""
-    if db.get(models.Machine, machine_id) is None:
-        raise HTTPException(404, "machine not found")
+    _scoped_machine(db, machine_id, current)
     behaviour = score_machine(db, machine_id)
     pretrained = score_pretrained_machine(db, machine_id)
     return {
@@ -87,8 +86,7 @@ def get_machine_intelligence(machine_id: int, current: CurrentUser = Depends(get
 @router.get("/machines/{machine_id}/behaviour")
 def get_machine_behaviour(machine_id: int, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     """Return the Lab online learner's current behavioural evidence."""
-    if db.get(models.Machine, machine_id) is None:
-        raise HTTPException(404, "machine not found")
+    _scoped_machine(db, machine_id, current)
     return score_machine(db, machine_id)
 
 
@@ -117,8 +115,7 @@ def get_live_behaviour(current: CurrentUser = Depends(get_current_user), db: Ses
 @router.get("/machines/{machine_id}/degradation")
 def get_machine_degradation(machine_id: int, limit: int = 48, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     """Return the explainable online degradation timeline."""
-    if db.get(models.Machine, machine_id) is None:
-        raise HTTPException(404, "machine not found")
+    _scoped_machine(db, machine_id, current)
     return get_timeline(db, machine_id, limit)
 
 
@@ -161,7 +158,7 @@ def get_model_lab(current: CurrentUser = Depends(get_current_user), db: Session 
     from datetime import datetime
     ids = _visible_machine_ids(db, current)
     machines = db.query(models.Machine).filter(models.Machine.id.in_(ids)).all()
-    reading_count = db.query(models.SensorReading).filter(models.SensorReading.machine_id.in_(visible_ids)).filter(models.SensorReading.machine_id.in_(ids)).count()
+    reading_count = db.query(models.SensorReading).filter(models.SensorReading.machine_id.in_(ids)).count()
     machines_with_readings = sum(1 for m in machines if db.query(models.SensorReading.id).filter_by(machine_id=m.id).first())
     return {'generated_at': datetime.utcnow().isoformat(), 'pretrained': pretrained_status(), 'forecasts': {'chronos_2': forecast_models_status(), 'timer': timer_status()}, 'fleet': fleet_intelligence(db, ids), 'risk_readiness': risk_readiness(db, ids), 'telemetry': {'reading_count': reading_count, 'machines_with_readings': machines_with_readings}}
 
@@ -174,7 +171,7 @@ def get_evidence_feed(limit: int = 80, current: CurrentUser = Depends(get_curren
     def add(kind, ident, machine_id, timestamp, message):
         if timestamp is not None:
             events.append({'id': ident, 'type': kind, 'machine_id': machine_id, 'machine_name': machines.get(machine_id, 'Machine'), 'timestamp': timestamp.isoformat(), 'message': message})
-    for r in db.query(models.SensorReading).order_by(models.SensorReading.recorded_at.desc(), models.SensorReading.id.desc()).limit(limit).all():
+    for r in db.query(models.SensorReading).filter(models.SensorReading.machine_id.in_(visible_ids)).order_by(models.SensorReading.recorded_at.desc(), models.SensorReading.id.desc()).limit(limit).all():
         add('telemetry', 'reading-' + str(r.id), r.machine_id, r.recorded_at, str(r.reading_type) + ': ' + str(r.value) + ' ' + str(r.unit or ''))
     for e in db.query(models.MLAnomalyEvent).filter(models.MLAnomalyEvent.machine_id.in_(visible_ids)).order_by(models.MLAnomalyEvent.created_at.desc()).limit(limit).all():
         add('anomaly', 'anomaly-' + str(e.id), e.machine_id, e.created_at, e.message)
