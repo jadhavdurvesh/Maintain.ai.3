@@ -414,22 +414,33 @@ export default function SettingsPage() {
               <div>
                 <div
                   style={{
-                    fontWeight: 600,
+                    fontWeight: 700,
+                    fontSize: 15,
                   }}
                 >
-                  {user.username}
+                  {user.organization_name || 'Your organization'}
                 </div>
 
                 <div
                   style={{
-                    color:
-                      'var(--text-faint)',
+                    color: 'var(--text-dim)',
                     fontSize: 12.5,
+                    marginTop: 4,
                   }}
                 >
-                  {user.organization_name}
+                  Organization
+                </div>
+
+                <div
+                  style={{
+                    color: 'var(--text-faint)',
+                    fontSize: 12.5,
+                    marginTop: 8,
+                  }}
+                >
+                  Username: <strong style={{ color: 'var(--text-dim)' }}>@{user.username}</strong>
                   {' · '}
-                  {user.role}
+                  Role: <strong style={{ color: 'var(--text-dim)' }}>{user.role}</strong>
                 </div>
               </div>
 
