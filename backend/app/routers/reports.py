@@ -313,7 +313,7 @@ def export_all_data(db: Session = Depends(get_db), current: CurrentUser = Depend
         manifest = {"generated_at_utc": datetime.utcnow().isoformat() + "Z", "datasets": allowed}
         archive.writestr("manifest.json", json.dumps(manifest, indent=2))
         for dataset in allowed:
-            headers, rows = _export_dataset(db, dataset)
+            headers, rows = _export_dataset(db, dataset, current)
             archive.writestr(f"{dataset}.csv", _csv_bytes(headers, rows))
     buffer.seek(0)
     filename = f"maintain_ai_full_export_{datetime.utcnow().date()}.zip"
