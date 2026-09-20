@@ -192,7 +192,7 @@ export const supabaseAuth = {
       body: JSON.stringify({ email, password }),
     }))),
 
-  signInWithProvider: async (provider) => {
+  signInWithProvider: async (provider, registration = false) => {
     if (!['google', 'apple'].includes(provider)) throw new Error('Unsupported sign-in provider')
     if (typeof window === 'undefined') return
 
@@ -203,6 +203,8 @@ export const supabaseAuth = {
     localStorage.setItem(PKCE_VERIFIER_FALLBACK_KEY, verifier)
     localStorage.setItem(PKCE_STATE_KEY, state)
     localStorage.setItem('maintain-ai-oauth-pending', '1')
+    if (registration) localStorage.setItem(OAUTH_REGISTRATION_KEY, '1')
+    else localStorage.removeItem(OAUTH_REGISTRATION_KEY)
 
     const redirectTo = window.location.origin + window.location.pathname
     const url = new URL(SUPABASE_URL + '/auth/v1/authorize')
