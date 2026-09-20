@@ -267,6 +267,7 @@ def worker_login(
 def sync_supabase_user(
     payload: SupabaseSyncIn,
     authorization: str | None = Header(default=None),
+    x_maintain_application: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
     if not supabase_auth_enabled():
@@ -278,6 +279,10 @@ def sync_supabase_user(
     claims = verify_access_token(token)
     if not claims or not claims.get("sub"):
         raise HTTPException(status_code=401, detail="Supabase access token is invalid or expired")
+
+    application = (x_maintain_application or "engineering").strip().lower()
+    if application not in {"engineering", "android", "workforce"}:
+        raise HTTPException(status_code=400, detail="invalid application context")
 
     try:
         sid = str(claims["sub"])
@@ -324,7 +329,7 @@ def sync_supabase_user(
             db.flush()
             db.add(models.UserApplicationAccess(
                 user_id=user.id,
-                application="engineering",
+                application=application,
                 enabled=True,
             ))
             db.commit()
@@ -338,24 +343,15 @@ def sync_supabase_user(
         if not organization:
             raise HTTPException(status_code=500, detail="Your account is not linked to an organization")
 
-        # This frontend is the Engineering application. Ensure the signed-in
-        # Supabase account is explicitly enabled for Engineering regardless of
-        # the user's role; role and application access are separate concerns.
-        engineering_access = db.query(models.UserApplicationAccess).filter(
+        requested_access = db.query(models.UserApplicationAccess).filter(
             models.UserApplicationAccess.user_id == user.id,
-            models.UserApplicationAccess.application == "engineering",
+            models.UserApplicationAccess.application == application,
         ).first()
-        if engineering_access:
-            if not engineering_access.enabled:
-                engineering_access.enabled = True
-                db.commit()
-        else:
-            db.add(models.UserApplicationAccess(
-                user_id=user.id,
-                application="engineering",
-                enabled=True,
-            ))
-            db.commit()
+        if not requested_access or not requested_access.enabled:
+            raise HTTPException(
+                status_code=403,
+                detail=f"account is not enabled for the {application} application",
+            )
 
         # Organization claim refresh is deliberately non-fatal. The Neon
         # organization remains the application authorization source.
