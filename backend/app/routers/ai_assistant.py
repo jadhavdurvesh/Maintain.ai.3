@@ -89,7 +89,7 @@ def _get_or_create_conversation(db: Session, conversation_id: str | None, machin
             raise HTTPException(400, "conversation belongs to a different machine")
     if conversation is None:
         conversation = models.AIConversation(
-            conversation_key=conversation_id or str(uuid4()), organization_id=current.organization_id, machine_id=machine_id,
+            conversation_key=conversation_id or str(uuid4()), organization_id=organization_id, machine_id=machine_id,
             title=(title or "Maintenance diagnosis")[:200],
         )
         db.add(conversation)
