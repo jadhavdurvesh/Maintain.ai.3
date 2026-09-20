@@ -120,10 +120,17 @@ export default function SettingsPage() {
     setSavingUser(true)
 
     try {
-      await api.post(
-        '/api/users',
-        form
-      )
+      if (authRequired) {
+        await api.post('/api/users/invitations', {
+          email: form.email,
+          role: form.role,
+          application: 'engineering',
+          username: form.username,
+          full_name: form.full_name,
+        })
+      } else {
+        await api.post('/api/users', form)
+      }
 
       setForm(emptyForm)
 
@@ -131,7 +138,7 @@ export default function SettingsPage() {
 
       setToast({
         type: 'success',
-        message: 'User added successfully.',
+        message: authRequired ? 'Organization invitation sent.' : 'User added successfully.',
       })
     } catch (e) {
       setToast({
