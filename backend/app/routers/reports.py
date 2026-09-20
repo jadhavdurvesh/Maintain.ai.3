@@ -60,8 +60,8 @@ def reliability_report(current: CurrentUser = Depends(get_current_user), db: Ses
 
 
 @router.get("/failure-analysis")
-def failure_analysis(db: Session = Depends(get_db)):
-    faults = db.query(models.FaultRecord).all()
+def failure_analysis(current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    faults = db.query(models.FaultRecord).join(models.Machine).filter(models.Machine.organization_id == current.organization_id).all()
     cause_counts = Counter((f.cause or "unspecified") for f in faults)
     return {
         "total_faults": len(faults),
@@ -70,9 +70,9 @@ def failure_analysis(db: Session = Depends(get_db)):
 
 
 @router.get("/recent-faults")
-def recent_faults(limit: int = 6, db: Session = Depends(get_db)):
+def recent_faults(limit: int = 6, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     faults = (
-        db.query(models.FaultRecord)
+        db.query(models.FaultRecord).join(models.Machine).filter(models.Machine.organization_id == current.organization_id)
         .order_by(models.FaultRecord.reported_date.desc())
         .limit(limit)
         .all()
@@ -93,15 +93,14 @@ def recent_faults(limit: int = 6, db: Session = Depends(get_db)):
 
 
 @router.get("/recent-activity")
-def recent_activity(limit: int = 6, db: Session = Depends(get_db)):
+def recent_activity(limit: int = 6, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     """Recently completed work orders and maintenance — the spec's
     'Recent Technician Activities' dashboard section."""
     machines = {m.id: m for m in db.query(models.Machine).all()}
     events = []
 
     completed_wos = (
-        db.query(models.WorkOrder)
-        .filter(models.WorkOrder.status == models.WorkOrderStatus.completed)
+        db.query(models.WorkOrder).join(models.Machine).filter(models.Machine.organization_id == current.organization_id, models.WorkOrder.status == models.WorkOrderStatus.completed)
         .order_by(models.WorkOrder.completed_at.desc())
         .limit(limit)
         .all()
@@ -116,8 +115,7 @@ def recent_activity(limit: int = 6, db: Session = Depends(get_db)):
         })
 
     completed_maint = (
-        db.query(models.MaintenanceRecord)
-        .filter(models.MaintenanceRecord.status == models.MaintenanceStatus.completed)
+        db.query(models.MaintenanceRecord).join(models.Machine).filter(models.Machine.organization_id == current.organization_id, models.MaintenanceRecord.status == models.MaintenanceStatus.completed)
         .order_by(models.MaintenanceRecord.completed_date.desc())
         .limit(limit)
         .all()
@@ -149,12 +147,15 @@ def _csv_bytes(headers, rows):
     return buffer.getvalue().encode("utf-8-sig")
 
 
-def _machine_map(db):
-    return {m.id: m for m in db.query(models.Machine).all()}
+def _machine_map(db, current: CurrentUser | None = None):
+    query = db.query(models.Machine)
+    if current is not None:
+        query = query.filter(models.Machine.organization_id == current.organization_id)
+    return {m.id: m for m in query.all()}
 
 
-def _export_dataset(db, dataset):
-    machines = _machine_map(db)
+def _export_dataset(db, dataset, current=None):
+    machines = _machine_map(db, current)
     if dataset == "machines":
         return ["id","machine_code","name","category","manufacturer","model_number","location","department","operating_hours","health_score","status","criticality","iot_enabled","archived"], [
             [m.id,m.machine_code,m.name,m.category,m.manufacturer,m.model_number,m.location,m.department,m.operating_hours,m.health_score,_enum_value(m.status),_enum_value(m.criticality),m.iot_enabled,m.archived] for m in machines.values()
@@ -299,7 +300,7 @@ def export_dataset_csv(dataset: str, db: Session = Depends(get_db), current: Cur
     if dataset not in allowed:
         from fastapi import HTTPException
         raise HTTPException(404, "unknown export dataset")
-    headers, rows = _export_dataset(db, dataset)
+    headers, rows = _export_dataset(db, dataset, current)
     filename = f"maintain_ai_{dataset}_{datetime.utcnow().date()}.csv"
     return StreamingResponse(iter([_csv_bytes(headers, rows)]), media_type="text/csv", headers={"Content-Disposition": f"attachment; filename={filename}"})
 
