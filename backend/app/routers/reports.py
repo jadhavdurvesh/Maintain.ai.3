@@ -216,7 +216,7 @@ def _export_dataset(db, dataset, current=None):
             [e.id,e.machine_id,machines.get(e.machine_id).machine_code if e.machine_id in machines else "",machines.get(e.machine_id).name if e.machine_id in machines else "",e.event_type,e.reading_type,e.value,e.threshold,e.message,e.shutdown_requested,e.device_acknowledged,e.created_at] for e in rows
         ]
     if dataset == "spare_parts":
-        rows=db.query(models.SparePart).all()
+        rows=db.query(models.SparePart).filter(models.SparePart.organization_id == current.organization_id).all()
         return ["id","name","part_number","description","quantity","minimum_stock","unit_cost"], [
             [x.id,x.name,x.part_number,x.description,x.quantity,x.minimum_stock,x.unit_cost] for x in rows
         ]
