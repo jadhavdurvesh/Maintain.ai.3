@@ -187,6 +187,7 @@ class Alert(Base):
 class SparePart(Base):
     __tablename__ = "spare_parts"
     id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), default=1, nullable=False, index=True)
     name = Column(String, nullable=False)
     part_number = Column(String, unique=True, index=True)
     quantity = Column(Integer, default=0)
@@ -335,6 +336,7 @@ class AppSetting(Base):
 class AuditLog(Base):
     __tablename__ = "audit_log"
     id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), default=1, nullable=False, index=True)
     entity_type = Column(String, nullable=False, index=True)
     entity_id = Column(Integer, nullable=True, index=True)
     action = Column(String, nullable=False)
