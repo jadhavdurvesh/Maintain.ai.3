@@ -12,7 +12,8 @@ from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
 from .. import models, audit
-from ..database import get_db, SessionLocal
+from ..database import get_db
+from ..deps import get_current_user, CurrentUser, SessionLocal
 from ..alerts_engine import evaluate_machine
 from ..ml.online import update_online_state
 from ..ml.temporal_features import materialize_windows
@@ -20,7 +21,7 @@ from ..ml.anomaly_events import create_anomaly_event
 from ..notification_service import notify_machine_workers
 from ..supabase_realtime import broadcast as supabase_broadcast
 
-router = APIRouter(prefix="/api/devices", tags=["devices"])
+router = APIRouter(prefix="/api/devices", tags=["devices"])\n\ndef _get_scoped_machine(db: Session, machine_id: int, current: CurrentUser, admin_only: bool = False):\n    if admin_only and current.role != models.UserRole.admin.value:\n        raise HTTPException(403, "administrator access required")\n    machine = db.query(models.Machine).filter(models.Machine.id == machine_id, models.Machine.organization_id == current.organization_id, models.Machine.archived.is_(False)).first()\n    if not machine:\n        raise HTTPException(404, "machine not found")\n    if current.role == models.UserRole.technician.value and not db.query(models.UserMachineAssignment).filter_by(user_id=current.id, machine_id=machine_id).first():\n        raise HTTPException(404, "machine not assigned to this worker")\n    return machine
 
 
 class TelemetryStream:
@@ -332,18 +333,14 @@ async def telemetry_stream_websocket(websocket: WebSocket):
 
 
 @router.get("/{machine_id}/status", response_model=DeviceStatusOut)
-def device_status(machine_id: int, db: Session = Depends(get_db)):
-    machine = db.get(models.Machine, machine_id)
-    if not machine:
-        raise HTTPException(404, "machine not found")
+def device_status(machine_id: int, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    machine = _get_scoped_machine(db, machine_id, current)
     return DeviceStatusOut(iot_enabled=machine.iot_enabled, has_key=bool(machine.device_key))
 
 
 @router.post("/{machine_id}/enable", response_model=DeviceStatusOut)
-def enable_device(machine_id: int, db: Session = Depends(get_db)):
-    machine = db.get(models.Machine, machine_id)
-    if not machine:
-        raise HTTPException(404, "machine not found")
+def enable_device(machine_id: int, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    machine = _get_scoped_machine(db, machine_id, current, admin_only=True)
     machine.iot_enabled = True
     machine.device_key = secrets.token_hex(16)
     db.commit()
@@ -352,10 +349,8 @@ def enable_device(machine_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{machine_id}/disable", response_model=DeviceStatusOut)
-def disable_device(machine_id: int, db: Session = Depends(get_db)):
-    machine = db.get(models.Machine, machine_id)
-    if not machine:
-        raise HTTPException(404, "machine not found")
+def disable_device(machine_id: int, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    machine = _get_scoped_machine(db, machine_id, current, admin_only=True)
     machine.iot_enabled = False
     db.commit()
     audit.log_event(db, "machine", machine.id, "iot_disabled", f"Live sensor integration disabled for {machine.name}")
@@ -507,21 +502,17 @@ async def device_websocket(websocket: WebSocket):
 
 
 @router.get("/{machine_id}/safety")
-def get_safety_policy(machine_id: int, db: Session = Depends(get_db)):
-    machine = db.get(models.Machine, machine_id)
-    if not machine:
-        raise HTTPException(404, "machine not found")
-    policy = db.query(models.MachineSafetyPolicy).filter_by(machine_id=machine_id).first()
+def get_safety_policy(machine_id: int, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    machine = _get_scoped_machine(db, machine_id, current)
+    policy = db.query(models.MachineSafetyPolicy).filter_by(machine_id=machine.id).first()
     if not policy:
         return {"configured": False, "enabled": False, "auto_shutdown_enabled": False}
     return {"configured": True, **{c.name: getattr(policy, c.name) for c in models.MachineSafetyPolicy.__table__.columns if c.name not in {"id", "machine_id"}}}
 
 
 @router.put("/{machine_id}/safety")
-def set_safety_policy(machine_id: int, payload: SafetyPolicyPayload, db: Session = Depends(get_db)):
-    machine = db.get(models.Machine, machine_id)
-    if not machine:
-        raise HTTPException(404, "machine not found")
+def set_safety_policy(machine_id: int, payload: SafetyPolicyPayload, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    machine = _get_scoped_machine(db, machine_id, current, admin_only=True)
     if payload.auto_shutdown_enabled and not payload.enabled:
         raise HTTPException(400, "Enable threshold monitoring before enabling automatic shutdown.")
     if payload.shutdown_low is not None and payload.warning_low is not None and payload.warning_low < payload.shutdown_low:
@@ -545,10 +536,8 @@ def set_safety_policy(machine_id: int, payload: SafetyPolicyPayload, db: Session
 
 
 @router.post("/{machine_id}/safety/test-shutdown")
-async def test_shutdown(machine_id: int, db: Session = Depends(get_db)):
-    machine = db.get(models.Machine, machine_id)
-    if not machine:
-        raise HTTPException(404, "machine not found")
+async def test_shutdown(machine_id: int, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    machine = _get_scoped_machine(db, machine_id, current, admin_only=True)
     client = _device_command_clients.get(machine_id)
     if not client:
         raise HTTPException(409, "Safety device WebSocket is not connected.")
