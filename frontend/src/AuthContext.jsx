@@ -13,6 +13,9 @@ export function AuthProvider({ children }) {
   const [needsOnboarding, setNeedsOnboarding] = useState(false)
   const [oauthProfile, setOauthProfile] = useState(null)
   const [authError, setAuthError] = useState(null)
+  const [emailConfirmationPending, setEmailConfirmationPending] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('maintain-ai-email-confirmation-pending') || 'null') } catch { return null }
+  })
 
   const syncSupabase = async (metadata = {}) => {
     if (!supabaseAuth.enabled) return null
@@ -53,7 +56,11 @@ export function AuthProvider({ children }) {
           if (current?.access_token) {
             setToken(current.access_token)
             const synced = await syncSupabase(current.user?.user_metadata || {})
-            if (!synced?.needs_onboarding) await loadMe()
+            if (!synced?.needs_onboarding) {
+              await loadMe()
+              localStorage.removeItem('maintain-ai-email-confirmation-pending')
+              setEmailConfirmationPending(null)
+            }
           }
         } else if (status.auth_required && getToken()) {
           await loadMe()
@@ -111,15 +118,46 @@ export function AuthProvider({ children }) {
     setAuthError(null)
     if (supabaseAuth.enabled) {
       const s = await supabaseAuth.signUp(email, password, { full_name, username, organization_name })
-      if (!s?.access_token) throw new Error('Account created. Check your email to confirm the account, then sign in.')
+      if (!s?.access_token) {
+        const pending = { email, createdAt: Date.now() }
+        localStorage.setItem('maintain-ai-email-confirmation-pending', JSON.stringify(pending))
+        setEmailConfirmationPending(pending)
+        return { pending_confirmation: true, email }
+      }
       setToken(s.access_token)
-      await syncSupabase({ organization_name, username, full_name })
-      await loadMe()
+      const synced = await syncSupabase({ organization_name, username, full_name })
+      if (!synced?.needs_onboarding) await loadMe()
       return
     }
     const r = await api.post('/api/auth/register', { organization_name, username, email, password, full_name })
     setToken(r.access_token)
     await loadMe()
+  }
+
+  const resendEmailConfirmation = async () => {
+    if (!emailConfirmationPending?.email) return
+    await supabaseAuth.resendSignupConfirmation(emailConfirmationPending.email)
+  }
+
+  const checkEmailConfirmation = async () => {
+    const current = await supabaseAuth.getSession()
+    if (!current?.access_token) return false
+    setToken(current.access_token)
+    const synced = await syncSupabase(current.user?.user_metadata || {})
+    if (synced?.needs_onboarding) {
+      setNeedsOnboarding(true)
+      setOauthProfile(synced)
+      return false
+    }
+    await loadMe()
+    localStorage.removeItem('maintain-ai-email-confirmation-pending')
+    setEmailConfirmationPending(null)
+    return true
+  }
+
+  const cancelEmailConfirmation = () => {
+    localStorage.removeItem('maintain-ai-email-confirmation-pending')
+    setEmailConfirmationPending(null)
   }
 
   const completeOnboarding = async (organization_name, username, full_name) => {
@@ -141,6 +179,6 @@ export function AuthProvider({ children }) {
   }
 
   const needsLogin = authRequired === true && !user
-  return <AuthContext.Provider value={{ authRequired, user, checking, needsLogin, needsOnboarding, oauthProfile, authError, login, register, completeOnboarding, logout }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ authRequired, user, checking, needsLogin, needsOnboarding, oauthProfile, authError, emailConfirmationPending, login, register, resendEmailConfirmation, checkEmailConfirmation, cancelEmailConfirmation, completeOnboarding, logout }}>{children}</AuthContext.Provider>
 }
 export function useAuth() { return useContext(AuthContext) }
