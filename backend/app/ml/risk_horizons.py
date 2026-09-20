@@ -15,14 +15,17 @@ HORIZONS = {
 }
 
 
-def risk_readiness(db):
+def risk_readiness(db, machine_ids=None):
     result = {}
     for name, seconds in HORIZONS.items():
         q = db.query(
             func.count(models.MLTrainingLabel.id),
             func.sum(func.cast(models.MLTrainingLabel.fault_within_horizon, db.bind.dialect.name == "postgresql" if False else None))
         )
-        rows = db.query(models.MLTrainingLabel).filter_by(horizon_seconds=seconds).all()
+        query = db.query(models.MLTrainingLabel).filter_by(horizon_seconds=seconds)
+        if machine_ids is not None:
+            query = query.filter(models.MLTrainingLabel.machine_id.in_(machine_ids))
+        rows = query.all()
         complete = len(rows)
         positives = sum(1 for row in rows if row.fault_within_horizon or row.breakdown_work_order_within_horizon)
         result[name] = {
@@ -40,9 +43,12 @@ def risk_readiness(db):
     }
 
 
-def fleet_intelligence(db):
+def fleet_intelligence(db, machine_ids=None):
     from .degradation import build_snapshot
-    machines = db.query(models.Machine).filter_by(archived=False).order_by(models.Machine.id.asc()).all()
+    query = db.query(models.Machine).filter_by(archived=False)
+    if machine_ids is not None:
+        query = query.filter(models.Machine.id.in_(machine_ids))
+    machines = query.order_by(models.Machine.id.asc()).all()
     fleet = []
     for machine in machines:
         snapshot = build_snapshot(db, machine.id)
