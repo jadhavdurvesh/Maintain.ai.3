@@ -142,6 +142,13 @@ def invite_member(
     if pending:
         raise HTTPException(409, "an invitation is already pending for this email")
 
+    username_base = (payload.username or email.split("@")[0])[:40].strip() or "user"
+    username = username_base
+    suffix = 2
+    while db.query(models.User).filter(models.User.username == username).first():
+        username = f"{username_base}{suffix}"
+        suffix += 1
+
     try:
         invited = invite_user_by_email(
             email,
@@ -152,12 +159,6 @@ def invite_member(
         raise HTTPException(502, str(exc))
 
     supabase_id = str(invited.get("id") or "")
-    username_base = (payload.username or email.split("@")[0])[:40].strip() or "user"
-    username = username_base
-    suffix = 2
-    while db.query(models.User).filter(models.User.username == username).first():
-        username = f"{username_base}{suffix}"
-        suffix += 1
 
     if existing_local:
         user = existing_local
