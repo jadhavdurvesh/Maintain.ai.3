@@ -49,7 +49,7 @@ export default function Login() {
 
   const signInProvider = async (provider) => {
     setError(null); setOauthBusy(provider)
-    try { await supabaseAuth.signInWithProvider(provider) }
+    try { await supabaseAuth.signInWithProvider(provider, mode === 'register') }
     catch (err) { setOauthBusy(null); setError(err.message || 'Could not start provider authentication.') }
   }
 
