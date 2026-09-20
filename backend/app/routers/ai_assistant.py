@@ -81,15 +81,15 @@ def _machine_context(db: Session, machine: models.Machine | None) -> dict | None
     }
 
 
-def _get_or_create_conversation(db: Session, conversation_id: str | None, machine_id: int | None, title: str | None = None) -> models.AIConversation:
+def _get_or_create_conversation(db: Session, conversation_id: str | None, machine_id: int | None, title: str | None = None, organization_id: int | None = None) -> models.AIConversation:
     conversation = None
     if conversation_id:
-        conversation = db.query(models.AIConversation).filter_by(conversation_key=conversation_id).first()
+        conversation = db.query(models.AIConversation).filter_by(conversation_key=conversation_id, organization_id=organization_id).first()
         if conversation and conversation.machine_id != machine_id:
             raise HTTPException(400, "conversation belongs to a different machine")
     if conversation is None:
         conversation = models.AIConversation(
-            conversation_key=conversation_id or str(uuid4()), machine_id=machine_id,
+            conversation_key=conversation_id or str(uuid4()), organization_id=current.organization_id, machine_id=machine_id,
             title=(title or "Maintenance diagnosis")[:200],
         )
         db.add(conversation)
@@ -134,7 +134,7 @@ def diagnose(payload: schemas.DiagnoseRequest, current: CurrentUser = Depends(ge
             if not assigned:
                 raise HTTPException(404, "machine not assigned to this worker")
     machine_category = machine.category if machine else None
-    conversation = _get_or_create_conversation(db, payload.conversation_id, payload.machine_id, payload.problem_description)
+    conversation = _get_or_create_conversation(db, payload.conversation_id, payload.machine_id, payload.problem_description, current.organization_id)
     history = _conversation_history(db, conversation)
 
     user_text = payload.user_message or (
@@ -160,6 +160,7 @@ def diagnose(payload: schemas.DiagnoseRequest, current: CurrentUser = Depends(ge
         )
 
     session = models.AIDiagnosticSession(
+        organization_id=current.organization_id,
         conversation_id=conversation.id,
         machine_id=payload.machine_id,
         problem_description=payload.problem_description,
@@ -214,7 +215,7 @@ def record_outcome(session_id: int, final_technician_result: str, current: Curre
 @router.get("/sessions")
 def list_sessions(machine_id: int | None = None, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     visible_ids = [m.id for m in db.query(models.Machine.id).filter(models.Machine.organization_id == current.organization_id, models.Machine.archived.is_(False)).all()]
-    q = db.query(models.AIDiagnosticSession).filter(models.AIDiagnosticSession.machine_id.in_(visible_ids))
+    q = db.query(models.AIDiagnosticSession).filter(models.AIDiagnosticSession.organization_id == current.organization_id)
     if machine_id:
         q = q.filter_by(machine_id=machine_id)
     sessions = q.order_by(models.AIDiagnosticSession.created_at.desc()).all()
@@ -231,7 +232,7 @@ def list_sessions(machine_id: int | None = None, current: CurrentUser = Depends(
 @router.get("/conversations")
 def list_conversations(machine_id: int | None = None, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     visible_ids = [m.id for m in db.query(models.Machine.id).filter(models.Machine.organization_id == current.organization_id, models.Machine.archived.is_(False)).all()]
-    q = db.query(models.AIConversation).filter(models.AIConversation.machine_id.in_(visible_ids))
+    q = db.query(models.AIConversation).filter(models.AIConversation.organization_id == current.organization_id)
     if machine_id:
         q = q.filter_by(machine_id=machine_id)
     conversations = q.order_by(models.AIConversation.updated_at.desc()).all()
