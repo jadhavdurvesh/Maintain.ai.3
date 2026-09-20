@@ -23,6 +23,7 @@ def _initialize_database():
         ensure_user_auth_schema()
         ensure_user_work_order_schema()
         ensure_lab_ml_schema()
+        ensure_tenant_schema()
         ensure_bootstrap_organization()
     except Exception:
         pass
@@ -73,6 +74,30 @@ def ensure_lab_ml_schema():
     except Exception:
         pass
 
+
+
+def ensure_tenant_schema():
+    """Add tenant ownership to legacy shared tables without destroying existing data.
+    Existing rows are assigned to the bootstrap organization; new rows are scoped
+    explicitly by the authenticated organization.
+    """
+    inspector = inspect(engine)
+    additions = []
+    if inspector.has_table("spare_parts"):
+        columns = {column["name"] for column in inspector.get_columns("spare_parts")}
+        if "organization_id" not in columns:
+            additions.append(("spare_parts", "organization_id", "INTEGER"))
+    if inspector.has_table("audit_log"):
+        columns = {column["name"] for column in inspector.get_columns("audit_log")}
+        if "organization_id" not in columns:
+            additions.append(("audit_log", "organization_id", "INTEGER"))
+    if not additions:
+        return
+    with engine.begin() as connection:
+        for table, column, sql_type in additions:
+            connection.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {sql_type}"))
+            connection.execute(text(f"UPDATE {table} SET {column} = 1 WHERE {column} IS NULL"))
+    Base.metadata.create_all(bind=engine)
 
 _initialize_database()
 
