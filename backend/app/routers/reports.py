@@ -163,9 +163,11 @@ def _csv_bytes(headers, rows):
 
 
 def _machine_map(db, current: CurrentUser | None = None):
-    query = db.query(models.Machine)
+    query = db.query(models.Machine).filter(models.Machine.archived.is_(False))
     if current is not None:
         query = query.filter(models.Machine.organization_id == current.organization_id)
+        if current.id is not None and current.role == models.UserRole.technician.value:
+            query = query.join(models.UserMachineAssignment, models.UserMachineAssignment.machine_id == models.Machine.id).filter(models.UserMachineAssignment.user_id == current.id)
     return {m.id: m for m in query.all()}
 
 
@@ -176,42 +178,42 @@ def _export_dataset(db, dataset, current=None):
             [m.id,m.machine_code,m.name,m.category,m.manufacturer,m.model_number,m.location,m.department,m.operating_hours,m.health_score,_enum_value(m.status),_enum_value(m.criticality),m.iot_enabled,m.archived] for m in machines.values()
         ]
     if dataset == "workorders":
-        rows=db.query(models.WorkOrder).all()
+        rows=db.query(models.WorkOrder).filter(models.WorkOrder.machine_id.in_(machines.keys())).all()
         return ["id","machine_id","machine_code","machine_name","fault_id","problem","priority","status","recommended_actions","assigned_to","created_at","completed_at","resolution_notes"], [
             [w.id,w.machine_id,machines.get(w.machine_id).machine_code if w.machine_id in machines else "",machines.get(w.machine_id).name if w.machine_id in machines else "",w.fault_id,w.problem,_enum_value(w.priority),_enum_value(w.status),w.recommended_actions,w.assigned_to,w.created_at,w.completed_at,w.resolution_notes] for w in rows
         ]
     if dataset == "maintenance":
-        rows=db.query(models.MaintenanceRecord).all()
+        rows=db.query(models.MaintenanceRecord).filter(models.MaintenanceRecord.machine_id.in_(machines.keys())).all()
         return ["id","machine_id","machine_code","machine_name","type","description","scheduled_date","completed_date","status","performed_by","notes"], [
             [r.id,r.machine_id,machines.get(r.machine_id).machine_code if r.machine_id in machines else "",machines.get(r.machine_id).name if r.machine_id in machines else "",_enum_value(r.type),r.description,r.scheduled_date,r.completed_date,_enum_value(r.status),r.performed_by,r.notes] for r in rows
         ]
     if dataset == "faults":
-        rows=db.query(models.FaultRecord).all()
+        rows=db.query(models.FaultRecord).filter(models.FaultRecord.machine_id.in_(machines.keys())).all()
         return ["id","machine_id","machine_code","machine_name","description","symptoms","cause","resolution","severity","reported_date","resolved_date"], [
             [f.id,f.machine_id,machines.get(f.machine_id).machine_code if f.machine_id in machines else "",machines.get(f.machine_id).name if f.machine_id in machines else "",f.description,f.symptoms,f.cause,f.resolution,_enum_value(f.severity),f.reported_date,f.resolved_date] for f in rows
         ]
     if dataset == "alerts":
-        rows=db.query(models.Alert).all()
+        rows=db.query(models.Alert).filter(models.Alert.machine_id.in_(machines.keys())).all()
         return ["id","machine_id","machine_code","machine_name","alert_type","severity","message","created_at","acknowledged","resolved"], [
             [a.id,a.machine_id,machines.get(a.machine_id).machine_code if a.machine_id in machines else "",machines.get(a.machine_id).name if a.machine_id in machines else "",a.alert_type,_enum_value(a.severity),a.message,a.created_at,a.acknowledged,a.resolved] for a in rows
         ]
     if dataset == "sensor_readings":
-        rows=db.query(models.SensorReading).order_by(models.SensorReading.recorded_at.asc(),models.SensorReading.id.asc()).all()
+        rows=db.query(models.SensorReading).filter(models.SensorReading.machine_id.in_(machines.keys())).order_by(models.SensorReading.recorded_at.asc(),models.SensorReading.id.asc()).all()
         return ["id","machine_id","machine_code","machine_name","reading_type","value","unit","source","recorded_at"], [
             [s.id,s.machine_id,machines.get(s.machine_id).machine_code if s.machine_id in machines else "",machines.get(s.machine_id).name if s.machine_id in machines else "",s.reading_type,s.value,s.unit,s.source,s.recorded_at] for s in rows
         ]
     if dataset == "components":
-        rows=db.query(models.Component).all()
+        rows=db.query(models.Component).filter(models.Component.machine_id.in_(machines.keys())).all()
         return ["id","machine_id","machine_code","machine_name","name","description"], [
             [x.id,x.machine_id,machines.get(x.machine_id).machine_code if x.machine_id in machines else "",machines.get(x.machine_id).name if x.machine_id in machines else "",x.name,x.description] for x in rows
         ]
     if dataset == "safety":
-        rows=db.query(models.MachineSafetyPolicy).all()
+        rows=db.query(models.MachineSafetyPolicy).filter(models.MachineSafetyPolicy.machine_id.in_(machines.keys())).all()
         return ["id","machine_id","machine_code","machine_name","enabled","monitored_reading_type","unit","warning_low","warning_high","shutdown_low","shutdown_high","auto_shutdown_enabled","updated_at","last_trip_at","last_trip_value","last_trip_reason"], [
             [p.id,p.machine_id,machines.get(p.machine_id).machine_code if p.machine_id in machines else "",machines.get(p.machine_id).name if p.machine_id in machines else "",p.enabled,p.monitored_reading_type,p.unit,p.warning_low,p.warning_high,p.shutdown_low,p.shutdown_high,p.auto_shutdown_enabled,p.updated_at,p.last_trip_at,p.last_trip_value,p.last_trip_reason] for p in rows
         ]
     if dataset == "safety_events":
-        rows=db.query(models.MachineSafetyEvent).order_by(models.MachineSafetyEvent.created_at.asc()).all()
+        rows=db.query(models.MachineSafetyEvent).filter(models.MachineSafetyEvent.machine_id.in_(machines.keys())).order_by(models.MachineSafetyEvent.created_at.asc()).all()
         return ["id","machine_id","machine_code","machine_name","event_type","reading_type","value","threshold","message","shutdown_requested","device_acknowledged","created_at"], [
             [e.id,e.machine_id,machines.get(e.machine_id).machine_code if e.machine_id in machines else "",machines.get(e.machine_id).name if e.machine_id in machines else "",e.event_type,e.reading_type,e.value,e.threshold,e.message,e.shutdown_requested,e.device_acknowledged,e.created_at] for e in rows
         ]
@@ -221,7 +223,7 @@ def _export_dataset(db, dataset, current=None):
             [x.id,x.name,x.part_number,x.description,x.quantity,x.minimum_stock,x.unit_cost] for x in rows
         ]
     if dataset == "notifications":
-        rows=db.query(models.InAppNotification).all()
+        rows=db.query(models.InAppNotification).join(models.User).filter(models.User.organization_id == current.organization_id).all()
         return ["id","user_id","title","message","type","created_at","read"], [
             [x.id,x.user_id,x.title,x.message,x.type,x.created_at,x.read] for x in rows
         ]
