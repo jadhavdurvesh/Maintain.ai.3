@@ -286,12 +286,10 @@ def sync_supabase_user(
         if not user and email:
             user = db.query(models.User).filter_by(email=email).first()
 
-        if payload.registration_mode and user:
-            raise HTTPException(
-                status_code=409,
-                detail="An account with this Google/Apple identity already exists. Use Sign in instead.",
-            )
-
+        # OAuth is intentionally identity-driven rather than button-driven:
+        # an existing identity signs in, while a new identity is sent to the
+        # organization/username onboarding step. This keeps Google/Apple
+        # behavior identical from either auth tab.
         if not user and (not payload.organization_name or not payload.username):
             return {
                 "needs_onboarding": True,
