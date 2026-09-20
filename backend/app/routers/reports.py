@@ -18,9 +18,22 @@ from ..exports.excel_report import build_excel_report
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
 
+def _visible_machines(db: Session, current: CurrentUser):
+    query = db.query(models.Machine).filter(
+        models.Machine.archived.is_(False),
+        models.Machine.organization_id == current.organization_id,
+    )
+    if current.id is not None and current.role == models.UserRole.technician.value:
+        query = query.join(
+            models.UserMachineAssignment,
+            models.UserMachineAssignment.machine_id == models.Machine.id,
+        ).filter(models.UserMachineAssignment.user_id == current.id)
+    return query.all()
+
+
 @router.get("/dashboard", response_model=schemas.DashboardSummary)
 def dashboard_summary(current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
-    machines = db.query(models.Machine).filter_by(archived=False, organization_id=current.organization_id).all()
+    machines = _visible_machines(db, current)
     machine_ids = [m.id for m in machines]
     return schemas.DashboardSummary(
         total_machines=len(machines),
@@ -61,7 +74,7 @@ def reliability_report(current: CurrentUser = Depends(get_current_user), db: Ses
 
 @router.get("/failure-analysis")
 def failure_analysis(current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
-    faults = db.query(models.FaultRecord).join(models.Machine).filter(models.Machine.organization_id == current.organization_id).all()
+    faults = db.query(models.FaultRecord).join(models.Machine).filter(models.Machine.id.in_([m.id for m in _visible_machines(db, current)])).all()
     cause_counts = Counter((f.cause or "unspecified") for f in faults)
     return {
         "total_faults": len(faults),
@@ -96,11 +109,12 @@ def recent_faults(limit: int = 6, current: CurrentUser = Depends(get_current_use
 def recent_activity(limit: int = 6, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     """Recently completed work orders and maintenance — the spec's
     'Recent Technician Activities' dashboard section."""
-    machines = {m.id: m for m in db.query(models.Machine).all()}
+    visible_ids = [m.id for m in _visible_machines(db, current)]
+    machines = {m.id: m for m in _visible_machines(db, current)}
     events = []
 
     completed_wos = (
-        db.query(models.WorkOrder).join(models.Machine).filter(models.Machine.organization_id == current.organization_id, models.WorkOrder.status == models.WorkOrderStatus.completed)
+        db.query(models.WorkOrder).join(models.Machine).filter(models.Machine.id.in_(visible_ids), models.WorkOrder.status == models.WorkOrderStatus.completed)
         .order_by(models.WorkOrder.completed_at.desc())
         .limit(limit)
         .all()
@@ -115,7 +129,7 @@ def recent_activity(limit: int = 6, current: CurrentUser = Depends(get_current_u
         })
 
     completed_maint = (
-        db.query(models.MaintenanceRecord).join(models.Machine).filter(models.Machine.organization_id == current.organization_id, models.MaintenanceRecord.status == models.MaintenanceStatus.completed)
+        db.query(models.MaintenanceRecord).join(models.Machine).filter(models.MaintenanceRecord.machine_id.in_(visible_ids), models.MaintenanceRecord.status == models.MaintenanceStatus.completed)
         .order_by(models.MaintenanceRecord.completed_date.desc())
         .limit(limit)
         .all()
