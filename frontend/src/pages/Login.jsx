@@ -5,14 +5,36 @@ import { supabaseAuth } from '../supabaseAuth.js'
 const initial = { organization_name: '', username: '', full_name: '', email: '', password: '' }
 
 export default function Login() {
-  const { login, register, needsOnboarding, oauthProfile, completeOnboarding, authError } = useAuth()
+  const { login, register, needsOnboarding, oauthProfile, completeOnboarding, authError, emailConfirmationPending, resendEmailConfirmation, checkEmailConfirmation, cancelEmailConfirmation } = useAuth()
   const [mode, setMode] = useState('login')
   const [form, setForm] = useState(initial)
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
   const [oauthBusy, setOauthBusy] = useState(null)
+  const [confirmationBusy, setConfirmationBusy] = useState(false)
+  const [confirmationMessage, setConfirmationMessage] = useState(null)
   const [onboarding, setOnboarding] = useState({ organization_name: '', username: '', full_name: '' })
   const displayedError = error || authError
+
+  const handleResendConfirmation = async () => {
+    setConfirmationBusy(true); setConfirmationMessage(null); setError(null)
+    try {
+      await resendEmailConfirmation()
+      setConfirmationMessage('A fresh verification email has been sent.')
+    } catch (err) {
+      setError(err.message || 'Could not resend the verification email.')
+    } finally { setConfirmationBusy(false) }
+  }
+
+  const handleCheckConfirmation = async () => {
+    setConfirmationBusy(true); setConfirmationMessage(null); setError(null)
+    try {
+      const complete = await checkEmailConfirmation()
+      if (!complete) setConfirmationMessage('Not verified yet. Open the latest email and click the verification button.')
+    } catch (err) {
+      setError(err.message || 'We could not complete verification yet.')
+    } finally { setConfirmationBusy(false) }
+  }
 
   useEffect(() => {
     if (needsOnboarding && oauthProfile) {
@@ -57,6 +79,52 @@ export default function Login() {
     setError(null)
     setOauthBusy(null)
     setMode(nextMode)
+  }
+
+  if (emailConfirmationPending && !needsOnboarding) {
+    return (
+      <main className="auth-screen">
+        <div className="auth-background"><div className="auth-grid" /><div className="auth-glow auth-glow-one" /><div className="auth-glow auth-glow-two" /></div>
+        <section className="auth-layout auth-onboarding-layout">
+          <div className="auth-brand-column">
+            <div className="auth-brand"><span className="auth-brand-mark">M</span><div><div className="auth-brand-name">MAINTAIN AI</div><div className="auth-brand-caption">ENGINEERING INTELLIGENCE PLATFORM</div></div></div>
+            <div className="auth-copy">
+              <div className="auth-eyebrow">VERIFICATION IN PROGRESS</div>
+              <h1>Your workspace is waiting for you.</h1>
+              <p>We created your Maintain AI account. Confirm your email and we'll finish signing you in automatically — no need to enter your password again.</p>
+            </div>
+            <div className="auth-points">
+              <div><span>01</span><div><strong>Check your inbox</strong><small>Look for the Maintain AI verification email.</small></div></div>
+              <div><span>02</span><div><strong>Verify once</strong><small>Click the secure verification button in the email.</small></div></div>
+              <div><span>03</span><div><strong>Continue automatically</strong><small>Your verified session will take you into Maintain AI.</small></div></div>
+            </div>
+          </div>
+          <div className="auth-card auth-confirmation-card">
+            <div className="auth-confirmation-icon">✉</div>
+            <div className="auth-card-kicker">CHECK YOUR INBOX</div>
+            <h2>Verify your email</h2>
+            <p className="auth-onboarding-sub">We sent a verification link to</p>
+            <div className="auth-confirmation-email">{emailConfirmationPending.email}</div>
+            <div className="auth-confirmation-progress">
+              <span className="auth-confirmation-dot active"></span><span className="auth-confirmation-line"></span>
+              <span className="auth-confirmation-dot"></span><span className="auth-confirmation-line"></span>
+              <span className="auth-confirmation-dot"></span>
+            </div>
+            <div className="auth-confirmation-steps"><span>Email sent</span><span>Verify</span><span>You're in</span></div>
+            {confirmationMessage && <div className="auth-confirmation-message">{confirmationMessage}</div>}
+            {displayedError && <div className="auth-error"><span>!</span><div><strong>Verification issue</strong><p>{displayedError}</p></div></div>}
+            <button className="auth-submit" type="button" disabled={confirmationBusy} onClick={handleCheckConfirmation}>
+              <span>{confirmationBusy ? 'Checking verification…' : "I've verified my email"}</span><span className="auth-arrow">→</span>
+            </button>
+            <button className="auth-secondary-action" type="button" disabled={confirmationBusy} onClick={handleResendConfirmation}>
+              {confirmationBusy ? 'Working…' : 'Resend verification email'}
+            </button>
+            <div className="auth-footer"><span>Wrong email?</span><button type="button" onClick={cancelEmailConfirmation}>Start again</button></div>
+            <div className="auth-security"><span>●</span><span>For your security, your account is activated only after email verification.</span></div>
+          </div>
+        </section>
+      </main>
+    )
   }
 
   if (needsOnboarding) {
@@ -122,11 +190,11 @@ export default function Login() {
               <span className="provider-google" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="17" height="17"><path fill="#4285F4" d="M21.35 12.27c0-.79-.07-1.55-.22-2.27H12v4.3h5.23a4.48 4.48 0 0 1-1.94 2.94v2.45h3.14c1.84-1.69 2.92-4.18 2.92-7.42z"/><path fill="#34A853" d="M12 21.92c2.63 0 4.84-.87 6.45-2.23l-3.14-2.45c-.87.58-1.98.93-3.31.93-2.54 0-4.69-1.72-5.46-4.03H3.3v2.53A9.74 9.74 0 0 0 12 21.92z"/><path fill="#FBBC05" d="M6.54 14.14A5.86 5.86 0 0 1 6.23 12c0-.74.13-1.46.31-2.14V7.33H3.3A9.74 9.74 0 0 0 2.26 12c0 1.57.38 3.05 1.04 4.67l3.24-2.53z"/><path fill="#EA4335" d="M12 5.83c1.43 0 2.71.49 3.72 1.45l2.78-2.78C16.84 2.87 14.63 2 12 2a9.74 9.74 0 0 0-8.7 5.33l3.24 2.53C7.31 7.55 9.46 5.83 12 5.83z"/></svg>
               </span>
-              {oauthBusy === 'google' ? 'Connecting…' : mode === 'register' ? 'Register with Google' : 'Continue with Google'}
+              {oauthBusy === 'google' ? 'Connecting…' : 'Continue with Google'}
             </button>
             <button type="button" disabled={oauthBusy !== null} onClick={() => signInProvider('apple')}>
               <span className="provider-apple" aria-hidden="true"></span>
-              {oauthBusy === 'apple' ? 'Connecting…' : mode === 'register' ? 'Register with Apple' : 'Continue with Apple'}
+              {oauthBusy === 'apple' ? 'Connecting…' : 'Continue with Apple'}
             </button>
           </div>
           <div className="auth-divider"><span>{mode === 'register' ? 'or register with email' : 'or continue with email'}</span></div>
