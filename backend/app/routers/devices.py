@@ -287,50 +287,92 @@ async def _publish_reading(machine, reading, behaviour, safety=None, degradation
         "safety": safety,
         "degradation": degradation,
     }
-    await telemetry_stream.broadcast(event)
+    await telemetry_stream.broadcast({**event, "organization_id": machine.organization_id})
     await supabase_broadcast("org:" + str(machine.organization_id) + ":telemetry", "telemetry", event)
 
 
 @router.websocket("/stream")
 async def telemetry_stream_websocket(websocket: WebSocket):
-    """Live dashboard stream; JWT is supplied as ?token= for browser WebSockets."""
+    """Authorized live telemetry stream for web/mobile clients."""
+    from ..supabase_auth import verify_access_token
     from ..auth import decode_access_token
     from ..bootstrap import BOOTSTRAP_ORG_ID
-    from ..deps import auth_required
+
     token = websocket.query_params.get("token")
+    application = (websocket.query_params.get("application") or "engineering").strip().lower()
+    if application not in {"engineering", "android", "workforce"}:
+        await websocket.close(code=1008, reason="invalid application context")
+        return
+
     db = SessionLocal()
+    organization_id = None
+    user_id = None
     try:
         if token:
-            payload = decode_access_token(token)
-            if not payload:
-                await websocket.close(code=1008, reason="invalid or expired token"); return
+            claims = verify_access_token(token)
+            if not claims:
+                claims = decode_access_token(token)
+            if not claims:
+                await websocket.close(code=1008, reason="invalid or expired token")
+                return
+
+            sid = claims.get("sub")
             try:
-                user_id, organization_id = int(payload["sub"]), int(payload["org"])
-            except (KeyError, TypeError, ValueError):
-                await websocket.close(code=1008, reason="invalid authentication token"); return
-            user = db.get(models.User, user_id)
-            if not user or not user.active or user.organization_id != organization_id:
-                await websocket.close(code=1008, reason="unauthorized"); return
-        elif auth_required():
-            await websocket.close(code=1008, reason="authentication required"); return
+                supabase_id = str(sid)
+                user = db.query(models.User).filter_by(supabase_user_id=supabase_id).first()
+                if not user and claims.get("email"):
+                    user = db.query(models.User).filter_by(email=claims.get("email")).first()
+                if user:
+                    access = db.query(models.UserApplicationAccess).filter(
+                        models.UserApplicationAccess.user_id == user.id,
+                        models.UserApplicationAccess.application == application,
+                        models.UserApplicationAccess.enabled.is_(True),
+                    ).first()
+                    if not access:
+                        await websocket.close(code=1008, reason="application access denied")
+                        return
+                    organization_id = user.organization_id
+                    user_id = user.id
+                else:
+                    payload = decode_access_token(token)
+                    user_id = int(payload["sub"])
+                    organization_id = int(payload["org"])
+                    user = db.get(models.User, user_id)
+                    if not user or not user.active or user.organization_id != organization_id:
+                        raise ValueError("unauthorized")
+            except Exception:
+                await websocket.close(code=1008, reason="unauthorized")
+                return
         else:
+            from ..deps import auth_required
+            if auth_required():
+                await websocket.close(code=1008, reason="authentication required")
+                return
             organization_id = BOOTSTRAP_ORG_ID
+
+        await websocket.accept()
+        await websocket.send_json({
+            "type": "stream_connected",
+            "protocol": "maintain-ai",
+            "version": 2,
+            "organization_id": organization_id,
+            "application": application,
+        })
+
+        # This stream is organization-filtered at publication time and
+        # additionally rejects arbitrary client-side machine subscriptions.
         await telemetry_stream.connect(websocket)
-        await websocket.send_json({"type":"stream_connected","protocol":"maintain-ai","version":1,"organization_id":organization_id})
         while True:
             message = await websocket.receive_json()
             if message.get("type") == "ping":
-                await websocket.send_json({"type":"pong"})
+                await websocket.send_json({"type": "pong"})
             else:
-                await websocket.send_json({"type":"error","message":"unsupported message type"})
+                await websocket.send_json({"type": "error", "message": "unsupported message type"})
     except WebSocketDisconnect:
         pass
     finally:
-        if 'machine' in locals() and machine and _device_command_clients.get(machine.id) is websocket:
-            _device_command_clients.pop(machine.id, None)
         telemetry_stream.disconnect(websocket)
         db.close()
-
 
 @router.get("/{machine_id}/status", response_model=DeviceStatusOut)
 def device_status(machine_id: int, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
