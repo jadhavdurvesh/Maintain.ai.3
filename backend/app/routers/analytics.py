@@ -12,8 +12,24 @@ from ..ml.degradation import get_timeline
 from ..ml.intelligence import process_telemetry
 from ..ml.risk_horizons import risk_readiness, fleet_intelligence
 from .. import models
+from ..deps import get_current_user, CurrentUser
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
+
+def _visible_machine_ids(db: Session, current: CurrentUser):
+    q = db.query(models.Machine.id).filter(models.Machine.organization_id == current.organization_id, models.Machine.archived.is_(False))
+    if current.id is not None and current.role == models.UserRole.technician.value:
+        q = q.join(models.UserMachineAssignment, models.UserMachineAssignment.machine_id == models.Machine.id).filter(models.UserMachineAssignment.user_id == current.id)
+    return [row[0] for row in q.all()]
+
+def _scoped_machine(db: Session, machine_id: int, current: CurrentUser):
+    machine = db.query(models.Machine).filter(models.Machine.id == machine_id, models.Machine.organization_id == current.organization_id, models.Machine.archived.is_(False)).first()
+    if not machine:
+        raise HTTPException(404, "machine not found")
+    if current.id is not None and current.role == models.UserRole.technician.value:
+        if not db.query(models.UserMachineAssignment).filter_by(user_id=current.id, machine_id=machine_id).first():
+            raise HTTPException(404, "machine not assigned to this worker")
+    return machine
 
 
 @router.get("/model-status")
@@ -46,15 +62,14 @@ def get_pretrained_model_status():
 
 
 @router.get("/machines/{machine_id}/pretrained-anomaly")
-def get_pretrained_anomaly(machine_id: int, db: Session = Depends(get_db)):
+def get_pretrained_anomaly(machine_id: int, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     """Run optional pretrained anomaly inference without training or calibration."""
-    if db.get(models.Machine, machine_id) is None:
-        raise HTTPException(404, "machine not found")
+    _scoped_machine(db, machine_id, current)
     return score_pretrained_machine(db, machine_id)
 
 
 @router.get("/machines/{machine_id}/intelligence")
-def get_machine_intelligence(machine_id: int, db: Session = Depends(get_db)):
+def get_machine_intelligence(machine_id: int, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     """Combine online behavioural evidence with optional pretrained anomaly evidence."""
     if db.get(models.Machine, machine_id) is None:
         raise HTTPException(404, "machine not found")
@@ -70,7 +85,7 @@ def get_machine_intelligence(machine_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/machines/{machine_id}/behaviour")
-def get_machine_behaviour(machine_id: int, db: Session = Depends(get_db)):
+def get_machine_behaviour(machine_id: int, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     """Return the Lab online learner's current behavioural evidence."""
     if db.get(models.Machine, machine_id) is None:
         raise HTTPException(404, "machine not found")
@@ -78,19 +93,14 @@ def get_machine_behaviour(machine_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/live-behaviour")
-def get_live_behaviour(db: Session = Depends(get_db)):
+def get_live_behaviour(current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     """Return online behavioural state for every active machine.
 
     This endpoint is intentionally lightweight and uses the same online model
     updated by every sensor reading, so the frontend can poll it for a live
     monitoring view without loading scikit-learn.
     """
-    machines = (
-        db.query(models.Machine)
-        .filter_by(archived=False)
-        .order_by(models.Machine.id.asc())
-        .all()
-    )
+    machines = db.query(models.Machine).filter(models.Machine.id.in_(_visible_machine_ids(db, current))).order_by(models.Machine.id.asc()).all()
     results = []
     for machine in machines:
         behaviour = score_machine(db, machine.id)
@@ -105,7 +115,7 @@ def get_live_behaviour(db: Session = Depends(get_db)):
 
 
 @router.get("/machines/{machine_id}/degradation")
-def get_machine_degradation(machine_id: int, limit: int = 48, db: Session = Depends(get_db)):
+def get_machine_degradation(machine_id: int, limit: int = 48, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     """Return the explainable online degradation timeline."""
     if db.get(models.Machine, machine_id) is None:
         raise HTTPException(404, "machine not found")
@@ -113,15 +123,15 @@ def get_machine_degradation(machine_id: int, limit: int = 48, db: Session = Depe
 
 
 @router.get("/fleet-intelligence")
-def get_fleet_intelligence(db: Session = Depends(get_db)):
+def get_fleet_intelligence(current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     """Return current degradation evidence for the active fleet."""
-    return fleet_intelligence(db)
+    return fleet_intelligence(db, _visible_machine_ids(db, current))
 
 
 @router.get("/risk-readiness")
-def get_risk_readiness(db: Session = Depends(get_db)):
+def get_risk_readiness(current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     """Return future-risk label readiness without exposing uncalibrated probabilities."""
-    return risk_readiness(db)
+    return risk_readiness(db, _visible_machine_ids(db, current))
 
 
 @router.get("/forecast-model-status")
@@ -130,10 +140,8 @@ def get_forecast_model_status():
 
 
 @router.get("/machines/{machine_id}/forecast")
-def get_machine_forecast(machine_id: int, reading_type: str = "temperature", model: str = "chronos2", horizon: int = 12, db: Session = Depends(get_db)):
-    machine = db.get(models.Machine, machine_id)
-    if not machine:
-        raise HTTPException(404, "machine not found")
+def get_machine_forecast(machine_id: int, reading_type: str = "temperature", model: str = "chronos2", horizon: int = 12, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    machine = _scoped_machine(db, machine_id, current)
     if horizon < 1 or horizon > 96:
         raise HTTPException(400, "horizon must be between 1 and 96")
     rows = (
@@ -149,35 +157,37 @@ def get_machine_forecast(machine_id: int, reading_type: str = "temperature", mod
     return {"machine_id": machine_id, "reading_type": reading_type, **chronos_forecast(values, horizon)}
 
 @router.get('/model-lab')
-def get_model_lab(db: Session = Depends(get_db)):
+def get_model_lab(current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     from datetime import datetime
-    machines = db.query(models.Machine).filter_by(archived=False).all()
-    reading_count = db.query(models.SensorReading).count()
+    ids = _visible_machine_ids(db, current)
+    machines = db.query(models.Machine).filter(models.Machine.id.in_(ids)).all()
+    reading_count = db.query(models.SensorReading).filter(models.SensorReading.machine_id.in_(visible_ids)).filter(models.SensorReading.machine_id.in_(ids)).count()
     machines_with_readings = sum(1 for m in machines if db.query(models.SensorReading.id).filter_by(machine_id=m.id).first())
-    return {'generated_at': datetime.utcnow().isoformat(), 'pretrained': pretrained_status(), 'forecasts': {'chronos_2': forecast_models_status(), 'timer': timer_status()}, 'fleet': fleet_intelligence(db), 'risk_readiness': risk_readiness(db), 'telemetry': {'reading_count': reading_count, 'machines_with_readings': machines_with_readings}}
+    return {'generated_at': datetime.utcnow().isoformat(), 'pretrained': pretrained_status(), 'forecasts': {'chronos_2': forecast_models_status(), 'timer': timer_status()}, 'fleet': fleet_intelligence(db, ids), 'risk_readiness': risk_readiness(db, ids), 'telemetry': {'reading_count': reading_count, 'machines_with_readings': machines_with_readings}}
 
 @router.get('/evidence-feed')
-def get_evidence_feed(limit: int = 80, db: Session = Depends(get_db)):
+def get_evidence_feed(limit: int = 80, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     limit = max(10, min(int(limit), 200))
     events = []
-    machines = {m.id: m.name for m in db.query(models.Machine).all()}
+    visible_ids = _visible_machine_ids(db, current)
+    machines = {m.id: m.name for m in db.query(models.Machine).filter(models.Machine.id.in_(visible_ids)).all()}
     def add(kind, ident, machine_id, timestamp, message):
         if timestamp is not None:
             events.append({'id': ident, 'type': kind, 'machine_id': machine_id, 'machine_name': machines.get(machine_id, 'Machine'), 'timestamp': timestamp.isoformat(), 'message': message})
     for r in db.query(models.SensorReading).order_by(models.SensorReading.recorded_at.desc(), models.SensorReading.id.desc()).limit(limit).all():
         add('telemetry', 'reading-' + str(r.id), r.machine_id, r.recorded_at, str(r.reading_type) + ': ' + str(r.value) + ' ' + str(r.unit or ''))
-    for e in db.query(models.MLAnomalyEvent).order_by(models.MLAnomalyEvent.created_at.desc()).limit(limit).all():
+    for e in db.query(models.MLAnomalyEvent).filter(models.MLAnomalyEvent.machine_id.in_(visible_ids)).order_by(models.MLAnomalyEvent.created_at.desc()).limit(limit).all():
         add('anomaly', 'anomaly-' + str(e.id), e.machine_id, e.created_at, e.message)
-    for d in db.query(models.MLDegradationSnapshot).order_by(models.MLDegradationSnapshot.recorded_at.desc()).limit(limit).all():
+    for d in db.query(models.MLDegradationSnapshot).filter(models.MLDegradationSnapshot.machine_id.in_(visible_ids)).order_by(models.MLDegradationSnapshot.recorded_at.desc()).limit(limit).all():
         add('degradation', 'degradation-' + str(d.id), d.machine_id, d.recorded_at, 'score ' + format(d.degradation_score, '.3f') + ', trend ' + format(d.trend_score, '.3f') + ', active signals ' + str(d.active_signal_count))
-    for f in db.query(models.FaultRecord).order_by(models.FaultRecord.reported_date.desc()).limit(limit).all():
+    for f in db.query(models.FaultRecord).filter(models.FaultRecord.machine_id.in_(visible_ids)).order_by(models.FaultRecord.reported_date.desc()).limit(limit).all():
         add('fault', 'fault-' + str(f.id), f.machine_id, f.reported_date, f.description + ((' · cause: ' + f.cause) if f.cause else ''))
-    for w in db.query(models.WorkOrder).order_by(models.WorkOrder.created_at.desc()).limit(limit).all():
+    for w in db.query(models.WorkOrder).filter(models.WorkOrder.machine_id.in_(visible_ids)).order_by(models.WorkOrder.created_at.desc()).limit(limit).all():
         status = w.status.value if hasattr(w.status, 'value') else w.status
         add('work_order', 'workorder-' + str(w.id), w.machine_id, w.created_at, str(status) + ': ' + w.problem)
-    for o in db.query(models.MLOutcomeFeedback).order_by(models.MLOutcomeFeedback.created_at.desc()).limit(limit).all():
+    for o in db.query(models.MLOutcomeFeedback).filter(models.MLOutcomeFeedback.machine_id.in_(visible_ids)).order_by(models.MLOutcomeFeedback.created_at.desc()).limit(limit).all():
         add('outcome', 'outcome-' + str(o.id), o.machine_id, o.created_at, o.outcome_type + ((' · ' + o.confirmed_root_cause) if o.confirmed_root_cause else ''))
-    for s in db.query(models.MachineSafetyEvent).order_by(models.MachineSafetyEvent.created_at.desc()).limit(limit).all():
+    for s in db.query(models.MachineSafetyEvent).filter(models.MachineSafetyEvent.machine_id.in_(visible_ids)).order_by(models.MachineSafetyEvent.created_at.desc()).limit(limit).all():
         add('safety', 'safety-' + str(s.id), s.machine_id, s.created_at, s.message)
     events.sort(key=lambda item: item['timestamp'], reverse=True)
     return {'events': events[:limit], 'count': min(len(events), limit), 'sources': ['sensor_readings', 'ml_anomaly_events', 'ml_degradation_snapshots', 'fault_records', 'work_orders', 'ml_outcome_feedback', 'machine_safety_events']}
