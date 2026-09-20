@@ -74,7 +74,7 @@ class UserRole(str, enum.Enum):
 class Machine(Base):
     __tablename__ = "machines"
     id = Column(Integer, primary_key=True, index=True)
-    machine_code = Column(String, unique=True, index=True, nullable=False)
+    machine_code = Column(String, index=True, nullable=False)
     name = Column(String, nullable=False)
     category = Column(String)
     manufacturer = Column(String)
