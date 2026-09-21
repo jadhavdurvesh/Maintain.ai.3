@@ -174,7 +174,7 @@ def get_model_lab(current: CurrentUser = Depends(get_current_user), db: Session 
     machines = db.query(models.Machine).filter(models.Machine.id.in_(ids)).all()
     reading_count = db.query(models.SensorReading).filter(models.SensorReading.machine_id.in_(ids)).count()
     machines_with_readings = sum(1 for m in machines if db.query(models.SensorReading.id).filter_by(machine_id=m.id).first())
-    return {'generated_at': datetime.utcnow().isoformat(), 'pretrained': pretrained_status(), 'forecasts': {'chronos_2': forecast_models_status(), 'timer': timer_status()}, 'fleet': fleet_intelligence(db, ids), 'risk_readiness': risk_readiness(db, ids), 'telemetry': {'reading_count': reading_count, 'machines_with_readings': machines_with_readings}}
+    return {'generated_at': datetime.utcnow().isoformat(), 'advanced_model': advanced_model.model_status(db, current.organization_id), 'pretrained': pretrained_status(), 'forecasts': {'chronos_2': forecast_models_status(), 'timer': timer_status()}, 'fleet': fleet_intelligence(db, ids), 'risk_readiness': risk_readiness(db, ids), 'telemetry': {'reading_count': reading_count, 'machines_with_readings': machines_with_readings}}
 
 @router.get('/evidence-feed')
 def get_evidence_feed(limit: int = 80, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
