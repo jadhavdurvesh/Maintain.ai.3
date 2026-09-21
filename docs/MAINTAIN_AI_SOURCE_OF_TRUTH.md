@@ -564,3 +564,40 @@ A feature is not complete until:
 - documentation is updated
 
 This is the source-of-truth contract for future Maintain.ai 3 work.
+
+
+## 18. Additional hardening findings
+
+### Notification tenant consistency
+Machine-to-worker notification fanout now verifies that the assigned user and machine belong to the same organization. This protects against malformed or legacy cross-tenant assignment rows.
+
+### Notification authentication
+Notification endpoints now use the application-aware current-user dependency so Supabase identities are supported consistently and application access remains enforced.
+
+### User directory privacy
+The organization member directory is administrator-only. A technician or viewer can inspect only their own assignment surface where the endpoint permits it.
+
+### AI key settings
+Reading Gemini key configuration status is administrator-only. The secret value itself remains organization-scoped in the settings store.
+
+### Work-order → maintenance linkage
+Completed work orders create a maintenance record with a unique `source_work_order_id`. This makes the side effect retry-safe and provides an explicit provenance link.
+
+### Frontend authorization UX
+Machine-detail write controls and safety-policy controls are hidden for non-admin users. Global maintenance scheduling remains admin-only, while maintenance completion remains available to administrators and technicians because the backend permits assigned technicians to complete their maintenance records.
+
+---
+
+## 19. Known limitations that must not be mistaken for completed work
+
+These are deliberately documented instead of being hidden behind optimistic UI:
+
+1. The advanced supervised model is **wired and tenant-scoped**, but an active production artifact still requires leakage-safe training data and validated training.
+2. The current temporal bootstrap representation is not a calibrated industrial failure model.
+3. The Random Forest baseline remains a health/baseline model.
+4. Startup schema repair remains compatibility-oriented rather than a full versioned migration system.
+5. CI regression coverage is now present, but the complete endpoint/realtime matrix still needs to be expanded to cover every router.
+6. Supabase Realtime authorization policies must remain synchronized with the server-issued tenant claims and organization topic conventions.
+7. Production deployment must set `REQUIRE_AUTH=true` and explicit `CORS_ORIGINS`.
+
+The correct behavior for an unavailable or unvalidated model is to expose its state as unavailable/not calibrated, not to fabricate a probability.
