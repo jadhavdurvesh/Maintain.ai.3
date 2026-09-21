@@ -104,7 +104,7 @@ export default function Maintenance() {
                 <tr key={r.id}>
                   <td>{r.description || r.type}</td>
                   <td><StatusBadge status={r.status === 'completed' ? 'healthy' : 'warning'} /></td>
-                  <td>{canAdmin && r.status !== 'completed' && <button className="btn secondary" onClick={() => complete(r.id)}>Mark done</button>}</td>
+                  <td>{canComplete && r.status !== 'completed' && <button className="btn secondary" onClick={() => complete(r.id)}>Mark done</button>}</td>
                 </tr>
               ))}
               {records.length === 0 && <tr><td colSpan={3} className="empty-state">Nothing scheduled yet.</td></tr>}
