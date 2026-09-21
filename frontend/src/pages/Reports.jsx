@@ -155,15 +155,12 @@ export default function Reports() {
 
       <div className="panel section-gap">
         <div className="panel-header">
-          <span className="panel-title">Predictive Model (local, on-device)</span>
+          <span className="panel-title">Batch Predictive Model</span>
           <span className="badge neutral">scikit-learn</span>
         </div>
         <div className="panel-body">
           <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 12 }}>
-            A small RandomForest model (a few tens of KB, no GPU, runs in milliseconds) trained
-            entirely on your own machines' accumulated operating hours, fault history, and
-            completed maintenance — not a cloud call, not an LLM. Retrain any time after adding
-            machines or logging more history; predictions get more meaningful as that history grows.
+            A small RandomForest model trained on your organization’s accumulated operating hours, fault history, maintenance, and sensor evidence. It is an optional batch model and is separate from the live online behavioural/anomaly pipeline.
           </p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
             {modelStatus?.trained ? (
@@ -171,7 +168,11 @@ export default function Reports() {
             ) : (
               <span className="badge neutral">Not trained yet</span>
             )}
-            <button className="btn" onClick={retrain} disabled={training}>{training ? 'Training…' : 'Retrain Model'}</button>
+            {modelStatus?.available !== false && (
+              <button className="btn" onClick={retrain} disabled={training}>
+                {training ? 'Training…' : 'Retrain Model'}
+              </button>
+            )}
           </div>
           {trainResult && !trainResult.trained && (
             <p style={{ color: 'var(--warning)', fontSize: 13 }}>{trainResult.reason}</p>
