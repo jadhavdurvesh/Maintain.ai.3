@@ -590,7 +590,8 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {isAdmin && (
+      {isAdmin && (<>
+
               <div className="panel section-gap">
                 <div className="panel-header"><span className="panel-title">Application Access</span><span className="badge neutral">{members?.length || 0} organization members</span></div>
                 <div className="panel-body">
@@ -613,9 +614,11 @@ export default function SettingsPage() {
               </div>
         
         
+      </>
       )}
 
-      {isAdmin && (
+      {isAdmin && (<>
+
               <div className="panel section-gap">
                 <div className="panel-header">
                   <span className="panel-title">
@@ -1086,6 +1089,7 @@ export default function SettingsPage() {
                   ? 'User roles and machine assignments are enforced by the backend.'
                   : 'Local mode is active — the local session has administrator privileges.'}
               </p>
+      </>
       )}
     </>
   )
