@@ -91,7 +91,7 @@ class Machine(Base):
     next_maintenance_date = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     archived = Column(Boolean, default=False)
-    organization_id = Column(Integer, ForeignKey("organizations.id"), default=1, nullable=False)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
     iot_enabled = Column(Boolean, default=False)
     device_key = Column(String, unique=True, index=True, nullable=True)
     components = relationship("Component", back_populates="machine", cascade="all, delete-orphan")

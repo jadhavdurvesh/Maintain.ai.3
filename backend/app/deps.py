@@ -14,7 +14,7 @@ from .supabase_auth import enabled as supabase_auth_enabled, verify_access_token
 def auth_required() -> bool:
     return os.getenv(
         "REQUIRE_AUTH",
-        "false",
+        "true",
     ).lower() == "true"
 
 
@@ -128,7 +128,9 @@ def _supabase_user_from_token(authorization: str | None, db: Session):
     if not user or not user.active: return None
     if not user.supabase_user_id:
         user.supabase_user_id = str(claims["sub"]); db.commit()
-    return CurrentUser(id=user.id, organization_id=user.organization_id or BOOTSTRAP_ORG_ID, username=user.username, role=user.role.value)
+    if user.organization_id is None:
+        return None
+    return CurrentUser(id=user.id, organization_id=user.organization_id, username=user.username, role=user.role.value)
 def get_current_user(
     authorization: str | None = Header(
         default=None,

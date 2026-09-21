@@ -313,6 +313,7 @@ async def _publish_reading(machine, reading, behaviour, safety=None, degradation
     }
     await telemetry_stream.broadcast(machine.organization_id, {**event, "organization_id": machine.organization_id})
     await supabase_broadcast("org:" + str(machine.organization_id) + ":telemetry", "telemetry", event)
+    await supabase_broadcast("machine:" + str(machine.id) + ":telemetry", "telemetry", event)
 
 
 @router.websocket("/stream")
@@ -441,6 +442,23 @@ def disable_device(machine_id: int, current: CurrentUser = Depends(get_current_u
     db.commit()
     audit.log_event(db, "machine", machine.id, "iot_disabled", f"Live sensor integration disabled for {machine.name}")
     return DeviceStatusOut(iot_enabled=False, has_key=bool(machine.device_key))
+
+
+@router.post("/ping")
+def device_ping(
+    x_device_key: str = Header(..., alias="X-Device-Key"),
+    db: Session = Depends(get_db),
+):
+    """Validate a machine device key without creating telemetry or ML state."""
+    machine = db.query(models.Machine).filter_by(device_key=x_device_key).first()
+    if not machine or not machine.iot_enabled:
+        raise HTTPException(401, "invalid or disabled device key")
+    return {
+        "ok": True,
+        "machine_id": machine.id,
+        "machine": machine.name,
+        "iot_enabled": True,
+    }
 
 
 @router.post("/ingest")

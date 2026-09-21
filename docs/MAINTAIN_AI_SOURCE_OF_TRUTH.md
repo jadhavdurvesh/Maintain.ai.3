@@ -186,9 +186,10 @@ Organization-only fanout is insufficient for technician access.
 
 ### Supabase broadcast
 
-Supabase broadcast is also organization-named:
+Supabase broadcast uses two scopes:
 
-`org:<organization_id>:telemetry`
+- Engineering: `org:<organization_id>:telemetry`
+- Android/workforce: `machine:<machine_id>:telemetry`
 
 The short-lived Realtime token carries:
 
@@ -196,9 +197,10 @@ The short-lived Realtime token carries:
 - Maintain user ID
 - organization ID
 - application
+- authorized active machine IDs
 - short expiry
 
-Database/Realtime policies must remain aligned with the same tenant model.
+Supabase RLS must enforce the application scope and machine IDs. Mobile clients must never rely on client-side filtering as the authorization boundary.
 
 ---
 
