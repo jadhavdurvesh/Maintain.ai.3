@@ -21,6 +21,7 @@ export default function MachineDetail() {
   const [newComponent, setNewComponent] = useState('')
   const [deviceStatus, setDeviceStatus] = useState(null)
   const [deviceBusy, setDeviceBusy] = useState(false)
+  const [deviceError, setDeviceError] = useState(null)
   const [revealedKey, setRevealedKey] = useState(null)
   const [liveReadings, setLiveReadings] = useState({})
   const [liveHistory, setLiveHistory] = useState({})
@@ -157,10 +158,14 @@ export default function MachineDetail() {
   }
   const enableDevice = async () => {
     setDeviceBusy(true)
+    setDeviceError(null)
     try {
       const result = await api.post(`/api/devices/${id}/enable`, {})
+      if (!result?.device_key) throw new Error('Backend enabled live sensor integration but did not return a device key.')
       setRevealedKey(result.device_key)
       setDeviceStatus({ iot_enabled: result.iot_enabled, has_key: result.has_key })
+    } catch (e) {
+      setDeviceError(e?.message || 'Could not enable live sensor integration.')
     } finally {
       setDeviceBusy(false)
     }
@@ -168,10 +173,13 @@ export default function MachineDetail() {
 
   const disableDevice = async () => {
     setDeviceBusy(true)
+    setDeviceError(null)
     try {
       const result = await api.post(`/api/devices/${id}/disable`, {})
       setDeviceStatus(result)
       setRevealedKey(null)
+    } catch (e) {
+      setDeviceError(e?.message || 'Could not disable live sensor integration.')
     } finally {
       setDeviceBusy(false)
     }
@@ -202,6 +210,10 @@ export default function MachineDetail() {
             for working example code. Off by default; nothing changes unless you turn it on.
           </p>
 
+          {deviceError && <div style={{ marginBottom: 12, padding: 10, borderRadius: 8, background: 'rgba(255,70,70,.10)', color: 'var(--critical)', fontSize: 12 }}>{deviceError}</div>}
+
+          {!canEdit && <div style={{ marginBottom: 12, color: 'var(--text-faint)', fontSize: 12 }}>Live sensor integration is managed by administrators.</div>}
+
           {revealedKey && (
             <div style={{ padding: 12, background: 'var(--panel-raised)', borderRadius: 8, marginBottom: 12 }}>
               <div style={{ fontSize: 12, color: 'var(--warning)', marginBottom: 6 }}>
@@ -211,7 +223,7 @@ export default function MachineDetail() {
             </div>
           )}
 
-          {deviceStatus?.iot_enabled ? (
+          {canEdit && deviceStatus?.iot_enabled ? (
             <div className="chip-row">
               <button className="btn secondary" onClick={enableDevice} disabled={deviceBusy}>
                 {deviceBusy ? 'Working…' : 'Regenerate Key'}
@@ -220,11 +232,11 @@ export default function MachineDetail() {
                 {deviceBusy ? 'Working…' : 'Disable'}
               </button>
             </div>
-          ) : (
+          ) : canEdit ? (
             <button className="btn" onClick={enableDevice} disabled={deviceBusy}>
               {deviceBusy ? 'Working…' : 'Enable Live Sensor Integration'}
             </button>
-          )}
+          ) : null}
         </div>
       </div>
 
