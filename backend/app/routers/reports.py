@@ -283,10 +283,10 @@ def export_excel(db: Session = Depends(get_db), current: CurrentUser = Depends(g
 
 
 
-@router.get("/export/gemini-pdf")
-def export_gemini_pdf(db: Session = Depends(get_db), current: CurrentUser = Depends(get_current_user)):
+@router.get("/export/ai-pdf")
+def export_ai_pdf(db: Session = Depends(get_db), current: CurrentUser = Depends(get_current_user)):
     _require_admin(current)
-    """Generate a detailed, evidence-grounded PDF with Gemini narrative when configured."""
+    """Generate a detailed, evidence-grounded AI maintenance report."""
     machines = _visible_machines(db, current)
     facts = []
     for m in machines:
@@ -317,7 +317,7 @@ def export_gemini_pdf(db: Session = Depends(get_db), current: CurrentUser = Depe
 
     from ..exports.gemini_pdf_report import build_gemini_pdf_report
     pdf = build_gemini_pdf_report(db, facts, ai)
-    filename = f"maintain_ai_gemini_report_{datetime.utcnow().date()}.pdf"
+    filename = f"maintain_ai_ai_report_{datetime.utcnow().date()}.pdf"
     return StreamingResponse(iter([pdf]), media_type="application/pdf", headers={"Content-Disposition":f"attachment; filename={filename}"})
 @router.get("/export/{dataset}.csv")
 def export_dataset_csv(dataset: str, db: Session = Depends(get_db), current: CurrentUser = Depends(get_current_user)):
