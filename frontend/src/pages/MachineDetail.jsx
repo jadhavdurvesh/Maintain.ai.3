@@ -5,10 +5,13 @@ import { formatDateTime, formatDate } from '../utils/dates.js'
 import StatusBadge from '../components/StatusBadge.jsx'
 import { Loading, ErrorState } from './Dashboard.jsx'
 import { usePageHeader } from '../PageHeaderContext.jsx'
+import { useAuth } from '../AuthContext.jsx'
 
 export default function MachineDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const canEdit = user?.role === 'admin'
   const [machine, setMachine] = useState(null)
   const [components, setComponents] = useState([])
   const [readings, setReadings] = useState([])
@@ -344,10 +347,10 @@ export default function MachineDetail() {
           <div className="panel-body">
             {components.map((c) => <div key={c.id} style={{ padding: '6px 0', borderBottom: '1px solid var(--border)' }}>{c.name}</div>)}
             {components.length === 0 && <div className="empty-state" style={{ padding: '8px 0' }}>No components logged yet.</div>}
-            <form onSubmit={addComponent} style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            {canEdit && <form onSubmit={addComponent} style={{ display: 'flex', gap: 8, marginTop: 12 }}>
               <input value={newComponent} onChange={(e) => setNewComponent(e.target.value)} placeholder="e.g. Drive-end bearing" />
               <button className="btn secondary" type="submit">Add</button>
-            </form>
+            </form>}
           </div>
         </div>
       </div>
@@ -356,7 +359,7 @@ export default function MachineDetail() {
         <div className="panel">
           <div className="panel-header"><span className="panel-title">Sensor / Manual Readings</span></div>
           <div className="panel-body">
-            <form onSubmit={addReading} style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            {canEdit && <form onSubmit={addReading} style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
               <select value={newReading.reading_type} onChange={(e) => setNewReading({ ...newReading, reading_type: e.target.value })}>
                 <option value="temperature">Temperature</option>
                 <option value="vibration">Vibration</option>
@@ -366,7 +369,7 @@ export default function MachineDetail() {
               <input type="number" step="any" required placeholder="value" value={newReading.value} onChange={(e) => setNewReading({ ...newReading, value: e.target.value })} />
               <input style={{ width: 70 }} value={newReading.unit} onChange={(e) => setNewReading({ ...newReading, unit: e.target.value })} />
               <button className="btn secondary" type="submit">Log</button>
-            </form>
+            </form>}
             <table>
               <thead><tr><th>Type</th><th>Value</th><th>Recorded</th></tr></thead>
               <tbody>
