@@ -18,6 +18,7 @@ for select
 to authenticated
 using (
   realtime.messages.extension = 'broadcast'
+  and ((current_setting('request.jwt.claims', true))::jsonb ->> 'maintain_application') = 'engineering'
   and realtime.topic() = 'org:' ||
       ((current_setting('request.jwt.claims', true))::json ->> 'org_id') ||
       ':telemetry'
@@ -30,6 +31,7 @@ to authenticated
 using (
   realtime.messages.extension = 'broadcast'
   and realtime.topic() like 'machine:%:telemetry'
+  and ((current_setting('request.jwt.claims', true))::jsonb ->> 'maintain_application') in ('android', 'workforce')
   and exists (
     select 1
     from jsonb_array_elements_text(
