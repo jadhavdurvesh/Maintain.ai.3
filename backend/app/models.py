@@ -348,6 +348,20 @@ class AuditLog(Base):
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
+class MLAdvancedArtifact(Base):
+    """Organization-scoped supervised temporal model artifact."""
+    __tablename__ = "ml_advanced_artifacts"
+    id = Column(Integer, primary_key=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
+    model_type = Column(String, nullable=False, default="temporal_gbdt")
+    model_version = Column(Integer, nullable=False, default=1)
+    metrics_json = Column(Text, nullable=True)
+    n_samples = Column(Integer, nullable=False, default=0)
+    n_positive = Column(Integer, nullable=False, default=0)
+    trained_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    artifact = Column(LargeBinary, nullable=False)
+    active = Column(Boolean, nullable=False, default=True)
+
 class MLModelArtifact(Base):
     __tablename__ = "ml_model_artifacts"
     id = Column(Integer, primary_key=True)
