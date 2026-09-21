@@ -159,16 +159,20 @@ def update_work_order(wo_id: int, payload: schemas.WorkOrderUpdate, current: Cur
             raise HTTPException(400, "resolution notes are required when completing a work order")
         work_order.completed_at = datetime.utcnow()
         _capture_work_order_outcome(db, work_order, current)
-        db.add(models.MaintenanceRecord(
-            machine_id=work_order.machine_id,
-            type=models.MaintenanceType.corrective,
-            description=work_order.problem,
-            completed_date=work_order.completed_at,
-            status=models.MaintenanceStatus.completed,
-            performed_by=current.username,
-            notes=work_order.resolution_notes,
-            source_work_order_id=work_order.id,
-        ))
+        existing_maintenance = db.query(models.MaintenanceRecord).filter_by(
+            source_work_order_id=work_order.id
+        ).first()
+        if not existing_maintenance:
+            db.add(models.MaintenanceRecord(
+                machine_id=work_order.machine_id,
+                type=models.MaintenanceType.corrective,
+                description=work_order.problem,
+                completed_date=work_order.completed_at,
+                status=models.MaintenanceStatus.completed,
+                performed_by=current.username,
+                notes=work_order.resolution_notes,
+                source_work_order_id=work_order.id,
+            ))
 
     db.commit()
     db.refresh(work_order)
