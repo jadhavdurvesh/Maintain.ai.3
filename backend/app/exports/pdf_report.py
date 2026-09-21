@@ -56,8 +56,17 @@ def build_pdf_report(db: Session, organization_id: int | None = None) -> bytes:
     if organization_id is not None:
         machine_query = machine_query.filter(models.Machine.organization_id == organization_id)
     machines = machine_query.all()
-    open_wo = db.query(models.WorkOrder).filter(models.WorkOrder.status != models.WorkOrderStatus.completed).count()
-    active_alerts = db.query(models.Alert).filter_by(resolved=False).count()
+    machine_ids = [m.id for m in machines]
+    open_wo_query = db.query(models.WorkOrder).filter(models.WorkOrder.status != models.WorkOrderStatus.completed)
+    active_alerts_query = db.query(models.Alert).filter(models.Alert.resolved == False)  # noqa: E712
+    if machine_ids:
+        open_wo_query = open_wo_query.filter(models.WorkOrder.machine_id.in_(machine_ids))
+        active_alerts_query = active_alerts_query.filter(models.Alert.machine_id.in_(machine_ids))
+    else:
+        open_wo_query = open_wo_query.filter(False)
+        active_alerts_query = active_alerts_query.filter(False)
+    open_wo = open_wo_query.count()
+    active_alerts = active_alerts_query.count()
     summary_rows = [
         ["Metric", "Value"],
         ["Total machines", str(len(machines))],
@@ -82,7 +91,11 @@ def build_pdf_report(db: Session, organization_id: int | None = None) -> bytes:
     story.append(_table(rel_rows, col_widths=[55 * mm, 20 * mm, 25 * mm, 22 * mm, 25 * mm, 20 * mm]))
 
     # --- Failure analysis ---
-    faults_query = db.query(models.FaultRecord).join(models.Machine).filter(models.Machine.organization_id == organization_id) if organization_id is not None else db.query(models.FaultRecord)
+    faults_query = db.query(models.FaultRecord)
+    if machine_ids:
+        faults_query = faults_query.filter(models.FaultRecord.machine_id.in_(machine_ids))
+    else:
+        faults_query = faults_query.filter(False)
     faults = faults_query.all()
     if faults:
         from collections import Counter
@@ -92,7 +105,11 @@ def build_pdf_report(db: Session, organization_id: int | None = None) -> bytes:
         story.append(_table(fa_rows, col_widths=[120 * mm, 40 * mm]))
 
     # --- Active alerts ---
-    alerts_query = db.query(models.Alert).join(models.Machine).filter(models.Alert.resolved == False) if organization_id is not None else db.query(models.Alert).filter_by(resolved=False)
+    alerts_query = db.query(models.Alert).filter(models.Alert.resolved == False)  # noqa: E712
+    if machine_ids:
+        alerts_query = alerts_query.filter(models.Alert.machine_id.in_(machine_ids))
+    else:
+        alerts_query = alerts_query.filter(False)
     alerts = alerts_query.order_by(models.Alert.created_at.desc()).all()
     if alerts:
         story.append(Paragraph("Active Alerts", h2))
