@@ -23,6 +23,7 @@ def _initialize_database():
         ensure_ai_conversation_schema()
         ensure_user_auth_schema()
         ensure_user_work_order_schema()
+        ensure_maintenance_work_order_schema()
         ensure_lab_ml_schema()
         ensure_tenant_schema()
         ensure_legacy_application_access_schema()
@@ -68,6 +69,17 @@ def ensure_user_work_order_schema():
     if "fault_id" not in columns:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE work_orders ADD COLUMN fault_id INTEGER"))
+
+def ensure_maintenance_work_order_schema():
+    inspector = inspect(engine)
+    if not inspector.has_table("maintenance_records"):
+        return
+    columns = {column["name"] for column in inspector.get_columns("maintenance_records")}
+    if "source_work_order_id" not in columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE maintenance_records ADD COLUMN source_work_order_id INTEGER"))
+    Base.metadata.create_all(bind=engine)
+
 
 
 def ensure_lab_ml_schema():
