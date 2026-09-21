@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from .. import models
 from ..database import get_db
-from ..deps import CurrentUser, get_authenticated_user
+from ..deps import CurrentUser, get_current_user
 from ..notification_service import firebase_diagnostics
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
@@ -21,7 +21,7 @@ class DeviceRegistration(BaseModel):
 @router.post("/register-device")
 def register_device(
     payload: DeviceRegistration,
-    current: CurrentUser = Depends(get_authenticated_user),
+    current: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     if not current.id:
