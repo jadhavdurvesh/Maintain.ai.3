@@ -39,6 +39,8 @@ def get_model_status(current: CurrentUser = Depends(get_current_user), db: Sessi
 
 @router.post("/train")
 def train_model(current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current.role != models.UserRole.admin.value:
+        raise HTTPException(403, "administrator access required")
     return risk_model.train(db, _visible_machine_ids(db, current), current.organization_id)
 
 
