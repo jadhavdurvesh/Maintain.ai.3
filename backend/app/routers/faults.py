@@ -49,6 +49,8 @@ def list_faults(machine_id: int | None = None, unresolved_only: bool = False, li
 
 @router.post("", response_model=schemas.FaultRecordOut)
 def create_fault(payload: schemas.FaultRecordIn, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current.role == models.UserRole.viewer.value:
+        raise HTTPException(403, "viewers cannot report faults")
     machine = _get_machine(payload.machine_id, current, db)
     fault = models.FaultRecord(**payload.model_dump())
     db.add(fault)
@@ -67,6 +69,8 @@ def create_fault(payload: schemas.FaultRecordIn, current: CurrentUser = Depends(
 
 @router.post("/{fault_id}/resolve", response_model=schemas.FaultRecordOut)
 def resolve_fault(fault_id: int, payload: schemas.FaultResolveIn, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current.role == models.UserRole.viewer.value:
+        raise HTTPException(403, "viewers cannot resolve faults")
     fault = db.query(models.FaultRecord).join(models.Machine).filter(
         models.FaultRecord.id == fault_id,
         models.Machine.organization_id == current.organization_id,
@@ -97,6 +101,8 @@ def resolve_fault(fault_id: int, payload: schemas.FaultResolveIn, current: Curre
 
 @router.post("/{fault_id}/work-order", response_model=schemas.WorkOrderOut)
 def create_work_order_from_fault(fault_id: int, payload: schemas.WorkOrderIn | None = None, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current.role == models.UserRole.viewer.value:
+        raise HTTPException(403, "viewers cannot create work orders")
     fault = db.query(models.FaultRecord).join(models.Machine).filter(
         models.FaultRecord.id == fault_id,
         models.Machine.organization_id == current.organization_id,
