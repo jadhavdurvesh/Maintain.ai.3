@@ -163,6 +163,7 @@ class IngestPayload(BaseModel):
     value: float
     unit: str | None = None
     recorded_at: datetime | None = None
+    event_id: str | None = None
 
 
 def _evaluate_safety_policy(db: Session, machine: models.Machine, reading: models.SensorReading):
@@ -235,6 +236,7 @@ def _process_reading(db: Session, machine: models.Machine, payload: IngestPayloa
         value=payload.value,
         unit=payload.unit,
         source="sensor",
+        external_id=payload.event_id,
         recorded_at=(payload.recorded_at.astimezone(timezone.utc).replace(tzinfo=None) if payload.recorded_at and payload.recorded_at.tzinfo else (payload.recorded_at if payload.recorded_at else datetime.utcnow())),
     )
     db.add(reading)
@@ -417,6 +419,10 @@ async def ingest_reading(
     machine = db.query(models.Machine).filter_by(device_key=x_device_key).first()
     if not machine or not machine.iot_enabled:
         raise HTTPException(401, "invalid or disabled device key")
+    if payload.event_id:
+        existing = db.query(models.SensorReading).filter_by(external_id=payload.event_id).first()
+        if existing:
+            return {"status": "duplicate", "reading_id": existing.id}
     reading, behaviour, safety, degradation = _process_reading(db, machine, payload)
     await _publish_reading(machine, reading, behaviour, safety, degradation)
     if safety and safety.get("shutdown_requested"):
