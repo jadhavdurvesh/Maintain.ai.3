@@ -420,6 +420,17 @@ def realtime_token(
     if application not in {"engineering", "android", "workforce"}:
         raise HTTPException(status_code=400, detail="invalid application context")
     # The token is intentionally short-lived and contains no secret application data.
+    visible_machine_query = db.query(models.Machine.id).filter(
+        models.Machine.organization_id == current.organization_id,
+        models.Machine.archived.is_(False),
+    )
+    if current.role == models.UserRole.technician.value:
+        visible_machine_query = visible_machine_query.join(
+            models.UserMachineAssignment,
+            models.UserMachineAssignment.machine_id == models.Machine.id,
+        ).filter(models.UserMachineAssignment.user_id == current.id)
+    machine_ids = [row[0] for row in visible_machine_query.all()]
+
     payload = {
         "sub": str(user.supabase_user_id),
         "role": "authenticated",
@@ -427,6 +438,9 @@ def realtime_token(
         "org_id": str(current.organization_id),
         "maintain_user_id": str(current.id),
         "maintain_application": application,
+        # Realtime RLS uses this claim for Android/workforce machine topics.
+        # Engineering clients continue to use the organization topic.
+        "machine_ids": [str(machine_id) for machine_id in machine_ids],
         "iat": datetime.now(timezone.utc),
         "exp": datetime.now(timezone.utc) + timedelta(minutes=55),
     }
