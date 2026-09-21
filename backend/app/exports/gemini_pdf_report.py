@@ -36,7 +36,7 @@ def build_gemini_pdf_report(db: Session, facts: list, ai: dict | None) -> bytes:
     h2=ParagraphStyle("GH",parent=styles["Heading2"],spaceBefore=12,spaceAfter=6)
     body=ParagraphStyle("GB",parent=styles["BodyText"],fontSize=9,leading=13)
     small=ParagraphStyle("GS",parent=body,fontSize=7.5,leading=10)
-    story=[Paragraph("MAINTAIN AI",title),Paragraph("AI-Assisted Maintenance Intelligence Report",styles["Heading2"]),Paragraph(f"Generated {datetime.utcnow().strftime('%d %b %Y, %H:%M UTC')}",small),Spacer(1,8)]
+    story=[Paragraph("MAINTAIN AI",title),Paragraph("AI Maintenance Intelligence Report",styles["Heading2"]),Paragraph(f"Generated {datetime.utcnow().strftime('%d %b %Y, %H:%M UTC')}",small),Spacer(1,8)]
     story.append(Paragraph("AI Executive Assessment",h2))
     if ai:
         story.append(_p(ai.get("safety_notice","Safety note: follow site isolation and emergency procedures."),body))
@@ -47,9 +47,9 @@ def build_gemini_pdf_report(db: Session, facts: list, ai: dict | None) -> bytes:
             story.append(Spacer(1,5)); story.append(Paragraph("Recommended Procedure",h2))
             for i,step in enumerate(ai["recommended_procedure"],1): story.append(_p(f"{i}. {step}",body)); story.append(Spacer(1,2))
         if ai.get("needs_more_info"):
-            story.append(_p("Gemini identified additional information needed for diagnosis; this report does not treat an unconfirmed cause as confirmed.",small))
+            story.append(_p("The AI identified additional information needed for diagnosis; this report does not treat an unconfirmed cause as confirmed.",small))
     else:
-        story.append(_p("Gemini analysis was unavailable. The report below contains the collected MAINTAIN AI evidence without an AI-generated diagnosis.",body))
+        story.append(_p("AI analysis was unavailable. The report below contains the collected MAINTAIN AI evidence without an AI-generated diagnosis.",body))
 
     for f in facts:
         m=f["machine"]; story.append(PageBreak()); story.append(Paragraph(f'{m["name"]} ({m["code"]})',h2))
@@ -67,5 +67,5 @@ def build_gemini_pdf_report(db: Session, facts: list, ai: dict | None) -> bytes:
             story.append(Paragraph("Recent Telemetry Evidence",h2))
             story.append(_table([["Signal","Value","Unit","Recorded"]]+[[x["type"],x["value"],x["unit"],x["recorded_at"]] for x in f["recent_readings"]], [35*mm,25*mm,25*mm,70*mm]))
     story.append(PageBreak()); story.append(Paragraph("Report Scope & Evidence",h2))
-    story.append(_p("This report combines machine records, faults, work orders, maintenance history, alerts and recent telemetry available in MAINTAIN AI at generation time. Gemini narrative is advisory and is constrained to the supplied evidence; it does not replace site safety procedures or technician verification.",body))
+    story.append(_p("This report combines machine records, faults, work orders, maintenance history, alerts and recent telemetry available in MAINTAIN AI at generation time. AI narrative is advisory and is constrained to the supplied evidence; it does not replace site safety procedures or technician verification.",body))
     doc.build(story); buf.seek(0); return buf.getvalue()
