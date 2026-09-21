@@ -1,9 +1,14 @@
-"""Optional online Gemini diagnostic layer for MAINTAIN AI."""
+"""Online Gemini diagnostic/report layer for MAINTAIN AI.
+
+Uses Google's current google-genai SDK. The older google-generativeai package is
+legacy; keeping the client here server-side means organization-scoped keys never
+reach the browser.
+"""
 import json
 import os
 from typing import List, Optional
 
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 
 
 def _resolve_api_key(db=None, organization_id=None) -> Optional[str]:
@@ -12,7 +17,7 @@ def _resolve_api_key(db=None, organization_id=None) -> Optional[str]:
         stored = settings_store.get_setting(db, "gemini_api_key", organization_id)
         if stored:
             return stored
-    return os.getenv("GEMINI_API_KEY")
+    return os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 
 
 SYSTEM_INSTRUCTION = """You are the diagnostic assistant inside MAINTAIN AI, an industrial predictive-maintenance system.
@@ -57,34 +62,43 @@ def diagnose_with_gemini(
         return None
 
     try:
-        import google.generativeai as genai
+        from google import genai
+        from google.genai import types
     except ImportError:
         return None
 
+    context_lines = []
+    if machine_context:
+        context_lines.append("Selected machine evidence:\\n" + json.dumps(machine_context, default=str, indent=2))
+    if conversation_history:
+        context_lines.append("Persistent diagnostic conversation history (oldest to newest):\\n" + json.dumps(conversation_history, default=str, indent=2))
+    if answers:
+        context_lines.append("Technician answers supplied with this request:\\n" + "\\n".join(f"- {a}" for a in answers))
+
+    prompt = (
+        f"Current problem reported by technician:\\n{problem_description}\\n\\n"
+        + "\\n\\n".join(context_lines)
+        + "\\n\\nUse the evidence and persistent conversation history above to continue this diagnostic session."
+    )
+
     try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel(GEMINI_MODEL, system_instruction=SYSTEM_INSTRUCTION)
-
-        context_lines = []
-        if machine_context:
-            context_lines.append("Selected machine evidence:\n" + json.dumps(machine_context, default=str, indent=2))
-        if conversation_history:
-            context_lines.append("Persistent diagnostic conversation history (oldest to newest):\n" + json.dumps(conversation_history, default=str, indent=2))
-        if answers:
-            context_lines.append("Technician answers supplied with this request:\n" + "\n".join(f"- {a}" for a in answers))
-
-        prompt = (
-            f"Current problem reported by technician:\n{problem_description}\n\n"
-            + "\n\n".join(context_lines)
-            + "\n\nUse the evidence and persistent conversation history above to continue this diagnostic session."
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_INSTRUCTION,
+                response_mime_type="application/json",
+            ),
         )
-
-        response = model.generate_content(
-            prompt,
-            generation_config={"response_mime_type": "application/json"},
-        )
-        data = json.loads(response.text)
+        text = getattr(response, "text", None)
+        if not text:
+            return None
+        data = json.loads(text)
         data["source"] = "gemini"
+        data["model"] = GEMINI_MODEL
         return data
     except Exception:
+        # Callers intentionally fall back to evidence-only output. Do not leak
+        # provider credentials or raw provider errors into the client response.
         return None
