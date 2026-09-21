@@ -561,30 +561,32 @@ export default function SettingsPage() {
           </p>
 
           {keyStatus?.configured ? (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-              }}
-            >
-              <span className="badge healthy">
-                Configured · ••••{' '}
-                {keyStatus.last4}
-              </span>
+            <>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                }}
+              >
+                <span className="badge healthy">
+                  Configured · ••••{' '}
+                  {keyStatus.last4}
+                </span>
 
-              <button className="btn secondary" onClick={testAiConnection} disabled={aiTesting}>
-                {aiTesting ? 'Testing…' : 'Test AI Connection'}
-              </button>
-              <button className="btn secondary" onClick={clearKey}>
-                Remove Key
-              </button>
-            </div>
-            {aiTestResult && (
-              <div style={{ marginTop: 10 }} className={aiTestResult.ok ? 'badge healthy' : 'badge critical'}>
-                {aiTestResult.ok ? 'AI connection verified' : aiTestResult.message}
+                <button className="btn secondary" onClick={testAiConnection} disabled={aiTesting}>
+                  {aiTesting ? 'Testing…' : 'Test AI Connection'}
+                </button>
+                <button className="btn secondary" onClick={clearKey}>
+                  Remove Key
+                </button>
               </div>
-            )}
+              {aiTestResult && (
+                <div style={{ marginTop: 10 }} className={aiTestResult.ok ? 'badge healthy' : 'badge critical'}>
+                  {aiTestResult.ok ? 'AI connection verified' : aiTestResult.message}
+                </div>
+              )}
+            </>
           ) : (
             <form
               onSubmit={saveKey}
