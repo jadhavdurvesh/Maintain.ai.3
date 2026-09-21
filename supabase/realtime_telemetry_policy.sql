@@ -30,17 +30,15 @@ to authenticated
 using (
   realtime.messages.extension = 'broadcast'
   and realtime.topic() like 'machine:%:telemetry'
-  and (
-    realtime.topic() = 'machine:' ||
-      ANY(
-        SELECT jsonb_array_elements_text(
-          coalesce(
-            (current_setting('request.jwt.claims', true))::jsonb -> 'machine_ids',
-            '[]'::jsonb
-          )
-        )
-      ) ||
-      ':telemetry'
+  and exists (
+    select 1
+    from jsonb_array_elements_text(
+      coalesce(
+        (current_setting('request.jwt.claims', true))::jsonb -> 'machine_ids',
+        '[]'::jsonb
+      )
+    ) as allowed(machine_id)
+    where realtime.topic() = 'machine:' || allowed.machine_id || ':telemetry'
   )
 );
 
