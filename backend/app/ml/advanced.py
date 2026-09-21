@@ -99,10 +99,13 @@ def score_features(artifact, features):
     return _sigmoid(raw)
 
 
-def load_active_artifact(db: Session):
+def load_active_artifact(db: Session, organization_id: int):
     row = (
         db.query(models.MLAdvancedArtifact)
-        .filter(models.MLAdvancedArtifact.active.is_(True))
+        .filter(
+            models.MLAdvancedArtifact.organization_id == organization_id,
+            models.MLAdvancedArtifact.active.is_(True),
+        )
         .order_by(models.MLAdvancedArtifact.id.desc())
         .first()
     )
@@ -114,8 +117,8 @@ def load_active_artifact(db: Session):
         return None
 
 
-def model_status(db: Session):
-    loaded = load_active_artifact(db)
+def model_status(db: Session, organization_id: int):
+    loaded = load_active_artifact(db, organization_id)
     if not loaded:
         return {
             "available": False,
@@ -138,7 +141,7 @@ def model_status(db: Session):
 
 
 def predict_machine(db: Session, machine: models.Machine):
-    loaded = load_active_artifact(db)
+    loaded = load_active_artifact(db, machine.organization_id)
     names, features = build_feature_vector(db, machine)
     if not loaded:
         return {
