@@ -80,6 +80,8 @@ def list_work_orders(status: str | None = None, limit: int = Query(50, ge=1, le=
 
 @router.post("", response_model=schemas.WorkOrderOut)
 def create_work_order(payload: schemas.WorkOrderIn, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current.role != models.UserRole.admin.value:
+        raise HTTPException(403, "administrator access required")
     if _is_worker(current):
         raise HTTPException(403, "workers cannot create work orders")
 
@@ -138,6 +140,8 @@ def update_work_order(wo_id: int, payload: schemas.WorkOrderUpdate, current: Cur
             if requested_status == "completed" and current_status != "in_progress":
                 raise HTTPException(400, "a work order must be in progress before it can be resolved")
     else:
+        if current.role == models.UserRole.viewer.value:
+            raise HTTPException(403, "viewers cannot modify work orders")
         if "assigned_to" in changes:
             validate_assignee(changes["assigned_to"], current, db)
         if "status" in changes and changes["status"] not in {"pending", "in_progress", "completed"}:
