@@ -20,6 +20,8 @@ def list_parts(low_stock_only: bool = False, current: CurrentUser = Depends(get_
 
 @router.post("", response_model=schemas.SparePartOut)
 def create_part(payload: schemas.SparePartIn, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current.role != models.UserRole.admin.value:
+        raise HTTPException(403, "administrator access required")
     if db.query(models.SparePart).filter(models.SparePart.part_number == payload.part_number, models.SparePart.organization_id == current.organization_id).first():
         raise HTTPException(400, "part_number already exists")
     part = models.SparePart(**payload.model_dump(), organization_id=current.organization_id)
@@ -31,6 +33,8 @@ def create_part(payload: schemas.SparePartIn, current: CurrentUser = Depends(get
 
 @router.patch("/{part_id}", response_model=schemas.SparePartOut)
 def update_part(part_id: int, quantity: int, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current.role != models.UserRole.admin.value:
+        raise HTTPException(403, "administrator access required")
     part = db.query(models.SparePart).filter(models.SparePart.id == part_id, models.SparePart.organization_id == current.organization_id).first()
     if not part:
         raise HTTPException(404, "part not found")
