@@ -18,6 +18,14 @@ def list_audit_log(
     db: Session = Depends(get_db),
 ):
     q = db.query(models.AuditLog).filter(models.AuditLog.organization_id == current.organization_id)
+    if current.role == models.UserRole.technician.value:
+        visible_ids = [row[0] for row in db.query(models.Machine.id).join(models.UserMachineAssignment, models.UserMachineAssignment.machine_id == models.Machine.id).filter(models.Machine.organization_id == current.organization_id, models.UserMachineAssignment.user_id == current.id).all()]
+        q = q.filter(
+            ((models.AuditLog.entity_type == "machine") & models.AuditLog.entity_id.in_(visible_ids))
+            | (models.AuditLog.entity_type.in_(["maintenance", "work_order", "fault", "alert", "component"]) & models.AuditLog.entity_id.in_(
+                db.query(models.MaintenanceRecord.id).filter(models.MaintenanceRecord.machine_id.in_(visible_ids))
+            ))
+        )
     if entity_type:
         q = q.filter_by(entity_type=entity_type)
     entries = q.order_by(models.AuditLog.created_at.desc()).limit(limit).all()
