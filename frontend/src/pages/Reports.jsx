@@ -87,7 +87,7 @@ export default function Reports() {
       <button className="btn secondary" onClick={() => downloadExport('csv')}>Summary CSV</button>
       <button className="btn secondary" onClick={() => downloadExport('excel')}>Excel Report</button>
       <button className="btn" onClick={() => downloadExport('pdf')}>PDF Report</button>
-      <button className="btn" onClick={downloadAiPdf}>✨ AI Detailed Report</button>
+      <button className="btn" onClick={downloadAiPdf}>AI Detailed Report</button>
     </div>
   ))
 
@@ -132,7 +132,7 @@ export default function Reports() {
           <p style={{color:'var(--text-dim)',fontSize:13,marginBottom:10}}>
             Generate a detailed PDF combining machine condition, telemetry evidence, faults, maintenance, work orders, alerts and AI's evidence-grounded narrative, procedures and possible causes.
           </p>
-          <button className="btn" onClick={downloadGeminiPdf}>Generate Gemini Detailed PDF</button>
+          <button className="btn" onClick={downloadAiPdf}>Generate AI Detailed Report</button>
           <p style={{color:'var(--text-faint)',fontSize:11,marginTop:9}}>AI is advisory: the report distinguishes supplied evidence from unconfirmed AI analysis and does not replace technician verification or safety procedures.</p>
         </div>
       </div>
