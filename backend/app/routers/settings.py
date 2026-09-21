@@ -44,3 +44,13 @@ def clear_gemini_key(current: CurrentUser = Depends(get_current_user), db: Sessi
     require_admin(current)
     settings_store.delete_setting(db, GEMINI_KEY_NAME, current.organization_id)
     return {"deleted": True}
+
+
+@router.post("/ai-connection-test")
+def test_ai_connection(current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    require_admin(current)
+    from ..ai.gemini_client import test_connection
+    result = test_connection(db=db, organization_id=current.organization_id)
+    if not result["ok"]:
+        return result
+    return result
