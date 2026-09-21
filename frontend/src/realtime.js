@@ -106,7 +106,7 @@ export function useTelemetryStream() {
           'phx_join',
           {
             config: { broadcast: { self: false }, private: true },
-            access_token: currentToken,
+            access_token: realtimeToken,
           },
         ]))
         }).catch(() => ws.close(1008, 'realtime authorization failed'))
