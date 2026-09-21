@@ -250,6 +250,7 @@ def list_users(
     current: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    require_admin(current)
     return (
         db.query(models.User)
         .filter(
