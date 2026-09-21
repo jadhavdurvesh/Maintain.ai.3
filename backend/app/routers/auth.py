@@ -294,10 +294,20 @@ def sync_supabase_user(
         if not user and email:
             user = db.query(models.User).filter_by(email=email).first()
 
-        # OAuth is intentionally identity-driven rather than button-driven:
-        # an existing identity signs in, while a new identity is sent to the
-        # organization/username onboarding step. This keeps Google/Apple
-        # behavior identical from either auth tab.
+        # "New organization" is a true registration boundary. A Supabase
+        # identity that already belongs to a Maintain.ai organization must
+        # never be silently attached to that existing organization.
+        if user and payload.registration_mode:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"This Google/Apple account already belongs to the "
+                    f"'{db.get(models.Organization, user.organization_id).name if user.organization_id else 'existing'}' "
+                    "organization. Sign in instead, or use a different identity to create a new organization."
+                ),
+            )
+
+        # A new identity is sent to the organization/username onboarding step.
         if not user and (not payload.organization_name or not payload.username):
             return {
                 "needs_onboarding": True,
