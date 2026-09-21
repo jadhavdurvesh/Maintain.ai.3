@@ -199,6 +199,8 @@ def diagnose(payload: schemas.DiagnoseRequest, current: CurrentUser = Depends(ge
 
 @router.post("/sessions/{session_id}/outcome")
 def record_outcome(session_id: int, final_technician_result: str, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current.role == models.UserRole.viewer.value:
+        raise HTTPException(403, "viewers cannot record AI outcomes")
     session = db.get(models.AIDiagnosticSession, session_id)
     if not session:
         raise HTTPException(404, "session not found")
