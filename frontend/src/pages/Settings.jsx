@@ -75,7 +75,16 @@ export default function SettingsPage() {
   const sendInvitation = async (e) => {
     e.preventDefault(); setInviting(true)
     try { await api.post('/api/users/invitations', inviteForm); setInviteForm({email:'',role:'technician',application:'workforce'}); await load(); await loadMembers(); setToast({type:'success',message:'Invitation sent.'}) }
-    catch (e) { setToast({type:'error',message:`Could not send invitation: ${e.message}`}) }
+    catch (e) {
+      const message = e.message || ''
+      const crossOrg = message.includes('that email belongs to another organization')
+      setToast({
+        type: 'error',
+        message: crossOrg
+          ? 'This email is already a member of another organization and cannot be invited here.'
+          : `Could not send invitation: ${message}`,
+      })
+    }
     finally { setInviting(false) }
   }
 
