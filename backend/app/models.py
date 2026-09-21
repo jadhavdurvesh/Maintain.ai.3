@@ -136,6 +136,7 @@ class SensorReading(Base):
     value = Column(Float, nullable=False)
     unit = Column(String)
     source = Column(String, default="manual")
+    external_id = Column(String, unique=True, index=True, nullable=True)
     recorded_at = Column(DateTime, default=datetime.utcnow)
     machine = relationship("Machine", back_populates="sensor_readings")
 
