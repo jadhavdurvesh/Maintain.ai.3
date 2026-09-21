@@ -12,8 +12,8 @@ from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
 from .. import models, audit
-from ..database import get_db
-from ..deps import get_current_user, CurrentUser, SessionLocal
+from ..database import get_db, SessionLocal
+from ..deps import get_current_user, CurrentUser
 from ..alerts_engine import evaluate_machine
 from ..ml.online import update_online_state
 from ..ml.temporal_features import materialize_windows
