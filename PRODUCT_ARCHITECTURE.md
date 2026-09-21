@@ -100,3 +100,22 @@ Test organization A and B must coexist. B must see none of A's organization-owne
 Before implementing: read this blueprint; identify affected entities/endpoints; identify tenant/role boundaries; make the smallest required change; check all clients; verify empty-org behavior; verify A/B isolation; update this document only when architecture actually changes.
 
 This document is the project scope guardrail. It prioritizes the predictive-maintenance workflow and prevents optional feature expansion from distracting implementation.
+
+## 15. Security audit baseline — September 2026
+
+The Lab branch was audited after tenant-leakage reports. The following boundaries are now enforced in the application layer:
+- New-organization OAuth cannot reuse an identity already linked to another Maintain.ai organization.
+- Machine administration is admin-only.
+- Organization Settings administration and Gemini key mutation are admin-only.
+- Maintenance scheduling is admin-only; technicians may complete maintenance only for assigned machines.
+- Alerts are organization-scoped; technicians only see/mutate alerts for assigned machines; viewers cannot mutate alerts.
+- Work-order creation is admin-only; technicians only update assigned work and viewers are read-only.
+- Fault mutation is blocked for viewers and remains assignment-scoped for technicians.
+- Spare-part mutation is admin-only and organization-scoped.
+- AI sessions/conversations are organization-scoped and assignment-scoped for technicians; viewers cannot record AI outcomes.
+- Organization-wide PDF/Excel/Gemini report exports are admin-only; machine/dataset exports use visible machine scope.
+- ML model training is admin-only.
+- Legacy username-only worker login is disabled whenever authenticated identity login/Supabase Auth is enabled.
+- Audit/history is organization-scoped and technician history is restricted to assigned assets.
+
+Remaining production verification must be performed with two real organizations and separate identities, including direct API tests and Realtime-channel isolation.
