@@ -84,6 +84,20 @@ def _get_scoped_machine(
     return machine
 
 
+def _get_machine_for_restore(
+    db: Session,
+    machine_id: int,
+    current: CurrentUser,
+) -> models.Machine:
+    machine = db.query(models.Machine).filter(
+        models.Machine.id == machine_id,
+        models.Machine.organization_id == current.organization_id,
+    ).first()
+    if not machine:
+        raise HTTPException(404, "machine not found")
+    return machine
+
+
 @router.get(
     "",
     response_model=List[schemas.MachineOut],
@@ -329,12 +343,13 @@ def restore_machine(
             detail="administrator access required",
         )
 
-    machine = _get_scoped_machine(
+    machine = _get_machine_for_restore(
         db,
         machine_id,
         current,
     )
-
+    if not machine.archived:
+        return {"archived": False, "already_restored": True}
     machine.archived = False
 
     db.commit()
