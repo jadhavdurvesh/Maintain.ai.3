@@ -444,6 +444,23 @@ def disable_device(machine_id: int, current: CurrentUser = Depends(get_current_u
     return DeviceStatusOut(iot_enabled=False, has_key=bool(machine.device_key))
 
 
+@router.post("/ping")
+def device_ping(
+    x_device_key: str = Header(..., alias="X-Device-Key"),
+    db: Session = Depends(get_db),
+):
+    """Validate a machine device key without creating telemetry or ML state."""
+    machine = db.query(models.Machine).filter_by(device_key=x_device_key).first()
+    if not machine or not machine.iot_enabled:
+        raise HTTPException(401, "invalid or disabled device key")
+    return {
+        "ok": True,
+        "machine_id": machine.id,
+        "machine": machine.name,
+        "iot_enabled": True,
+    }
+
+
 @router.post("/ingest")
 async def ingest_reading(
     payload: IngestPayload,
