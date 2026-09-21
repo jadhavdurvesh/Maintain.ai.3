@@ -3,6 +3,7 @@ import api from '../api/client.js'
 import StatusBadge from '../components/StatusBadge.jsx'
 import { Loading, ErrorState } from './Dashboard.jsx'
 import { usePageHeader } from '../PageHeaderContext.jsx'
+import { useAuth } from '../AuthContext.jsx'
 
 export default function Maintenance() {
   usePageHeader('Maintenance')
@@ -63,7 +64,7 @@ export default function Maintenance() {
       </div>
 
       <div className="grid-2">
-        <div className="panel">
+        {canAdmin && <div className="panel">
           <div className="panel-header"><span className="panel-title">Schedule Maintenance</span></div>
           <form className="panel-body" onSubmit={schedule}>
             <div className="field">
@@ -92,7 +93,7 @@ export default function Maintenance() {
             </div>
             <button className="btn" type="submit">Schedule</button>
           </form>
-        </div>
+        </div>}
 
         <div className="panel">
           <div className="panel-header"><span className="panel-title">Maintenance Records</span></div>
@@ -103,7 +104,7 @@ export default function Maintenance() {
                 <tr key={r.id}>
                   <td>{r.description || r.type}</td>
                   <td><StatusBadge status={r.status === 'completed' ? 'healthy' : 'warning'} /></td>
-                  <td>{r.status !== 'completed' && <button className="btn secondary" onClick={() => complete(r.id)}>Mark done</button>}</td>
+                  <td>{canAdmin && r.status !== 'completed' && <button className="btn secondary" onClick={() => complete(r.id)}>Mark done</button>}</td>
                 </tr>
               ))}
               {records.length === 0 && <tr><td colSpan={3} className="empty-state">Nothing scheduled yet.</td></tr>}
