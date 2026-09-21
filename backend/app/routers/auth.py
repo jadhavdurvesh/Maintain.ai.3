@@ -383,6 +383,7 @@ def sync_supabase_user(
 def realtime_token(
     current: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
+    x_maintain_application: str | None = Header(default=None),
 ):
     """Issue a short-lived Supabase Realtime JWT carrying the Neon tenant context."""
     secret = os.getenv("SUPABASE_JWT_SECRET", "").strip()
@@ -393,9 +394,9 @@ def realtime_token(
     if not user or not user.active or not user.supabase_user_id:
         raise HTTPException(status_code=401, detail="Supabase identity is not linked to this account")
 
-    application = "engineering"
-    # get_current_user has already enforced the X-Maintain-Application header.
-    # Preserve that context when callers need Android/Workforce Realtime access.
+    application = (x_maintain_application or "engineering").strip().lower()
+    if application not in {"engineering", "android", "workforce"}:
+        raise HTTPException(status_code=400, detail="invalid application context")
     # The token is intentionally short-lived and contains no secret application data.
     payload = {
         "sub": str(user.supabase_user_id),
