@@ -167,6 +167,7 @@ def update_work_order(wo_id: int, payload: schemas.WorkOrderUpdate, current: Cur
             status=models.MaintenanceStatus.completed,
             performed_by=current.username,
             notes=work_order.resolution_notes,
+            source_work_order_id=work_order.id,
         ))
 
     db.commit()
@@ -178,7 +179,7 @@ def update_work_order(wo_id: int, payload: schemas.WorkOrderUpdate, current: Cur
             db, "work_order", work_order.id, "completed",
             f"Work order resolved for {machine.name if machine else work_order.machine_id}: {work_order.problem}"
             + (f" — {work_order.resolution_notes}" if work_order.resolution_notes else ""),
-            performed_by=work_order.assigned_to or current.username,
+            performed_by=current.username,
         )
     elif payload.status == "in_progress":
         audit.log_event(db, "work_order", work_order.id, "acknowledged", f"Work order #{work_order.id} acknowledged by {current.username}", performed_by=current.username)
