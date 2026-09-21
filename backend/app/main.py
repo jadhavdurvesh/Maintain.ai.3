@@ -95,6 +95,10 @@ def ensure_tenant_schema():
         columns = {column["name"] for column in inspector.get_columns("audit_log")}
         if "organization_id" not in columns:
             additions.append(("audit_log", "organization_id", "INTEGER"))
+    if inspector.has_table("sensor_readings"):
+        columns = {column["name"] for column in inspector.get_columns("sensor_readings")}
+        if "external_id" not in columns:
+            additions.append(("sensor_readings", "external_id", "VARCHAR"))
     if not additions:
         return
     with engine.begin() as connection:
