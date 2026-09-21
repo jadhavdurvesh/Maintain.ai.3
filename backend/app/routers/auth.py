@@ -117,6 +117,12 @@ def register(
     )
 
     db.add(user)
+    db.flush()
+    db.add(models.UserApplicationAccess(
+        user_id=user.id,
+        application="engineering",
+        enabled=True,
+    ))
     db.commit()
     db.refresh(user)
 
