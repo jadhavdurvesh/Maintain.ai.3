@@ -39,6 +39,15 @@ jobs:
       - name: Compile Python
         working-directory: backend
         run: python -m compileall -q app
+      - name: Install test runner
+        working-directory: backend
+        run: pip install pytest
+      - name: Run architecture regression tests
+        working-directory: backend
+        env:
+          DATABASE_URL: sqlite:///./ci-maintain-ai-test.db
+          REQUIRE_AUTH: 'false'
+        run: pytest -q
 
   desktop:
     needs: frontend
