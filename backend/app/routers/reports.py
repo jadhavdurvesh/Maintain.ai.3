@@ -18,6 +18,11 @@ from ..exports.excel_report import build_excel_report
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
 
+def _require_admin(current: CurrentUser):
+    if current.role != models.UserRole.admin.value:
+        raise HTTPException(403, "administrator access required")
+
+
 def _visible_machines(db: Session, current: CurrentUser):
     query = db.query(models.Machine).filter(
         models.Machine.archived.is_(False),
@@ -255,6 +260,7 @@ def export_machines_csv(db: Session = Depends(get_db), current: CurrentUser = De
 
 @router.get("/export/pdf")
 def export_pdf(db: Session = Depends(get_db), current: CurrentUser = Depends(get_current_user)):
+    _require_admin(current)
     pdf_bytes = build_pdf_report(db, organization_id=current.organization_id)
     filename = f"maintain_ai_report_{datetime.utcnow().date()}.pdf"
     return StreamingResponse(
@@ -266,6 +272,7 @@ def export_pdf(db: Session = Depends(get_db), current: CurrentUser = Depends(get
 
 @router.get("/export/excel")
 def export_excel(db: Session = Depends(get_db), current: CurrentUser = Depends(get_current_user)):
+    _require_admin(current)
     xlsx_bytes = build_excel_report(db, organization_id=current.organization_id)
     filename = f"maintain_ai_report_{datetime.utcnow().date()}.xlsx"
     return StreamingResponse(
@@ -278,6 +285,7 @@ def export_excel(db: Session = Depends(get_db), current: CurrentUser = Depends(g
 
 @router.get("/export/gemini-pdf")
 def export_gemini_pdf(db: Session = Depends(get_db), current: CurrentUser = Depends(get_current_user)):
+    _require_admin(current)
     """Generate a detailed, evidence-grounded PDF with Gemini narrative when configured."""
     machines = _visible_machines(db, current)
     facts = []
