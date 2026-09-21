@@ -17,9 +17,11 @@ psycopg2-binary==2.9.9
 # Optional — only needed if you use the online Gemini diagnostic path.
 google-genai==2.23.0
 
-# The heavier batch ML stack is intentionally kept out of the Vercel/serverless
-# dependency set. Install backend/requirements-ml.txt in the desktop/local ML
-# environment when RandomForest training is needed.
+# Lightweight batch inference/training dependencies are included in the API runtime.
+# Heavy deep-learning/training dependencies remain in requirements-ml.txt.
+numpy==2.1.1
+scikit-learn==1.5.2
+joblib==1.4.2
 
 # Supabase JWT signature verification for asymmetric signing keys.
 cryptography==43.0.1
