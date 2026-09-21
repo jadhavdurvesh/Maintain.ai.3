@@ -80,9 +80,11 @@ def train(db: Session, machine_ids=None, organization_id=None) -> dict:
         existing.n_samples = len(X)
         existing.artifact = artifact
     else:
+        if organization_id is None:
+            raise ValueError("organization_id is required to train the batch model")
         db.add(models.MLModelArtifact(
             model_version=MODEL_VERSION,
-            organization_id=organization_id or 1,
+            organization_id=organization_id,
             feature_names=json.dumps(FEATURE_NAMES),
             trained_at=datetime.utcnow(),
             n_samples=len(X),
