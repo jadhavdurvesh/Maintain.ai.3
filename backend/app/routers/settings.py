@@ -24,6 +24,7 @@ class ApiKeyIn(BaseModel):
 
 @router.get("/gemini-key")
 def get_gemini_key_status(current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    require_admin(current)
     value = settings_store.get_setting(db, GEMINI_KEY_NAME, current.organization_id)
     return {
         "configured": bool(value),
