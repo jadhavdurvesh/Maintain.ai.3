@@ -75,9 +75,13 @@ def ensure_maintenance_work_order_schema():
     if not inspector.has_table("maintenance_records"):
         return
     columns = {column["name"] for column in inspector.get_columns("maintenance_records")}
-    if "source_work_order_id" not in columns:
-        with engine.begin() as connection:
+    with engine.begin() as connection:
+        if "source_work_order_id" not in columns:
             connection.execute(text("ALTER TABLE maintenance_records ADD COLUMN source_work_order_id INTEGER"))
+        connection.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_maintenance_source_work_order "
+            "ON maintenance_records(source_work_order_id)"
+        ))
     Base.metadata.create_all(bind=engine)
 
 
