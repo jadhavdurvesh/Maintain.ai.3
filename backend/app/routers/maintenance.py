@@ -11,6 +11,23 @@ from ..deps import get_current_user, CurrentUser
 router = APIRouter(prefix="/api/maintenance", tags=["maintenance"])
 
 
+def _is_worker(current: CurrentUser) -> bool:
+    return current.id is not None and current.role == models.UserRole.technician.value
+
+
+def _machine_for_user(machine_id: int, current: CurrentUser, db: Session):
+    machine = db.query(models.Machine).filter(
+        models.Machine.id == machine_id,
+        models.Machine.organization_id == current.organization_id,
+        models.Machine.archived.is_(False),
+    ).first()
+    if not machine:
+        raise HTTPException(404, "machine not found")
+    if _is_worker(current) and not db.query(models.UserMachineAssignment).filter_by(user_id=current.id, machine_id=machine_id).first():
+        raise HTTPException(404, "machine not assigned to this worker")
+    return machine
+
+
 @router.get("", response_model=List[schemas.MaintenanceRecordOut])
 def list_maintenance(
     machine_id: int | None = None,
@@ -24,6 +41,8 @@ def list_maintenance(
         .join(models.Machine)
         .filter(models.Machine.organization_id == current.organization_id)
     )
+    if _is_worker(current):
+        q = q.join(models.UserMachineAssignment, models.UserMachineAssignment.machine_id == models.MaintenanceRecord.machine_id).filter(models.UserMachineAssignment.user_id == current.id)
     if machine_id:
         q = q.filter(models.MaintenanceRecord.machine_id == machine_id)
     return q.order_by(models.MaintenanceRecord.scheduled_date.desc(), models.MaintenanceRecord.id.desc()).offset(offset).limit(limit).all()
@@ -35,9 +54,9 @@ def schedule_maintenance(
     current: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    machine = db.get(models.Machine, machine_id)
-    if not machine or machine.organization_id != current.organization_id:
-        raise HTTPException(404, "machine not found")
+    if current.role != models.UserRole.admin.value:
+        raise HTTPException(403, "administrator access required")
+    machine = _machine_for_user(machine_id, current, db)
     record = models.MaintenanceRecord(machine_id=machine_id, **payload.model_dump())
     db.add(record)
 
@@ -55,8 +74,13 @@ def complete_maintenance(
     current: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    record = db.get(models.MaintenanceRecord, record_id)
-    if not record or record.machine.organization_id != current.organization_id:
+    record = db.query(models.MaintenanceRecord).join(models.Machine).filter(
+        models.MaintenanceRecord.id == record_id,
+        models.Machine.organization_id == current.organization_id,
+    ).first()
+    if not record:
+        raise HTTPException(404, "maintenance record not found")
+    if _is_worker(current) and not db.query(models.UserMachineAssignment).filter_by(user_id=current.id, machine_id=record.machine_id).first():
         raise HTTPException(404, "maintenance record not found")
     record.status = models.MaintenanceStatus.completed
     record.completed_date = datetime.utcnow()
@@ -90,7 +114,10 @@ def complete_maintenance(
 def upcoming_and_overdue(current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     """Computes due-soon / overdue maintenance from operating hours, per the spec's
     'Smart Maintenance Scheduler': next service = interval - (current_hours mod interval)."""
-    machines = db.query(models.Machine).filter_by(archived=False, organization_id=current.organization_id).all()
+    machines_query = db.query(models.Machine).filter_by(archived=False, organization_id=current.organization_id)
+    if _is_worker(current):
+        machines_query = machines_query.join(models.UserMachineAssignment, models.UserMachineAssignment.machine_id == models.Machine.id).filter(models.UserMachineAssignment.user_id == current.id)
+    machines = machines_query.all()
     results = []
     for m in machines:
         interval = m.maintenance_interval_hours or 500
