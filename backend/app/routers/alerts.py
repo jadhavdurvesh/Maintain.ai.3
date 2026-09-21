@@ -7,6 +7,15 @@ from .. import models, schemas, audit
 from ..database import get_db
 from ..deps import get_current_user, CurrentUser
 
+
+def _can_mutate_alert(alert, current: CurrentUser, db: Session):
+    if current.role == models.UserRole.viewer.value:
+        raise HTTPException(403, "viewers cannot modify alerts")
+    if current.role == models.UserRole.technician.value:
+        assigned = db.query(models.UserMachineAssignment).filter_by(user_id=current.id, machine_id=alert.machine_id).first()
+        if not assigned:
+            raise HTTPException(404, "alert not assigned to this worker")
+
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 
 
@@ -31,6 +40,7 @@ def acknowledge_alert(alert_id: int, current: CurrentUser = Depends(get_current_
     alert = db.get(models.Alert, alert_id)
     if not alert or alert.machine.organization_id != current.organization_id:
         raise HTTPException(404, "alert not found")
+    _can_mutate_alert(alert, current, db)
     alert.acknowledged = True
     db.commit()
     db.refresh(alert)
@@ -43,6 +53,7 @@ def resolve_alert(alert_id: int, current: CurrentUser = Depends(get_current_user
     alert = db.get(models.Alert, alert_id)
     if not alert or alert.machine.organization_id != current.organization_id:
         raise HTTPException(404, "alert not found")
+    _can_mutate_alert(alert, current, db)
     alert.resolved = True
     db.commit()
     db.refresh(alert)
