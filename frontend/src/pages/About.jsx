@@ -38,6 +38,16 @@ export default function About() {
         </div>
       </section>
 
+      <section className="panel section-gap" style={{ textAlign: 'center' }}>
+        <div className="panel-header" style={{ justifyContent: 'center' }}><span className="panel-title">Guided by</span></div>
+        <div className="panel-body" style={{ display: 'flex', justifyContent: 'center' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '12px 18px', borderRadius: 12, border: '1px solid var(--border)', background: 'var(--panel-raised)', color: 'var(--text)', fontWeight: 650 }}>
+            <Users size={17} style={{ color: 'var(--accent)' }} />
+            Dr. A. A. Gadhikar Sir
+          </div>
+        </div>
+      </section>
+
       <section className="panel section-gap">
         <div className="panel-header" style={{ justifyContent: 'center' }}><span className="panel-title">How Maintain.ai works</span></div>
         <div className="panel-body" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
