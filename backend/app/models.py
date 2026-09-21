@@ -152,6 +152,7 @@ class MaintenanceRecord(Base):
     status = Column(Enum(MaintenanceStatus), default=MaintenanceStatus.scheduled)
     performed_by = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
+    source_work_order_id = Column(Integer, ForeignKey("work_orders.id"), nullable=True, unique=True, index=True)
     machine = relationship("Machine", back_populates="maintenance_records")
 
 
