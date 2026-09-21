@@ -90,12 +90,33 @@ def _user_from_token(
             detail="invalid organization context",
         )
 
+    access = db.query(models.UserApplicationAccess).filter(
+        models.UserApplicationAccess.user_id == user.id,
+        models.UserApplicationAccess.application == "engineering",
+        models.UserApplicationAccess.enabled.is_(True),
+    ).first()
+    if not access:
+        raise HTTPException(403, "account is not enabled for the engineering application")
+
     return CurrentUser(
         id=user.id,
         organization_id=user.organization_id,
         username=user.username,
         role=user.role.value,
     )
+
+
+def visible_machine_ids(db: Session, current: CurrentUser, include_archived: bool = False) -> list[int]:
+    """Return machine IDs visible to this identity; use this for secondary resources."""
+    q = db.query(models.Machine.id).filter(models.Machine.organization_id == current.organization_id)
+    if not include_archived:
+        q = q.filter(models.Machine.archived.is_(False))
+    if current.id is not None and current.role == models.UserRole.technician.value:
+        q = q.join(
+            models.UserMachineAssignment,
+            models.UserMachineAssignment.machine_id == models.Machine.id,
+        ).filter(models.UserMachineAssignment.user_id == current.id)
+    return [row[0] for row in q.all()]
 
 
 def _supabase_user_from_token(authorization: str | None, db: Session):
