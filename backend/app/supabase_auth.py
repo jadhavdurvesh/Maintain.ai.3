@@ -1,6 +1,7 @@
 import json
 import os
 import urllib.request
+import urllib.error
 from functools import lru_cache
 
 import jwt
@@ -78,5 +79,12 @@ def invite_user_by_email(email: str, redirect_to: str | None = None, metadata: d
     try:
         with urllib.request.urlopen(req, timeout=10) as response:
             return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        try:
+            body = exc.read().decode("utf-8", errors="replace")
+            detail = json.loads(body).get("msg") or json.loads(body).get("message") or body
+        except Exception:
+            detail = str(exc)
+        raise RuntimeError(f"Supabase invitation failed (HTTP {exc.code}): {detail}") from exc
     except Exception as exc:
         raise RuntimeError(f"Supabase invitation failed: {exc}") from exc
