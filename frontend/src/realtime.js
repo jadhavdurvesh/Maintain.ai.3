@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { getToken } from './api/client.js'
+import api from './api/client.js'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || ''
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || ''
@@ -66,8 +66,7 @@ export function useTelemetryStream() {
     const connect = () => {
       if (stopped) return
       const org = getOrganizationId()
-      const token = getToken()
-      if (!org || !token) {
+      if (!org) {
         closeSocket()
         setStatus(org ? 'waiting-for-auth' : 'waiting-for-org')
         return
@@ -87,8 +86,7 @@ export function useTelemetryStream() {
       socketRef.current = ws
       ws.onopen = () => {
         const currentOrg = getOrganizationId()
-        const currentToken = getToken()
-        if (!currentOrg || !currentToken) {
+        if (!currentOrg) {
           closeSocket()
           setStatus(currentOrg ? 'waiting-for-auth' : 'waiting-for-org')
           return
@@ -97,7 +95,11 @@ export function useTelemetryStream() {
         retryRef.current = 0
         setStatus('connected')
         const topic = 'realtime:org:' + currentOrg + ':telemetry'
-        ws.send(JSON.stringify([
+        api.post('/api/auth/realtime-token', {}).then((result) => {
+          if (ws.readyState !== WebSocket.OPEN) return
+          const realtimeToken = result && result.access_token
+          if (!realtimeToken) { ws.close(1008, 'missing realtime token'); return }
+          ws.send(JSON.stringify([
           String(Date.now()),
           '1',
           topic,
@@ -107,6 +109,7 @@ export function useTelemetryStream() {
             access_token: currentToken,
           },
         ]))
+        }).catch(() => ws.close(1008, 'realtime authorization failed'))
         heartbeatRef.current = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify([String(Date.now()), '2', 'phoenix', 'heartbeat', {}]))
