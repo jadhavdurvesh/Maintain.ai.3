@@ -4,7 +4,7 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text
 
@@ -12,6 +12,7 @@ from . import models
 from .bootstrap import ensure_bootstrap_organization
 from .database import Base, engine
 from .routers import auth
+from .deps import get_current_user, CurrentUser
 
 # Database initialization is deliberately best-effort at import time.
 # Vercel/serverless must be able to import FastAPI even if an old database
@@ -24,6 +25,7 @@ def _initialize_database():
         ensure_user_work_order_schema()
         ensure_lab_ml_schema()
         ensure_tenant_schema()
+        ensure_legacy_application_access_schema()
         ensure_bootstrap_organization()
     except Exception:
         pass
@@ -107,6 +109,22 @@ def ensure_tenant_schema():
             connection.execute(text(f"UPDATE {table} SET {column} = 1 WHERE {column} IS NULL"))
     Base.metadata.create_all(bind=engine)
 
+def ensure_legacy_application_access_schema():
+    """Backfill explicit engineering access for legacy password accounts."""
+    inspector = inspect(engine)
+    if not inspector.has_table("users") or not inspector.has_table("user_application_access"):
+        return
+    with engine.begin() as connection:
+        connection.execute(text(
+            "INSERT INTO user_application_access (user_id, application, enabled, created_at) "
+            "SELECT u.id, 'engineering', TRUE, CURRENT_TIMESTAMP "
+            "FROM users u "
+            "WHERE u.password_hash IS NOT NULL "
+            "AND NOT EXISTS (SELECT 1 FROM user_application_access a "
+            "WHERE a.user_id = u.id AND a.application = 'engineering')"
+        ))
+
+
 _initialize_database()
 
 if os.getenv("SEED_DEMO_DATA", "").lower() == "true":
@@ -122,11 +140,12 @@ app = FastAPI(
     version="0.1.0",
 )
 
+_cors_origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_cors_origins,
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Device-Key", "X-Maintain-Application"],
 )
 
 # Authentication is mandatory and must never be hidden by an optional-router
@@ -169,7 +188,9 @@ def root():
 
 
 @app.get("/api/system/router-status")
-def router_status():
+def router_status(current: CurrentUser = Depends(get_current_user)):
+    if current.role != models.UserRole.admin.value:
+        raise HTTPException(status_code=403, detail="administrator access required")
     return {
         "loaded": [name for name in _ROUTER_NAMES if name not in _ROUTER_LOAD_ERRORS],
         "failed": _ROUTER_LOAD_ERRORS,
