@@ -11,6 +11,7 @@ from ..ml.timer import timer_status, forecast as timer_forecast
 from ..ml.degradation import get_timeline
 from ..ml.intelligence import process_telemetry
 from ..ml.risk_horizons import risk_readiness, fleet_intelligence
+from ..ml import advanced as advanced_model
 from .. import models
 from ..deps import get_current_user, CurrentUser
 
@@ -154,6 +155,17 @@ def get_machine_forecast(machine_id: int, reading_type: str = "temperature", mod
     if model.lower() in {"timer", "timer-84m"}:
         return {"machine_id": machine_id, "reading_type": reading_type, **timer_forecast(values, horizon)}
     return {"machine_id": machine_id, "reading_type": reading_type, **chronos_forecast(values, horizon)}
+
+@router.get("/advanced-model-status")
+def get_advanced_model_status(current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    return advanced_model.model_status(db, current.organization_id)
+
+
+@router.get("/machines/{machine_id}/advanced-risk")
+def get_advanced_risk(machine_id: int, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    machine = _scoped_machine(db, machine_id, current)
+    return advanced_model.predict_machine(db, machine)
+
 
 @router.get('/model-lab')
 def get_model_lab(current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
