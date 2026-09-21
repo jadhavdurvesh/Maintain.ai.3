@@ -49,6 +49,39 @@ Diagnostic rules:
 """
 
 
+def test_connection(db=None, organization_id=None):
+    """Verify the configured AI key can reach the configured Gemini model."""
+    api_key = _resolve_api_key(db, organization_id)
+    if not api_key:
+        return {"ok": False, "configured": False, "message": "No AI API key is configured for this organization."}
+    try:
+        from google import genai
+        from google.genai import types
+    except ImportError:
+        return {"ok": False, "configured": True, "message": "AI provider SDK is not installed on the backend."}
+    try:
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents="Reply with the single word OK.",
+            config=types.GenerateContentConfig(response_mime_type="text/plain"),
+        )
+        if not getattr(response, "text", None):
+            return {"ok": False, "configured": True, "message": "AI provider returned an empty response."}
+        return {"ok": True, "configured": True, "model": GEMINI_MODEL, "message": "AI connection verified."}
+    except Exception as exc:
+        error_text = str(exc).lower()
+        if "api key" in error_text or "permission" in error_text or "unauthenticated" in error_text or "401" in error_text or "403" in error_text:
+            message = "The saved AI API key was rejected or does not have access to the selected model."
+        elif "429" in error_text or "quota" in error_text or "rate" in error_text:
+            message = "The AI API quota or rate limit was reached."
+        elif "404" in error_text or "not found" in error_text:
+            message = "The configured AI model is unavailable for this API key."
+        else:
+            message = "The AI provider could not be reached or returned an error."
+        return {"ok": False, "configured": True, "message": message}
+
+
 def diagnose_with_gemini(
     problem_description: str,
     machine_context: Optional[dict] = None,
