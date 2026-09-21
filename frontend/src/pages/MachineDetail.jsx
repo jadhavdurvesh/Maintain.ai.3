@@ -284,7 +284,7 @@ export default function MachineDetail() {
         </div>
         <div className="panel-body">
           <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 12 }}>Configure early warning points and hard shutdown points for one telemetry signal. Automatic shutdown is separately controlled and requires a connected safety-capable IoT device.</p>
-          <form onSubmit={saveSafety}>
+          {canEdit && <form onSubmit={saveSafety}>
             <div className="chip-row" style={{ marginBottom: 10 }}>
               <label><input type="checkbox" checked={!!safetyForm.enabled} onChange={e => setSafetyForm({...safetyForm, enabled:e.target.checked})} /> Enable limit monitoring</label>
               <label>Signal <select value={safetyForm.monitored_reading_type} onChange={e => setSafetyForm({...safetyForm, monitored_reading_type:e.target.value})}><option value="temperature">Temperature</option><option value="vibration">Vibration</option><option value="current">Current</option><option value="load">Load</option></select></label>
@@ -301,7 +301,8 @@ export default function MachineDetail() {
               <button className="btn" type="submit" disabled={safetyBusy}>{safetyBusy ? 'Saving…' : 'Save Safety Settings'}</button>
               <button className="btn secondary" type="button" onClick={testSafetyShutdown} disabled={safetyBusy || !deviceStatus?.iot_enabled}>Test IoT Shutdown Signal</button>
             </div>
-          </form>
+          </form>}
+          {!canEdit && <div style={{color:'var(--text-faint)',fontSize:12,marginTop:8}}>Safety settings are managed by administrators.</div>}
           <div style={{ marginTop: 10, color: 'var(--text-faint)', fontSize: 11 }}>The app sends a shutdown command to the authenticated IoT safety channel when a hard limit is crossed. For real equipment, the ESP32 should drive a properly rated relay/contactor or independent safety interlock locally; do not use a hobby GPIO as the sole protection for mains or hazardous machinery.</div>
           {safetyEvent && <div style={{ marginTop: 10, padding: 10, borderRadius: 8, background: safetyEvent.shutdown_requested ? 'rgba(255,70,70,.10)' : 'rgba(255,180,0,.10)', color: safetyEvent.shutdown_requested ? 'var(--critical)' : 'var(--warning)', fontSize: 12 }}>{safetyEvent.message}{safetyEvent.shutdown_requested ? ' · Shutdown command issued.' : ' · Warning notification issued.'}</div>}
         </div>
