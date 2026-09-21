@@ -64,7 +64,7 @@ def schedule_maintenance(
         machine.next_maintenance_date = payload.scheduled_date
     db.commit()
     db.refresh(record)
-    audit.log_event(db, "maintenance", record.id, "scheduled", f"{payload.type.title()} maintenance scheduled for {machine.name}: {payload.description or '—'}")
+    audit.log_event(db, "maintenance", record.id, "scheduled", f"{payload.type.title()} maintenance scheduled for {machine.name}: {payload.description or '—'}", performed_by=current.username)
     return record
 
 
@@ -82,12 +82,24 @@ def complete_maintenance(
         raise HTTPException(404, "maintenance record not found")
     if _is_worker(current) and not db.query(models.UserMachineAssignment).filter_by(user_id=current.id, machine_id=record.machine_id).first():
         raise HTTPException(404, "maintenance record not found")
-    record.status = models.MaintenanceStatus.completed
-    record.completed_date = datetime.utcnow()
-    if notes:
-        record.notes = notes
 
     machine = db.get(models.Machine, record.machine_id)
+    if not machine or machine.archived:
+        raise HTTPException(409, "cannot complete maintenance for an archived or missing machine")
+
+    if record.status == models.MaintenanceStatus.completed:
+        if notes and notes != (record.notes or ""):
+            record.notes = notes
+            record.performed_by = current.username
+            db.commit()
+            db.refresh(record)
+        return record
+
+    record.status = models.MaintenanceStatus.completed
+    record.completed_date = datetime.utcnow()
+    record.performed_by = current.username
+    if notes:
+        record.notes = notes
     if machine:
         machine.last_maintenance_date = record.completed_date
         # bump health score back up on completed preventive/corrective work
@@ -105,7 +117,7 @@ def complete_maintenance(
         db, "maintenance", record.id, "completed",
         f"Maintenance completed on {machine.name if machine else record.machine_id}: {record.description or record.type.value}"
         + (f" — {notes}" if notes else ""),
-        performed_by=record.performed_by,
+        performed_by=current.username,
     )
     return record
 
