@@ -206,6 +206,12 @@ def worker_login(
     payload: WorkerLoginIn,
     db: Session = Depends(get_db),
 ):
+    if auth_required() or supabase_auth_enabled():
+        raise HTTPException(
+            status_code=410,
+            detail="Worker username login is disabled when authenticated identity login is enabled",
+        )
+
     username = payload.username.strip()
 
     if not username:
