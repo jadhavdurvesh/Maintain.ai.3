@@ -55,6 +55,7 @@ export default function ModelLab() {
       { icon: BrainCircuit, title: 'TimeRadar', value: data.pretrained?.available ? 'Ready' : 'Optional', detail: data.pretrained?.model || 'Zero-shot anomaly model' },
       { icon: TrendingUp, title: 'Chronos-2', value: data.forecasts?.chronos_2?.available ? 'Ready' : 'Optional', detail: 'Zero-shot signal forecasting' },
       { icon: Timer, title: 'Timer', value: data.forecasts?.timer?.available ? 'Ready' : 'Optional', detail: 'Zero-shot signal forecasting' },
+      { icon: BrainCircuit, title: 'Advanced model', value: data.advanced_model?.trained ? 'Trained' : 'Not trained', detail: data.advanced_model?.model_type || 'Supervised temporal model' },
       { icon: Radio, title: 'Live telemetry', value: data.telemetry?.machines_with_readings ?? 0, detail: (data.telemetry?.reading_count ?? 0) + ' recent readings' },
     ]
   }, [data])
@@ -81,6 +82,7 @@ export default function ModelLab() {
               <Status ok={!!data.pretrained?.available}>{data.pretrained?.available ? 'TimeRadar ready' : 'TimeRadar unavailable'}</Status>
               <Status ok={!!data.forecasts?.chronos_2?.available}>{data.forecasts?.chronos_2?.available ? 'Chronos-2 ready' : 'Chronos-2 optional'}</Status>
               <Status ok={!!data.forecasts?.timer?.available}>{data.forecasts?.timer?.available ? 'Timer ready' : 'Timer optional'}</Status>
+              <Status ok={!!data.advanced_model?.trained}>{data.advanced_model?.trained ? 'Advanced model trained' : 'Advanced model not trained'}</Status>
             </div>
             <div style={{display:'grid',gap:8,fontSize:12,color:'var(--text-dim)'}}>
               <div><b>Pretrained anomaly:</b> {data.pretrained?.model || 'TimeRadar'} · zero-shot · no MAINTAIN AI training</div>
