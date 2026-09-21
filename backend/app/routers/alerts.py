@@ -30,6 +30,8 @@ def list_alerts(
         .join(models.Machine)
         .filter(models.Machine.organization_id == current.organization_id)
     )
+    if current.role == models.UserRole.technician.value:
+        q = q.join(models.UserMachineAssignment, models.UserMachineAssignment.machine_id == models.Alert.machine_id).filter(models.UserMachineAssignment.user_id == current.id)
     if active_only:
         q = q.filter(models.Alert.resolved == False)  # noqa: E712
     return q.order_by(models.Alert.created_at.desc()).all()
