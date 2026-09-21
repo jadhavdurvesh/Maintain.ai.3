@@ -1,44 +1,11 @@
 const BASE_URL = import.meta.env.VITE_API_URL || ''
 const TOKEN_KEY = 'maintain-ai-token'
-
-export function getToken() {
-  return localStorage.getItem(TOKEN_KEY)
-}
-export function setToken(token) {
-  if (token) localStorage.setItem(TOKEN_KEY, token)
-  else localStorage.removeItem(TOKEN_KEY)
-}
-
-let unauthorizedHandler = null
-export function onUnauthorized(fn) {
-  unauthorizedHandler = fn
-}
-
-async function request(path, options = {}) {
-  const token = getToken()
-  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) }
-  if (token) headers['Authorization'] = `Bearer ${token}`
-
-  const res = await fetch(`${BASE_URL}${path}`, { ...options, headers })
-
-  if (res.status === 401) {
-    setToken(null)
-    if (unauthorizedHandler) unauthorizedHandler()
-  }
-  if (!res.ok) {
-    const body = await res.text()
-    throw new Error(`${res.status} ${res.statusText}: ${body}`)
-  }
-  const contentType = res.headers.get('content-type') || ''
-  if (contentType.includes('application/json')) return res.json()
-  return res.text()
-}
-
-export const api = {
-  get: (path) => request(path),
-  post: (path, body) => request(path, { method: 'POST', body: JSON.stringify(body) }),
-  patch: (path, body) => request(path, { method: 'PATCH', body: JSON.stringify(body) }),
-  del: (path) => request(path, { method: 'DELETE' }),
-}
-
-export default api
+export function getToken() { return localStorage.getItem(TOKEN_KEY) }
+export function setToken(token) { if (token) localStorage.setItem(TOKEN_KEY, token); else localStorage.removeItem(TOKEN_KEY) }
+const GET_CACHE_TTL_MS = 15000, getCache = new Map(), getInFlight = new Map()
+export function clearApiCache(prefix = '') { for (const key of getCache.keys()) if (!prefix || key.startsWith(prefix)) getCache.delete(key) }
+let unauthorizedHandler = null; export function onUnauthorized(fn) { unauthorizedHandler = fn }
+let desktopBasePromise
+async function getApiBaseUrl() { if (typeof window !== 'undefined' && window.maintainAI) { desktopBasePromise ||= window.maintainAI.backendUrl(); return desktopBasePromise } return BASE_URL }
+async function request(path, options = {}) { const method=(options.method||'GET').toUpperCase(), isGet=method==='GET', now=Date.now(); if(isGet){const c=getCache.get(path);if(c&&now-c.time<GET_CACHE_TTL_MS)return c.data;const p=getInFlight.get(path);if(p)return p} const token=getToken(), headers={'Content-Type':'application/json','X-Maintain-Application':'engineering',...(options.headers||{})}; if(token)headers.Authorization='Bearer '+token; const controller=new AbortController(), timeout=window.setTimeout(()=>controller.abort(),20000), base=await getApiBaseUrl(); let timedOut=false; const fp=fetch(base+path,{...options,headers,signal:controller.signal}).catch(err=>{ if (err?.name === 'AbortError' || controller.signal.aborted) { timedOut=true; throw new Error(`Request timed out after 20s: ${method} ${path}`) } throw err }).finally(()=>window.clearTimeout(timeout)); if(isGet)getInFlight.set(path,fp); const res=await fp; if(res.status===401){setToken(null);if(unauthorizedHandler)unauthorizedHandler()} if(isGet)getInFlight.delete(path); if(!isGet)clearApiCache(); if(!res.ok){const body=await res.text();throw new Error(res.status+' '+res.statusText+': '+body)} const ct=res.headers.get('content-type')||'', data=ct.includes('application/json')?await res.json():await res.text(); if(isGet)getCache.set(path,{time:Date.now(),data}); return data }
+export const api={get:p=>request(p),post:(p,b)=>request(p,{method:'POST',body:JSON.stringify(b)}),patch:(p,b)=>request(p,{method:'PATCH',body:JSON.stringify(b)}),put:(p,b)=>request(p,{method:'PUT',body:JSON.stringify(b)}),del:p=>request(p,{method:'DELETE'})}; export default api

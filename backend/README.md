@@ -86,3 +86,9 @@ training a real model.
 - **Predictive health scoring** is currently simple (maintenance completion
   bumps it up, nothing decays it automatically) — a good next step once you
   have real sensor history to train against.
+
+## Machine safety interlock
+
+Each machine can have its own telemetry safety policy through the device API. It supports warning-low/warning-high thresholds, independent shutdown-low/shutdown-high thresholds, and a separate automatic-shutdown enable switch. Warning crossings create alerts and notifications. When automatic shutdown is enabled and a hard limit is crossed, the authenticated IoT WebSocket receives a shutdown command.
+
+The ESP32 example includes an optional safety relay output and latches that output off when the command arrives. For real equipment, the relay/contactor and emergency-stop/interlock chain must be independently safety-rated; MAINTAIN AI should be treated as a supervisory control path, not the sole protective device.

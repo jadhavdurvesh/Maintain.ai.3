@@ -82,12 +82,15 @@ def machine_features(db: Session, machine: models.Machine) -> list:
     ]
 
 
-def build_training_data(db: Session):
+def build_training_data(db: Session, machine_ids=None):
     """One training row per active machine: features -> current health_score.
     Sensor columns use compact rolling summaries, keeping the model cheap to
     train and predict while allowing live sensor history to influence results.
     """
-    machines = db.query(models.Machine).filter_by(archived=False).all()
+    query = db.query(models.Machine).filter_by(archived=False)
+    if machine_ids is not None:
+        query = query.filter(models.Machine.id.in_(machine_ids))
+    machines = query.all()
     X, y, machine_ids = [], [], []
     for m in machines:
         X.append(machine_features(db, m))

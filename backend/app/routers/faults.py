@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from .. import models, schemas, audit
@@ -36,7 +36,7 @@ def _get_machine(machine_id: int, current: CurrentUser, db: Session) -> models.M
 
 
 @router.get("", response_model=List[schemas.FaultRecordOut])
-def list_faults(machine_id: int | None = None, unresolved_only: bool = False, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+def list_faults(machine_id: int | None = None, unresolved_only: bool = False, limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0), current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     query = db.query(models.FaultRecord).join(models.Machine).filter(models.Machine.organization_id == current.organization_id)
     if _is_worker(current):
         query = query.join(models.UserMachineAssignment, models.UserMachineAssignment.machine_id == models.Machine.id).filter(models.UserMachineAssignment.user_id == current.id)
@@ -44,11 +44,13 @@ def list_faults(machine_id: int | None = None, unresolved_only: bool = False, cu
         query = query.filter(models.FaultRecord.machine_id == machine_id)
     if unresolved_only:
         query = query.filter(models.FaultRecord.resolved_date.is_(None))
-    return query.order_by(models.FaultRecord.reported_date.desc()).all()
+    return query.order_by(models.FaultRecord.reported_date.desc(), models.FaultRecord.id.desc()).offset(offset).limit(limit).all()
 
 
 @router.post("", response_model=schemas.FaultRecordOut)
 def create_fault(payload: schemas.FaultRecordIn, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current.role == models.UserRole.viewer.value:
+        raise HTTPException(403, "viewers cannot report faults")
     machine = _get_machine(payload.machine_id, current, db)
     fault = models.FaultRecord(**payload.model_dump())
     db.add(fault)
@@ -67,6 +69,8 @@ def create_fault(payload: schemas.FaultRecordIn, current: CurrentUser = Depends(
 
 @router.post("/{fault_id}/resolve", response_model=schemas.FaultRecordOut)
 def resolve_fault(fault_id: int, payload: schemas.FaultResolveIn, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current.role == models.UserRole.viewer.value:
+        raise HTTPException(403, "viewers cannot resolve faults")
     fault = db.query(models.FaultRecord).join(models.Machine).filter(
         models.FaultRecord.id == fault_id,
         models.Machine.organization_id == current.organization_id,
@@ -97,6 +101,8 @@ def resolve_fault(fault_id: int, payload: schemas.FaultResolveIn, current: Curre
 
 @router.post("/{fault_id}/work-order", response_model=schemas.WorkOrderOut)
 def create_work_order_from_fault(fault_id: int, payload: schemas.WorkOrderIn | None = None, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current.role == models.UserRole.viewer.value:
+        raise HTTPException(403, "viewers cannot create work orders")
     fault = db.query(models.FaultRecord).join(models.Machine).filter(
         models.FaultRecord.id == fault_id,
         models.Machine.organization_id == current.organization_id,
@@ -166,3 +172,37 @@ def create_work_order_from_fault(fault_id: int, payload: schemas.WorkOrderIn | N
             notify_work_order_assigned(db, work_order, machine)
 
     return work_order
+
+
+@router.post("/outcome-feedback", response_model=schemas.MLOutcomeFeedbackOut)
+def record_ml_outcome_feedback(
+    payload: schemas.MLOutcomeFeedbackIn,
+    current: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    machine = _get_machine(payload.machine_id, current, db)
+    if payload.fault_id:
+        fault = db.get(models.FaultRecord, payload.fault_id)
+        if not fault or fault.machine_id != machine.id:
+            raise HTTPException(400, "fault does not belong to this machine")
+    if payload.work_order_id:
+        work_order = db.get(models.WorkOrder, payload.work_order_id)
+        if not work_order or work_order.machine_id != machine.id:
+            raise HTTPException(400, "work order does not belong to this machine")
+    allowed = {"confirmed_failure", "preventive_finding", "false_alarm", "no_issue", "unknown"}
+    if payload.outcome_type not in allowed:
+        raise HTTPException(400, f"outcome_type must be one of: {', '.join(sorted(allowed))}")
+    feedback = models.MLOutcomeFeedback(
+        **payload.model_dump(),
+        false_alarm=(payload.false_alarm or payload.outcome_type == "false_alarm"),
+        created_by=current.username,
+    )
+    db.add(feedback)
+    db.commit()
+    db.refresh(feedback)
+    audit.log_event(
+        db, "ml_outcome_feedback", feedback.id, "recorded",
+        f"Technician outcome recorded for {machine.name}: {feedback.outcome_type}",
+        performed_by=current.username,
+    )
+    return feedback

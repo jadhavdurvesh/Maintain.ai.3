@@ -1,0 +1,15 @@
+{
+  "dataset": "NASA C-MAPSS FD001-FD004",
+  "model_version": "shared-temporal-v1.1",
+  "training_assets": 485,
+  "validation_assets": 116,
+  "internal_test_assets": 108,
+  "internal_test_samples": 22149,
+  "internal_test_mae": 34.222023010253906,
+  "internal_test_rmse": 50.87088394165039,
+  "official_nasa_test_assets": 698,
+  "official_nasa_test_mae": 25.117116928100586,
+  "official_nasa_test_rmse": 36.36524200439453,
+  "best_validation_loss": 34.39039982059097,
+  "epochs_completed": 23
+}

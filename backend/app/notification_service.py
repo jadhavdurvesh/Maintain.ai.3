@@ -165,10 +165,12 @@ def notify_machine_workers(
     assignments = (
         db.query(models.UserMachineAssignment, models.User)
         .join(models.User, models.User.id == models.UserMachineAssignment.user_id)
+        .join(models.Machine, models.Machine.id == models.UserMachineAssignment.machine_id)
         .filter(
             models.UserMachineAssignment.machine_id == machine_id,
             models.User.active.is_(True),
             models.User.role == models.UserRole.technician,
+            models.User.organization_id == models.Machine.organization_id,
         )
         .all()
     )

@@ -6,10 +6,10 @@ from typing import List, Optional
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 
-def _resolve_api_key(db=None) -> Optional[str]:
+def _resolve_api_key(db=None, organization_id=None) -> Optional[str]:
     if db is not None:
         from .. import settings_store
-        stored = settings_store.get_setting(db, "gemini_api_key")
+        stored = settings_store.get_setting(db, "gemini_api_key", organization_id)
         if stored:
             return stored
     return os.getenv("GEMINI_API_KEY")
@@ -50,8 +50,9 @@ def diagnose_with_gemini(
     answers: Optional[List[str]] = None,
     conversation_history: Optional[List[dict]] = None,
     db=None,
+    organization_id=None,
 ) -> Optional[dict]:
-    api_key = _resolve_api_key(db)
+    api_key = _resolve_api_key(db, organization_id)
     if not api_key:
         return None
 

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from .. import models, schemas, audit
@@ -42,18 +42,46 @@ def _get_work_order(wo_id: int, current: CurrentUser, db: Session) -> models.Wor
     return work_order
 
 
+def _capture_work_order_outcome(db: Session, work_order: models.WorkOrder, current: CurrentUser):
+    """Create one initial ML outcome automatically when a work order is completed.
+
+    This is intentionally conservative: a linked fault becomes a confirmed-failure
+    training candidate; an unlinked order is recorded as unknown until a technician
+    provides stronger evidence in the Fault Log.
+    """
+    existing = db.query(models.MLOutcomeFeedback).filter_by(work_order_id=work_order.id).first()
+    if existing:
+        return existing
+
+    outcome_type = "confirmed_failure" if work_order.fault_id else "unknown"
+    fault = db.get(models.FaultRecord, work_order.fault_id) if work_order.fault_id else None
+    feedback = models.MLOutcomeFeedback(
+        machine_id=work_order.machine_id,
+        fault_id=work_order.fault_id,
+        work_order_id=work_order.id,
+        outcome_type=outcome_type,
+        corrective_action=work_order.resolution_notes,
+        notes="Automatically captured from completed work order; technician can refine the outcome in Fault Log.",
+        created_by=current.username,
+    )
+    db.add(feedback)
+    return feedback
+
+
 @router.get("", response_model=List[schemas.WorkOrderOut])
-def list_work_orders(status: str | None = None, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+def list_work_orders(status: str | None = None, limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0), current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     query = db.query(models.WorkOrder).join(models.Machine).filter(models.Machine.organization_id == current.organization_id)
     if _is_worker(current):
         query = query.filter(models.WorkOrder.assigned_to == current.username)
     if status:
         query = query.filter(models.WorkOrder.status == status)
-    return query.order_by(models.WorkOrder.created_at.desc()).all()
+    return query.order_by(models.WorkOrder.created_at.desc(), models.WorkOrder.id.desc()).offset(offset).limit(limit).all()
 
 
 @router.post("", response_model=schemas.WorkOrderOut)
 def create_work_order(payload: schemas.WorkOrderIn, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current.role != models.UserRole.admin.value:
+        raise HTTPException(403, "administrator access required")
     if _is_worker(current):
         raise HTTPException(403, "workers cannot create work orders")
 
@@ -112,10 +140,16 @@ def update_work_order(wo_id: int, payload: schemas.WorkOrderUpdate, current: Cur
             if requested_status == "completed" and current_status != "in_progress":
                 raise HTTPException(400, "a work order must be in progress before it can be resolved")
     else:
+        if current.role == models.UserRole.viewer.value:
+            raise HTTPException(403, "viewers cannot modify work orders")
         if "assigned_to" in changes:
             validate_assignee(changes["assigned_to"], current, db)
         if "status" in changes and changes["status"] not in {"pending", "in_progress", "completed"}:
             raise HTTPException(400, "invalid work order status")
+
+    requested_status = changes.get("status")
+    if requested_status == "completed" and work_order.status == models.WorkOrderStatus.completed:
+        return work_order
 
     for field, value in changes.items():
         setattr(work_order, field, value)
@@ -124,15 +158,21 @@ def update_work_order(wo_id: int, payload: schemas.WorkOrderUpdate, current: Cur
         if not work_order.resolution_notes:
             raise HTTPException(400, "resolution notes are required when completing a work order")
         work_order.completed_at = datetime.utcnow()
-        db.add(models.MaintenanceRecord(
-            machine_id=work_order.machine_id,
-            type=models.MaintenanceType.corrective,
-            description=work_order.problem,
-            completed_date=work_order.completed_at,
-            status=models.MaintenanceStatus.completed,
-            performed_by=work_order.assigned_to or current.username,
-            notes=work_order.resolution_notes,
-        ))
+        _capture_work_order_outcome(db, work_order, current)
+        existing_maintenance = db.query(models.MaintenanceRecord).filter_by(
+            source_work_order_id=work_order.id
+        ).first()
+        if not existing_maintenance:
+            db.add(models.MaintenanceRecord(
+                machine_id=work_order.machine_id,
+                type=models.MaintenanceType.corrective,
+                description=work_order.problem,
+                completed_date=work_order.completed_at,
+                status=models.MaintenanceStatus.completed,
+                performed_by=current.username,
+                notes=work_order.resolution_notes,
+                source_work_order_id=work_order.id,
+            ))
 
     db.commit()
     db.refresh(work_order)
@@ -143,7 +183,7 @@ def update_work_order(wo_id: int, payload: schemas.WorkOrderUpdate, current: Cur
             db, "work_order", work_order.id, "completed",
             f"Work order resolved for {machine.name if machine else work_order.machine_id}: {work_order.problem}"
             + (f" — {work_order.resolution_notes}" if work_order.resolution_notes else ""),
-            performed_by=work_order.assigned_to or current.username,
+            performed_by=current.username,
         )
     elif payload.status == "in_progress":
         audit.log_event(db, "work_order", work_order.id, "acknowledged", f"Work order #{work_order.id} acknowledged by {current.username}", performed_by=current.username)

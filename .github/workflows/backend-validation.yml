@@ -2,9 +2,9 @@ name: Backend Validation
 
 on:
   push:
-    branches: [main]
+    branches: [main, Lab]
   pull_request:
-    branches: [main]
+    branches: [main, Lab]
 
 jobs:
   validate:
@@ -21,8 +21,18 @@ jobs:
         run: pip install -r requirements.txt
       - name: Compile backend
         run: python -m compileall -q app
-      - name: Import FastAPI application
+      - name: Install test runner
+        run: pip install pytest
+
+      - name: Import application and assert all routers load
         env:
           DATABASE_URL: sqlite:///./ci-maintain-ai.db
           REQUIRE_AUTH: 'false'
-        run: python -c "from app.main import app; print(app.title)"
+          CORS_ORIGINS: http://localhost:5173
+        run: python -c "from app.main import app, _ROUTER_LOAD_ERRORS; assert not _ROUTER_LOAD_ERRORS, _ROUTER_LOAD_ERRORS; print(app.title)"
+
+      - name: Run architecture regression tests
+        env:
+          DATABASE_URL: sqlite:///./ci-maintain-ai-test.db
+          REQUIRE_AUTH: 'false'
+        run: pytest -q

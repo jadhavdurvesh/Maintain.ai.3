@@ -3,6 +3,7 @@ import api from '../api/client.js'
 import StatusBadge from '../components/StatusBadge.jsx'
 import { Loading, ErrorState } from './Dashboard.jsx'
 import { usePageHeader } from '../PageHeaderContext.jsx'
+import { useAuth } from '../AuthContext.jsx'
 
 export default function Maintenance() {
   usePageHeader('Maintenance')
@@ -12,13 +13,24 @@ export default function Maintenance() {
   const [error, setError] = useState(null)
   const [form, setForm] = useState({ machine_id: '', type: 'preventive', description: '', scheduled_date: '' })
 
+  const { user } = useAuth()
+  const canAdmin = user?.role === 'admin'
+  const canComplete = user?.role === 'admin' || user?.role === 'technician'
+
   const load = () => {
-    Promise.all([
+    setError(null)
+    Promise.allSettled([
       api.get('/api/maintenance/due/upcoming'),
-      api.get('/api/maintenance'),
+      api.get('/api/maintenance?limit=50'),
       api.get('/api/machines'),
-    ]).then(([u, r, m]) => { setUpcoming(u); setRecords(r); setMachines(m) })
-      .catch((e) => setError(e.message))
+    ]).then(([u, r, m]) => {
+      const failures = []
+      if (u.status === 'fulfilled') setUpcoming(u.value); else failures.push(`upcoming maintenance: ${u.reason?.message || u.reason}`)
+      if (r.status === 'fulfilled') setRecords(r.value); else failures.push(`maintenance records: ${r.reason?.message || r.reason}`)
+      if (m.status === 'fulfilled') setMachines(m.value); else failures.push(`machines: ${m.reason?.message || m.reason}`)
+      if (failures.length === 3) setError(failures.join(' | '))
+      else if (failures.length) setError(`Some maintenance data could not be loaded: ${failures.join(' | ')}`)
+    })
   }
 
   useEffect(() => { load() }, [])
@@ -63,7 +75,7 @@ export default function Maintenance() {
       </div>
 
       <div className="grid-2">
-        <div className="panel">
+        {canAdmin && <div className="panel">
           <div className="panel-header"><span className="panel-title">Schedule Maintenance</span></div>
           <form className="panel-body" onSubmit={schedule}>
             <div className="field">
@@ -92,7 +104,7 @@ export default function Maintenance() {
             </div>
             <button className="btn" type="submit">Schedule</button>
           </form>
-        </div>
+        </div>}
 
         <div className="panel">
           <div className="panel-header"><span className="panel-title">Maintenance Records</span></div>
@@ -103,7 +115,7 @@ export default function Maintenance() {
                 <tr key={r.id}>
                   <td>{r.description || r.type}</td>
                   <td><StatusBadge status={r.status === 'completed' ? 'healthy' : 'warning'} /></td>
-                  <td>{r.status !== 'completed' && <button className="btn secondary" onClick={() => complete(r.id)}>Mark done</button>}</td>
+                  <td>{canComplete && r.status !== 'completed' && <button className="btn secondary" onClick={() => complete(r.id)}>Mark done</button>}</td>
                 </tr>
               ))}
               {records.length === 0 && <tr><td colSpan={3} className="empty-state">Nothing scheduled yet.</td></tr>}

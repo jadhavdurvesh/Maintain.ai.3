@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import api from '../api/client.js'
+import { formatDateTime } from '../utils/dates.js'
 import { Loading, ErrorState } from './Dashboard.jsx'
 import { usePageHeader } from '../PageHeaderContext.jsx'
 
@@ -29,7 +30,7 @@ export default function History() {
   const [error, setError] = useState(null)
 
   const load = () => {
-    const query = filter ? `?entity_type=${filter}&limit=200` : '?limit=200'
+    const query = filter ? `?entity_type=${filter}&limit=50` : '?limit=50'
     Promise.all([api.get(`/api/audit-log${query}`), api.get('/api/audit-log/count')])
       .then(([e, c]) => { setEntries(e); setCount(c.total_events) })
       .catch((e) => setError(e.message))
@@ -69,7 +70,7 @@ export default function History() {
             {entries.map((e) => (
               <tr key={e.id}>
                 <td className="mono" style={{ whiteSpace: 'nowrap', color: 'var(--text-faint)' }}>
-                  {new Date(e.created_at + 'Z').toLocaleString()}
+                  {formatDateTime(e.created_at)}
                 </td>
                 <td>
                   <span className={`badge ${ACTION_TONE[e.action] || 'neutral'}`} style={{ marginRight: 8 }}>{e.action}</span>

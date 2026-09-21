@@ -1,7 +1,9 @@
 import { Routes, Route, NavLink } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useTelemetryStream } from './realtime.js'
 import {
   LayoutDashboard, Factory, Wrench, ClipboardList, Bot,
-  AlertTriangle, Package, BarChart3, Settings as SettingsIcon, History as HistoryIcon, Info, Bug,
+  AlertTriangle, Package, BarChart3, Settings as SettingsIcon, History as HistoryIcon, Info, Bug, BrainCircuit,
 } from 'lucide-react'
 
 import { PageHeaderProvider, useCurrentHeader } from './PageHeaderContext.jsx'
@@ -22,6 +24,7 @@ import Reports from './pages/Reports.jsx'
 import SettingsPage from './pages/Settings.jsx'
 import History from './pages/History.jsx'
 import About from './pages/About.jsx'
+import ModelLab from './pages/ModelLab.jsx'
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -33,6 +36,7 @@ const NAV = [
   { to: '/alerts', label: 'Alerts', icon: AlertTriangle },
   { to: '/spare-parts', label: 'Spare Parts', icon: Package },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
+  { to: '/model-lab', label: 'AI Model Lab', icon: BrainCircuit },
   { to: '/history', label: 'History', icon: HistoryIcon },
   { to: '/settings', label: 'Settings', icon: SettingsIcon },
   { to: '/about', label: 'About', icon: Info },
@@ -44,7 +48,14 @@ function Topbar({ theme, setTheme }) {
 }
 
 function Sidebar() {
-  return <div className="sidebar-glass"><div className="sidebar-inner"><div className="brand"><span className="brand-status-dot" /><div><div className="brand-mark">MAINTAIN AI</div><div className="brand-sub">predictive maintenance</div></div></div><nav className="nav-group">{NAV.map(({ to, label, icon: Icon, end }) => <NavLink key={to} to={to} end={end} className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}><Icon size={16} strokeWidth={1.75} />{label}</NavLink>)}</nav></div></div>
+  const { status: streamStatus } = useTelemetryStream()
+  const [desktopStatus, setDesktopStatus] = useState(null)
+  useEffect(() => {
+    if (!window.maintainAI) return
+    window.maintainAI.getConnectionStatus().then(setDesktopStatus)
+    return window.maintainAI.onConnectionStatus(setDesktopStatus)
+  }, [])
+  return <div className="sidebar-glass"><div className="sidebar-inner"><div className="brand"><span className={`brand-status-dot${streamStatus === "offline" || streamStatus === "reconnecting" ? " offline" : ""}`} title={`Live telemetry: ${streamStatus}`} /><div><div className="brand-mark">MAINTAIN AI</div><div className="brand-sub">predictive maintenance</div></div></div><nav className="nav-group">{NAV.map(({ to, label, icon: Icon, end }) => <NavLink key={to} to={to} end={end} className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}><Icon size={16} strokeWidth={1.75} />{label}</NavLink>)}</nav></div></div>
 }
 
 export default function App() {
@@ -64,6 +75,7 @@ export default function App() {
     <Route path="/alerts" element={<Alerts />} />
     <Route path="/spare-parts" element={<SpareParts />} />
     <Route path="/reports" element={<Reports />} />
+    <Route path="/model-lab" element={<ModelLab />} />
     <Route path="/history" element={<History />} />
     <Route path="/settings" element={<SettingsPage />} />
     <Route path="/about" element={<About />} />

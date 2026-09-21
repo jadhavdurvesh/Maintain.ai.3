@@ -1,57 +1,13 @@
-const { app, BrowserWindow } = require('electron')
+const { app, BrowserWindow, ipcMain, net } = require('electron')
 const path = require('path')
-const { spawn } = require('child_process')
-const http = require('http')
 
-let backendProcess = null
+const path = require('path')
+
 let mainWindow = null
 
-const isDev = !app.isPackaged
-
-function backendBinaryPath() {
-  const exeName = process.platform === 'win32' ? 'maintain-ai-backend.exe' : 'maintain-ai-backend'
-  return path.join(process.resourcesPath, 'backend', exeName)
-}
-
-function waitForServer(url, timeoutMs = 20000) {
-  return new Promise((resolve, reject) => {
-    const start = Date.now()
-    const check = () => {
-      http.get(url, () => resolve())
-        .on('error', () => {
-          if (Date.now() - start > timeoutMs) reject(new Error('Backend did not respond in time'))
-          else setTimeout(check, 300)
-        })
-    }
-    check()
-  })
-}
-
-function startBackend() {
-  if (isDev) {
-    // In dev, run the backend yourself (see desktop/README.md) — Electron
-    // just points at it, same as it points at the Vite dev server.
-    return Promise.resolve()
-  }
-
-  // Per-user, per-OS app-data folder — survives app updates/reinstalls,
-  // unlike anything stored inside the install directory itself.
-  const dbPath = path.join(app.getPath('userData'), 'maintain_ai.db')
-
-  backendProcess = spawn(backendBinaryPath(), [], {
-    env: {
-      ...process.env,
-      DATABASE_URL: `sqlite:///${dbPath.replace(/\\/g, '/')}`,
-      MODEL_PATH: path.join(app.getPath('userData'), 'risk_model.joblib'),
-      PORT: '8000',
-    },
-  })
-  backendProcess.stdout.on('data', (d) => console.log(`[backend] ${d}`))
-  backendProcess.stderr.on('data', (d) => console.error(`[backend] ${d}`))
-  backendProcess.on('error', (err) => console.error('Failed to start backend:', err))
-
-  return waitForServer('http://127.0.0.1:8000/')
-}
+// The desktop installer is a client for the hosted MAINTAIN AI backend.
+// The Vite build embeds VITE_API_URL into the frontend bundle.
+const backendUrl = process.env.MAINTAIN_AI_API_URL || 'https://maintain-ai-3.vercel.app'\nlet connectionStatus = { state: 'checking', backendUrl, checkedAt: null }\nlet connectionTimer = null\n\nfunction checkBackend() {\n  const started = Date.now()\n  const request = net.request(`${backendUrl.replace(/\\/$/, '')}/api/auth/status`)\n  let settled = false\n  const finish = (state, error = null) => {\n    if (settled) return\n    settled = true\n    connectionStatus = { state, backendUrl, latencyMs: Date.now() - started, checkedAt: new Date().toISOString(), error }\n    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('desktop:connection-status', connectionStatus)\n  }\n  request.on('response', response => finish(response.statusCode >= 200 && response.statusCode < 500 ? 'connected' : 'unavailable'))\n  request.on('error', error => finish('offline', error.message))\n  request.setHeader('Accept', 'application/json')\n  request.end()\n}\n\nipcMain.handle('desktop:get-backend-url', () => backendUrl)\nipcMain.handle('desktop:get-connection-status', () => connectionStatus)
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -62,12 +18,12 @@ function createWindow() {
     title: 'MAINTAIN AI',
     backgroundColor: '#12161c',
     webPreferences: {
-      contextIsolation: true,
+      contextIsolation: true,\n      preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
     },
   })
 
-  if (isDev) {
+  if (!app.isPackaged) {
     mainWindow.loadURL('http://localhost:5173')
     mainWindow.webContents.openDevTools({ mode: 'detach' })
   } else {
@@ -77,26 +33,15 @@ function createWindow() {
   mainWindow.on('closed', () => { mainWindow = null })
 }
 
-app.whenReady().then(async () => {
-  try {
-    await startBackend()
-  } catch (err) {
-    console.error('Backend failed to become ready:', err)
-    // Still open the window — it'll show the app's own "couldn't reach backend" screen
-    // instead of a blank Electron window, which is more useful for debugging.
-  }
-  createWindow()
+app.whenReady().then(() => {
+  console.log('MAINTAIN AI desktop client configured for:', backendUrl)
+  createWindow()\n  checkBackend()\n  connectionTimer = setInterval(checkBackend, 10000)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
 
-app.on('window-all-closed', () => {
-  if (backendProcess) backendProcess.kill()
+app.on('before-quit', () => { if (connectionTimer) clearInterval(connectionTimer) })\n\napp.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
-})
-
-app.on('before-quit', () => {
-  if (backendProcess) backendProcess.kill()
 })

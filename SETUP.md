@@ -101,6 +101,46 @@ cd maintain-ai/backend && python3 -m uvicorn app.main:app --reload
 cd maintain-ai/frontend && npm run dev
 ```
 
+## 5. (Optional) Enable pretrained time-series intelligence
+
+The normal backend does not require PyTorch or pretrained models. For local/desktop predictive-maintenance development, install the heavier ML stack separately:
+
+```bash
+cd maintain-ai
+python3 -m pip install -r backend/requirements-ml.txt
+python3 scripts/install_pretrained_models.py
+# Optional: also cache Timer + Chronos-2 zero-shot forecasting models
+python3 scripts/install_pretrained_models.py --with-forecasts
+```
+
+This installs the bundled **TimeRadar** checkpoint from the public project into:
+
+```text
+backend/app/ml/artifacts/pretrained/TimeRadar/
+```
+
+The application uses TimeRadar in **zero-shot anomaly-detection mode**. It does not train or modify the pretrained weights. The Machine Detail page exposes the resulting anomaly signal when supported telemetry is available.
+
+Set `MAINTAIN_PRETRAINED_FORECASTS=1` in the backend environment to enable the optional zero-shot Timer and Chronos-2 forecasting endpoints. These models forecast future signal values; they do not produce calibrated failure probabilities.
+
+The anomaly score is deliberately **not presented as a failure probability**. Calibrated 24h/48h/7d failure risk will be added only after MAINTAIN AI has sufficient point-in-time telemetry and technician-confirmed outcomes.
+
+If the optional ML stack or checkpoint is missing, the rest of MAINTAIN AI continues to work normally and the Machine Detail page reports that the pretrained signal is unavailable.
+
+## 6. Hosted PostgreSQL
+
+The online backend is PostgreSQL-ready and uses the same SQLAlchemy models as local SQLite. Set `DATABASE_URL` on the backend:
+
+```env
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DATABASE
+```
+
+PostgreSQL uses connection pooling and stale-connection checks. SQLite remains the default when `DATABASE_URL` is not set, so local development is unchanged.
+
+For the hosted deployment, provision a managed PostgreSQL database and add its `DATABASE_URL` only to the backend environment. **Never put the database URL in the frontend or desktop app.** Clients continue to communicate only with FastAPI.
+
+Before moving production data, take a backup and verify the hosted schema with the application/API test suite.
+
 ## Troubleshooting
 
 **"Address already in use" on port 8000 or 5173**
@@ -129,3 +169,8 @@ the Reports page's buttons:
 - http://localhost:8000/api/reports/export/csv
 - http://localhost:8000/api/reports/export/pdf
 - http://localhost:8000/api/reports/export/excel
+
+
+## 7. Supabase Realtime configuration
+
+Set backend `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and backend-only `SUPABASE_SECRET_KEY`. Set frontend `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`. Telemetry is persisted in Neon first, then published to private organization-scoped Supabase Realtime topics (`org:<organization_id>:telemetry`). Never expose the secret key to frontend or desktop.

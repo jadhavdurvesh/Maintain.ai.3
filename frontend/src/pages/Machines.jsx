@@ -4,6 +4,7 @@ import api from '../api/client.js'
 import StatusBadge from '../components/StatusBadge.jsx'
 import { Loading, ErrorState } from './Dashboard.jsx'
 import { usePageHeader } from '../PageHeaderContext.jsx'
+import { useAuth } from '../AuthContext.jsx'
 
 const EMPTY_FORM = {
   machine_code: '', name: '', category: 'induction_motor', manufacturer: '',
@@ -17,12 +18,14 @@ export default function Machines() {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const navigate = useNavigate()
+  const { authRequired, user } = useAuth()
+  const canManageMachines = !authRequired || user?.role === 'admin'
 
-  usePageHeader('Machines & Assets', (
+  usePageHeader('Machines & Assets', canManageMachines ? (
     <button className="btn" onClick={() => setShowForm((s) => !s)}>
       {showForm ? 'Cancel' : '+ Add Machine'}
     </button>
-  ))
+  ) : null)
 
   const load = () => api.get('/api/machines').then(setMachines).catch((e) => setError(e.message))
 
@@ -49,7 +52,7 @@ export default function Machines() {
 
   return (
     <>
-      {showForm && (
+      {showForm && canManageMachines && (
         <div className="panel section-gap">
           <div className="panel-header"><span className="panel-title">New Machine</span></div>
           <form className="panel-body" onSubmit={submit}>

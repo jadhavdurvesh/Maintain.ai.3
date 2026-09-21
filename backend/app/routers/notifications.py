@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from .. import models
 from ..database import get_db
-from ..deps import CurrentUser, get_authenticated_user
+from ..deps import CurrentUser, get_current_user
 from ..notification_service import firebase_diagnostics
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
@@ -21,7 +21,7 @@ class DeviceRegistration(BaseModel):
 @router.post("/register-device")
 def register_device(
     payload: DeviceRegistration,
-    current: CurrentUser = Depends(get_authenticated_user),
+    current: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     if not current.id:
@@ -53,7 +53,7 @@ def register_device(
 @router.delete("/device")
 def unregister_device(
     device_token: str,
-    current: CurrentUser = Depends(get_authenticated_user),
+    current: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     device = (
@@ -74,7 +74,7 @@ def unregister_device(
 def list_notifications(
     unread_only: bool = False,
     limit: int = 100,
-    current: CurrentUser = Depends(get_authenticated_user),
+    current: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     limit = max(1, min(limit, 100))
@@ -98,7 +98,7 @@ def list_notifications(
 
 @router.get("/diagnostics")
 def notification_diagnostics(
-    current: CurrentUser = Depends(get_authenticated_user),
+    current: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     if not current.id:
@@ -109,7 +109,7 @@ def notification_diagnostics(
 @router.post("/{notification_id}/read")
 def mark_read(
     notification_id: int,
-    current: CurrentUser = Depends(get_authenticated_user),
+    current: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     row = (
@@ -129,7 +129,7 @@ def mark_read(
 
 @router.post("/read-all")
 def mark_all_read(
-    current: CurrentUser = Depends(get_authenticated_user),
+    current: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     count = (

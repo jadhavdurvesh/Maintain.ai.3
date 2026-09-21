@@ -30,11 +30,14 @@ def _write_sheet(wb, title, headers, rows):
     return ws
 
 
-def build_excel_report(db: Session) -> bytes:
+def build_excel_report(db: Session, organization_id: int | None = None) -> bytes:
     wb = Workbook()
     wb.remove(wb.active)  # drop the default empty sheet
 
-    machines = db.query(models.Machine).filter_by(archived=False).all()
+    machine_query = db.query(models.Machine).filter_by(archived=False)
+    if organization_id is not None:
+        machine_query = machine_query.filter(models.Machine.organization_id == organization_id)
+    machines = machine_query.all()
 
     _write_sheet(
         wb, "Machines",
@@ -55,11 +58,12 @@ def build_excel_report(db: Session) -> bytes:
         rel_rows,
     )
 
-    faults = db.query(models.FaultRecord).all()
+    faults_query = db.query(models.FaultRecord).join(models.Machine).filter(models.Machine.organization_id == organization_id) if organization_id is not None else db.query(models.FaultRecord)
+    faults = faults_query.all()
     cause_counts = Counter((f.cause or "unspecified") for f in faults).most_common(20)
     _write_sheet(wb, "Failure Analysis", ["Cause", "Occurrences"], [[c, n] for c, n in cause_counts])
 
-    work_orders = db.query(models.WorkOrder).all()
+    work_orders = db.query(models.WorkOrder).join(models.Machine).filter(models.Machine.organization_id == organization_id).all() if organization_id is not None else db.query(models.WorkOrder).all()
     machine_names = {m.id: m.name for m in machines}
     _write_sheet(
         wb, "Work Orders",
@@ -68,14 +72,14 @@ def build_excel_report(db: Session) -> bytes:
           wo.assigned_to, wo.created_at.strftime("%Y-%m-%d %H:%M") if wo.created_at else ""] for wo in work_orders],
     )
 
-    parts = db.query(models.SparePart).all()
+    parts = db.query(models.SparePart).filter(models.SparePart.organization_id == organization_id).all() if organization_id is not None else db.query(models.SparePart).all()
     _write_sheet(
         wb, "Spare Parts",
         ["Name", "Part Number", "Quantity", "Minimum Stock", "Compatible Categories"],
         [[p.name, p.part_number, p.quantity, p.minimum_stock, p.compatible_machine_categories] for p in parts],
     )
 
-    alerts = db.query(models.Alert).filter_by(resolved=False).all()
+    alerts = db.query(models.Alert).join(models.Machine).filter(models.Alert.resolved == False, models.Machine.organization_id == organization_id).all() if organization_id is not None else db.query(models.Alert).filter_by(resolved=False).all()
     _write_sheet(
         wb, "Active Alerts",
         ["Machine", "Type", "Severity", "Message", "Created At"],

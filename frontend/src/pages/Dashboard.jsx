@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Factory, CheckCircle2, AlertTriangle, Flame, ClipboardList, CalendarClock, Bell } from 'lucide-react'
 import api from '../api/client.js'
+import { parseBackendDate } from '../utils/dates.js'
 import StatusBadge from '../components/StatusBadge.jsx'
 import { HealthDistributionChart, MachineHealthBarChart } from '../components/Charts.jsx'
 import { usePageHeader } from '../PageHeaderContext.jsx'
@@ -17,9 +18,13 @@ export default function Dashboard() {
   const [recentFaults, setRecentFaults] = useState([])
   const [recentActivity, setRecentActivity] = useState([])
   const [riskPredictions, setRiskPredictions] = useState(null)
+  const [pretrainedStatus, setPretrainedStatus] = useState(null)
+  const [fleetIntelligence, setFleetIntelligence] = useState(null)
+  const [riskReadiness, setRiskReadiness] = useState(null)
   const [error, setError] = useState(null)
 
   useEffect(() => {
+    const optional = (path, fallback) => api.get(path).catch(() => fallback)
     Promise.all([
       api.get('/api/reports/dashboard'),
       api.get('/api/machines'),
@@ -28,11 +33,14 @@ export default function Dashboard() {
       api.get('/api/reports/reliability'),
       api.get('/api/reports/recent-faults'),
       api.get('/api/reports/recent-activity'),
-      api.get('/api/analytics/risk-predictions'),
+      optional('/api/analytics/risk-predictions', { available: false, reason: 'Risk predictions are not available on this deployment yet.' }),
+      optional('/api/analytics/pretrained-model-status', { configured: false, model: 'TimeRadar' }),
+      optional('/api/analytics/fleet-intelligence', { machines: [] }),
+      optional('/api/analytics/risk-readiness', { horizons: {}, message: 'Risk-readiness analytics are not available on this deployment yet.' }),
     ])
-      .then(([s, m, a, u, r, rf, ra, risk]) => {
+      .then(([s, m, a, u, r, rf, ra, risk, pretrained, fleet, readiness]) => {
         setSummary(s); setMachines(m); setAlerts(a); setUpcoming(u); setReliability(r)
-        setRecentFaults(rf); setRecentActivity(ra); setRiskPredictions(risk)
+        setRecentFaults(rf); setRecentActivity(ra); setRiskPredictions(risk); setPretrainedStatus(pretrained); setFleetIntelligence(fleet); setRiskReadiness(readiness)
       })
       .catch((e) => setError(e.message))
   }, [])
@@ -119,6 +127,28 @@ export default function Dashboard() {
 
       <div className="panel section-gap">
         <div className="panel-header">
+          <span className="panel-title">Temporal AI Intelligence</span>
+          <span className={'badge ' + (pretrainedStatus?.configured ? 'healthy' : 'warning')}>
+            {pretrainedStatus?.configured ? 'Ready' : 'Optional'}
+          </span>
+        </div>
+        <div className="panel-body">
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center' }}>
+            <div>
+              <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>Pretrained foundation model</div>
+              <div className="mono" style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>{pretrainedStatus?.model || 'TimeRadar'}</div>
+            </div>
+            <div style={{ maxWidth: 650, color: 'var(--text-faint)', fontSize: 12 }}>
+              {pretrainedStatus?.configured
+                ? 'Zero-shot anomaly inference is available for machines with supported telemetry. Failure probability remains separate and uncalibrated.'
+                : 'Install the optional ML stack and pretrained checkpoint to enable zero-shot temporal anomaly inference. The rest of the application remains fully functional without it.'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="panel section-gap">
+        <div className="panel-header">
           <span className="panel-title">AI Risk Predictions</span>
           <span className="badge neutral">local model</span>
         </div>
@@ -148,6 +178,58 @@ export default function Dashboard() {
               )}
             </div>
           )}
+        </div>
+      </div>
+
+      <div className="panel section-gap">
+        <div className="panel-header">
+          <span className="panel-title">Fleet Degradation Intelligence</span>
+          <span className="badge neutral">Live evidence</span>
+        </div>
+        <div className="panel-body">
+          {fleetIntelligence?.machines?.length ? (
+            <table>
+              <thead><tr><th>Machine</th><th>Category</th><th>Degradation</th><th>Trend</th><th>Signals</th></tr></thead>
+              <tbody>
+                {fleetIntelligence.machines.slice(0, 12).map((m) => (
+                  <tr key={m.machine_id} className="clickable" onClick={() => navigate(`/machines/${m.machine_id}`)}>
+                    <td title={m.machine_name}>{m.machine_name}</td>
+                    <td>{m.category}</td>
+                    <td className="mono">{Number(m.degradation_score).toFixed(3)}</td>
+                    <td className="mono">{Number(m.trend_score).toFixed(3)}</td>
+                    <td className="mono">{m.active_signal_count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : <div className="empty-state">Collecting live telemetry for fleet intelligence…</div>}
+          <div style={{marginTop:10,color:'var(--text-faint)',fontSize:11}}>
+            Current evidence is shown for operational visibility. It is not a failure probability and is not used to rank model quality.
+          </div>
+        </div>
+      </div>
+
+      <div className="panel section-gap">
+        <div className="panel-header">
+          <span className="panel-title">Future Failure-Risk Readiness</span>
+          <span className="badge neutral">Calibration pending</span>
+        </div>
+        <div className="panel-body">
+          <div style={{color:'var(--text-faint)',fontSize:12,marginBottom:10}}>{riskReadiness?.message || 'Collecting leakage-safe outcomes…'}</div>
+          <table>
+            <thead><tr><th>Horizon</th><th>Complete labels</th><th>Positive outcomes</th><th>Negative outcomes</th><th>Status</th></tr></thead>
+            <tbody>
+              {Object.entries(riskReadiness?.horizons || {}).map(([h, v]) => (
+                <tr key={h}>
+                  <td className="mono">{h}</td>
+                  <td className="mono">{v.complete_labels}</td>
+                  <td className="mono">{v.positive_outcomes}</td>
+                  <td className="mono">{v.negative_outcomes}</td>
+                  <td><span className="badge neutral">Not calibrated</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -342,7 +424,7 @@ export function Loading({ variant = 'table' }) {
 
 function timeAgo(isoString) {
   if (!isoString) return 'unknown time'
-  const diffMs = Date.now() - new Date(isoString + 'Z').getTime()
+  const diffMs = Date.now() - parseBackendDate(isoString).getTime()
   const hours = Math.floor(diffMs / 3600000)
   if (hours < 1) return 'just now'
   if (hours < 24) return `${hours}h ago`

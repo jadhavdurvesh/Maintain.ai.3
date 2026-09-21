@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, EmailStr
 
 
 class ComponentIn(BaseModel):
@@ -227,3 +227,54 @@ class MachineAssignmentOut(BaseModel):
     machine_id: int
     machine_name: str
     assigned: bool = True
+
+class MachineDetailOut(BaseModel):
+    machine: MachineOut
+    components: List[ComponentOut]
+    readings: List[SensorReadingOut]
+    maintenance: List[MaintenanceRecordOut]
+    device_status: dict
+
+
+class MLOutcomeFeedbackIn(BaseModel):
+    machine_id: int
+    fault_id: Optional[int] = None
+    work_order_id: Optional[int] = None
+    outcome_type: str
+    confirmed_root_cause: Optional[str] = None
+    failed_component: Optional[str] = None
+    corrective_action: Optional[str] = None
+    downtime_minutes: Optional[float] = None
+    false_alarm: bool = False
+    notes: Optional[str] = None
+
+
+class MLOutcomeFeedbackOut(MLOutcomeFeedbackIn):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    created_by: Optional[str]
+    created_at: datetime
+
+
+class OrganizationInvitationIn(BaseModel):
+    email: EmailStr
+    role: str = "technician"
+    application: str = "workforce"
+
+
+class OrganizationInvitationOut(BaseModel):
+    id: int
+    email: str
+    role: str
+    application: str
+    status: str
+    created_at: datetime
+
+
+class OrganizationMemberOut(BaseModel):
+    user_id: int
+    username: str
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    role: str
+    applications: List[str]

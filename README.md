@@ -30,7 +30,7 @@
 
 **MAINTAIN AI** is a predictive-maintenance and maintenance-management platform designed to help industrial teams monitor assets, identify developing problems, manage maintenance operations, and make better decisions from machine data.
 
-The platform combines a traditional rule-based diagnostic engine, a locally trained machine-learning model, and an optional AI maintenance assistant. It can operate through a browser or as an installable desktop application, while optional ESP32/IoT integration provides a path from manual machine records to live sensor data.
+The platform combines a traditional rule-based diagnostic engine, live telemetry anomaly detection, an optional pretrained time-series foundation model, a locally trained machine-learning baseline, and an optional AI maintenance assistant. The pretrained temporal layer currently runs TimeRadar in zero-shot anomaly-detection mode; calibrated future failure risk is kept separate until MAINTAIN AI has sufficient point-in-time telemetry and technician-confirmed outcomes. It can operate through a browser or as an installable desktop application, while optional ESP32/IoT integration provides a path from manual machine records to live sensor data.
 
 ```text
                          MAINTAIN AI
@@ -265,6 +265,15 @@ The original certificate identifies the tested target, test date, Grade A result
                         AI Maintenance
                            Assistant
 ```
+
+## 📚 Project Documentation
+
+The implementation is documented in two living documents:
+
+- [`docs/FEATURES_AND_ARCHITECTURE.md`](docs/FEATURES_AND_ARCHITECTURE.md) — every major feature, data flow, current model layer, limitations, and current status.
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — next implementation phases, real predictive-risk model plan, evaluation criteria, RUL conditions, and deployment direction.
+
+These documents distinguish implemented functionality from experimental/optional model integrations and future work.
 
 ## 🛠️ Technology Stack
 

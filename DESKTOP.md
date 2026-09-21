@@ -1,139 +1,113 @@
-# Building an Installable Desktop App
+# MAINTAIN AI Desktop — Installable Cloud Client
 
-This turns the web app into a real installer (.exe on Windows, .dmg on Mac,
-.AppImage/.deb on Linux) that a user can double-click and run — no Python,
-no Node, no terminal required on their end.
+The desktop application is an Electron client that connects to the hosted MAINTAIN AI backend. The installer contains the React/Vite frontend, but does not start or bundle a local FastAPI server.
 
-I built and actually ran this pipeline end to end while putting it together
-(including launching the packaged app itself, not just the pieces) — it
-works. Two notes on what that testing did and didn't cover are at the
-bottom.
-
-## How it fits together
+## Architecture
 
 ```
-backend/  →  PyInstaller  →  a single native executable (~60MB, no Python needed)
-frontend/ →  vite build   →  static HTML/CSS/JS
-                                      │
-                                      ▼
-                    desktop/ (Electron) bundles both:
-                    - spawns the backend executable as a child process
-                    - loads the frontend from disk (file://)
-                    - points the backend's database at the OS's per-user
-                      app-data folder, so data survives updates/reinstalls
-                                      │
-                                      ▼
-                    electron-builder → .exe / .dmg / .AppImage installer
+Windows / macOS / Linux
+          │
+          ▼
+   MAINTAIN AI Desktop
+        Electron
+          │
+          │ HTTPS + WSS
+          ▼
+ maintain-ai-3.vercel.app
+          │
+          ▼
+    FastAPI backend
+          │
+          ├── Database
+          ├── ML / pretrained models
+          ├── WebSocket telemetry
+          ├── Reports / exports
+          └── Authentication
 ```
 
-The frontend still just calls the backend over `http://127.0.0.1:8000` —
-same code path as the web version. Electron doesn't change how the app
-works, only how it's launched and packaged.
+The frontend uses `VITE_API_URL` at build time. GitHub Actions uses the repository variable `MAINTAIN_AI_API_URL` when present and otherwise uses:
 
-## Build steps
+```
+https://maintain-ai-3.vercel.app
+```
 
-Run these **on the OS you're targeting** — see the cross-compilation note
-below for why.
+## Local development
 
-**1. Build the frontend, pointed at the port the desktop app will use:**
+Run the web frontend and backend normally, then run Electron:
+
+```bash
+cd backend
+python3 -m uvicorn app.main:app --reload
+```
+
+In another terminal:
 
 ```bash
 cd frontend
 npm install
-VITE_API_URL=http://127.0.0.1:8000 npm run build
+npm run dev
 ```
 
-(On Windows PowerShell: `$env:VITE_API_URL="http://127.0.0.1:8000"; npm run build`)
-
-**2. Freeze the backend into a standalone executable:**
-
-```bash
-cd backend
-pip install -r requirements.txt --break-system-packages
-pip install pyinstaller --break-system-packages
-pyinstaller maintain-ai-backend.spec
-```
-
-This produces `backend/dist/maintain-ai-backend` (or `.exe` on Windows).
-The `.spec` file (not a plain `--onefile` CLI call) is what makes sure
-`knowledge_base.json` actually gets bundled — without it, the AI Assistant
-would throw a file-not-found error at runtime that's easy to miss until
-someone actually uses that feature.
-
-**3. Package with Electron:**
+Then:
 
 ```bash
 cd desktop
 npm install
+npm run dev
+```
+
+## Build an installer locally
+
+Build the frontend against the hosted backend:
+
+```bash
+cd frontend
+npm install
+VITE_API_URL=https://maintain-ai-3.vercel.app npm run build
+```
+
+On Windows PowerShell:
+
+```powershell
+$env:VITE_API_URL="https://maintain-ai-3.vercel.app"
+npm run build
+```
+
+Then:
+
+```bash
+cd ../desktop
+npm install
 npm run dist
 ```
 
-Installers land in `desktop/dist/`. `electron-builder` copies the backend
-executable and the frontend build into the app's resources automatically
-(see the `extraResources` section of `desktop/package.json`) — you don't
-need to move anything by hand.
+Installers are written to `desktop/dist/`.
 
-## The cross-compilation caveat
+Targets:
+- Windows: `.exe`
+- macOS: `.dmg`
+- Linux: `.AppImage` and `.deb`
 
-PyInstaller and Electron's native installers can't reliably be built for a
-different OS than the one you're running the build on. In practice:
+## GitHub Actions
 
-- Build the Windows `.exe` **on Windows**
-- Build the Mac `.dmg` **on a Mac**
-- Build the Linux `.AppImage`/`.deb` **on Linux**
+The workflow at `.github/workflows/desktop-build.yml` builds Windows, macOS, and Linux installers.
 
-If you only have one machine, the common workaround is a CI pipeline (e.g.
-GitHub Actions with a build matrix of `windows-latest` / `macos-latest` /
-`ubuntu-latest` runners) that runs the same three steps above on each OS
-and uploads the resulting installers as build artifacts. Worth setting up
-once you're ready to hand this to someone on a different OS than yours —
-not needed just to run it yourself.
+It runs:
+- Manually from GitHub Actions
+- Automatically when a version tag such as `v0.2.0` is pushed
 
-## Where the Gemini API key lives (and why not just bake it in)
+Every build uploads installable artifacts. Version tags additionally create a GitHub Release containing the installers.
 
-Short answer: it lives in the app's own local database, entered once
-through **Settings → AI Assistant** in the running app. Never in source
-code, never in the installer itself.
+A new desktop build does not require a Vercel deployment. The installed client talks to the hosted backend over HTTPS and WebSocket.
 
-Why not just embed your key in the build so nobody has to enter one?
+## Security
 
-- **An installer isn't a secret container.** An Electron app is a folder of
-  files (we even disabled `asar` packing for cleaner debugging, but even
-  with it enabled, `.asar` archives are trivially unpacked with a
-  one-line tool). Anyone who installs the app can extract any string baked
-  into it, including an API key.
-- **It would be *your* key, spending *your* quota**, for anyone who ever
-  runs the installer — including if it ends up shared beyond who you
-  intended.
-- **The app doesn't need a key to work.** The offline diagnostic engine
-  covers the AI Assistant with zero configuration. Gemini is opt-in
-  enhancement, not a requirement — so shipping without a key is the
-  correct default, not a missing feature.
+The installer contains no database credentials, JWT signing secrets, Gemini API keys, or backend secrets. Do not put secrets into the frontend build.
 
-If you're the only person who'll ever run this build, entering your own
-key once via Settings (as we already built) is the right amount of
-security — it's stored locally on your machine, same as any other app's
-config. The only thing to actively avoid is pasting a real key into a file
-that gets committed to git or built into a distributable installer.
+## Release process
 
-## What I verified vs. what to check on your own machine
-
-**Actually built and ran, in this environment:**
-- The `pyinstaller` build, including confirming the frozen binary serves
-  the AI assistant, PDF export, and Excel export correctly
-- The full `electron-builder` package step (resource bundling)
-- **Launched the actual packaged Linux app** under a virtual display,
-  confirmed the backend auto-spawns, confirmed the database lands in the
-  right per-user folder, and clicked through the UI to confirm routing
-  works — this is what caught two real bugs (Vite's absolute asset paths
-  and BrowserRouter both break under Electron's `file://` loading) that
-  are now fixed (`base: './'` in `vite.config.js`, switched to
-  `HashRouter`)
-
-**Not tested here — worth a quick check on your end:**
-- Windows and Mac builds specifically (I only have a Linux sandbox) — the
-  pipeline is the same, but always worth confirming on the actual target OS
-- The final installer files themselves (`.exe`/`.dmg`/`.AppImage`) — I
-  tested the unpacked app (`--dir` build), which exercises the same
-  resource-bundling and runtime logic, but not the installer/uninstaller
-  wizard itself
+1. Push the desired code to `Lab`.
+2. Create a version tag such as `v0.2.0`.
+3. GitHub Actions builds Windows, macOS, and Linux installers.
+4. The workflow publishes the installers to the GitHub Release.
+5. Users install the package for their operating system and connect to the online MAINTAIN AI backend.

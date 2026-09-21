@@ -1,6 +1,6 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from .. import models, schemas, audit
@@ -81,6 +81,20 @@ def _get_scoped_machine(
             detail="machine not assigned to this worker",
         )
 
+    return machine
+
+
+def _get_machine_for_restore(
+    db: Session,
+    machine_id: int,
+    current: CurrentUser,
+) -> models.Machine:
+    machine = db.query(models.Machine).filter(
+        models.Machine.id == machine_id,
+        models.Machine.organization_id == current.organization_id,
+    ).first()
+    if not machine:
+        raise HTTPException(404, "machine not found")
     return machine
 
 
@@ -190,6 +204,51 @@ def get_machine(
     )
 
 
+
+@router.get(
+    "/{machine_id}/detail",
+    response_model=schemas.MachineDetailOut,
+)
+def get_machine_detail(
+    machine_id: int,
+    current: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return the small initial Machine Detail payload in one DB request cycle."""
+    machine = _get_scoped_machine(db, machine_id, current)
+
+    components = (
+        db.query(models.Component)
+        .filter(models.Component.machine_id == machine_id)
+        .order_by(models.Component.id.asc())
+        .all()
+    )
+    readings = (
+        db.query(models.SensorReading)
+        .filter(models.SensorReading.machine_id == machine_id)
+        .order_by(models.SensorReading.recorded_at.desc(), models.SensorReading.id.desc())
+        .limit(20)
+        .all()
+    )
+    maintenance = (
+        db.query(models.MaintenanceRecord)
+        .filter(models.MaintenanceRecord.machine_id == machine_id)
+        .order_by(models.MaintenanceRecord.scheduled_date.desc(), models.MaintenanceRecord.id.desc())
+        .limit(50)
+        .all()
+    )
+
+    return {
+        "machine": machine,
+        "components": components,
+        "readings": readings,
+        "maintenance": maintenance,
+        "device_status": {
+            "iot_enabled": bool(machine.iot_enabled),
+            "has_key": bool(machine.device_key),
+        },
+    }
+
 @router.patch(
     "/{machine_id}",
     response_model=schemas.MachineOut,
@@ -284,12 +343,13 @@ def restore_machine(
             detail="administrator access required",
         )
 
-    machine = _get_scoped_machine(
+    machine = _get_machine_for_restore(
         db,
         machine_id,
         current,
     )
-
+    if not machine.archived:
+        return {"archived": False, "already_restored": True}
     machine.archived = False
 
     db.commit()
@@ -408,6 +468,8 @@ def add_reading(
 )
 def list_readings(
     machine_id: int,
+    limit: int = Query(20, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     current: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -419,12 +481,9 @@ def list_readings(
 
     return (
         db.query(models.SensorReading)
-        .filter(
-            models.SensorReading.machine_id
-            == machine_id
-        )
-        .order_by(
-            models.SensorReading.recorded_at.desc()
-        )
+        .filter(models.SensorReading.machine_id == machine_id)
+        .order_by(models.SensorReading.recorded_at.desc(), models.SensorReading.id.desc())
+        .offset(offset)
+        .limit(limit)
         .all()
     )

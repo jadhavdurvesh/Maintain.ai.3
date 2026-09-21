@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
+from ..deps import get_current_user, CurrentUser
 from ..ai import offline_engine, gemini_client
 
 router = APIRouter(prefix="/api/ai", tags=["ai_assistant"])
@@ -80,15 +81,15 @@ def _machine_context(db: Session, machine: models.Machine | None) -> dict | None
     }
 
 
-def _get_or_create_conversation(db: Session, conversation_id: str | None, machine_id: int | None, title: str | None = None) -> models.AIConversation:
+def _get_or_create_conversation(db: Session, conversation_id: str | None, machine_id: int | None, title: str | None = None, organization_id: int | None = None) -> models.AIConversation:
     conversation = None
     if conversation_id:
-        conversation = db.query(models.AIConversation).filter_by(conversation_key=conversation_id).first()
+        conversation = db.query(models.AIConversation).filter_by(conversation_key=conversation_id, organization_id=organization_id).first()
         if conversation and conversation.machine_id != machine_id:
             raise HTTPException(400, "conversation belongs to a different machine")
     if conversation is None:
         conversation = models.AIConversation(
-            conversation_key=conversation_id or str(uuid4()), machine_id=machine_id,
+            conversation_key=conversation_id or str(uuid4()), organization_id=organization_id, machine_id=machine_id,
             title=(title or "Maintenance diagnosis")[:200],
         )
         db.add(conversation)
@@ -108,6 +109,13 @@ def _conversation_history(db: Session, conversation: models.AIConversation, limi
     } for message in messages]
 
 
+def _visible_machine_ids(db: Session, current: CurrentUser):
+    q = db.query(models.Machine.id).filter(models.Machine.organization_id == current.organization_id, models.Machine.archived.is_(False))
+    if current.id is not None and current.role == models.UserRole.technician.value:
+        q = q.join(models.UserMachineAssignment, models.UserMachineAssignment.machine_id == models.Machine.id).filter(models.UserMachineAssignment.user_id == current.id)
+    return [row[0] for row in q.all()]
+
+
 def _assistant_memory(result: dict) -> str:
     return json.dumps({
         "clarifying_questions": result.get("clarifying_questions", []),
@@ -118,10 +126,22 @@ def _assistant_memory(result: dict) -> str:
 
 
 @router.post("/diagnose", response_model=schemas.DiagnoseResponse)
-def diagnose(payload: schemas.DiagnoseRequest, db: Session = Depends(get_db)):
-    machine = db.get(models.Machine, payload.machine_id) if payload.machine_id else None
+def diagnose(payload: schemas.DiagnoseRequest, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    machine = None
+    if payload.machine_id:
+        machine = db.query(models.Machine).filter(
+            models.Machine.id == payload.machine_id,
+            models.Machine.organization_id == current.organization_id,
+            models.Machine.archived.is_(False),
+        ).first()
+        if not machine:
+            raise HTTPException(404, "machine not found")
+        if current.id is not None and current.role == models.UserRole.technician.value:
+            assigned = db.query(models.UserMachineAssignment).filter_by(user_id=current.id, machine_id=machine.id).first()
+            if not assigned:
+                raise HTTPException(404, "machine not assigned to this worker")
     machine_category = machine.category if machine else None
-    conversation = _get_or_create_conversation(db, payload.conversation_id, payload.machine_id, payload.problem_description)
+    conversation = _get_or_create_conversation(db, payload.conversation_id, payload.machine_id, payload.problem_description, current.organization_id)
     history = _conversation_history(db, conversation)
 
     user_text = payload.user_message or (
@@ -139,7 +159,7 @@ def diagnose(payload: schemas.DiagnoseRequest, db: Session = Depends(get_db)):
     if payload.use_online_ai:
         result = gemini_client.diagnose_with_gemini(
             payload.problem_description, _machine_context(db, machine), payload.answers,
-            conversation_history=history, db=db,
+            conversation_history=history, db=db, organization_id=current.organization_id,
         )
     if result is None:
         result = offline_engine.diagnose(
@@ -147,6 +167,7 @@ def diagnose(payload: schemas.DiagnoseRequest, db: Session = Depends(get_db)):
         )
 
     session = models.AIDiagnosticSession(
+        organization_id=current.organization_id,
         conversation_id=conversation.id,
         machine_id=payload.machine_id,
         problem_description=payload.problem_description,
@@ -177,10 +198,20 @@ def diagnose(payload: schemas.DiagnoseRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/sessions/{session_id}/outcome")
-def record_outcome(session_id: int, final_technician_result: str, db: Session = Depends(get_db)):
+def record_outcome(session_id: int, final_technician_result: str, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current.role == models.UserRole.viewer.value:
+        raise HTTPException(403, "viewers cannot record AI outcomes")
     session = db.get(models.AIDiagnosticSession, session_id)
     if not session:
         raise HTTPException(404, "session not found")
+    if session.organization_id != current.organization_id:
+        raise HTTPException(404, "session not found")
+    if session.machine_id:
+        machine = db.query(models.Machine).filter(models.Machine.id == session.machine_id, models.Machine.organization_id == current.organization_id, models.Machine.archived.is_(False)).first()
+        if not machine:
+            raise HTTPException(404, "session not found")
+        if current.role == models.UserRole.technician.value and not db.query(models.UserMachineAssignment).filter_by(user_id=current.id, machine_id=machine.id).first():
+            raise HTTPException(404, "session not found")
     session.final_technician_result = final_technician_result
     if session.conversation_id:
         conversation = db.get(models.AIConversation, session.conversation_id)
@@ -195,8 +226,10 @@ def record_outcome(session_id: int, final_technician_result: str, db: Session = 
 
 
 @router.get("/sessions")
-def list_sessions(machine_id: int | None = None, db: Session = Depends(get_db)):
-    q = db.query(models.AIDiagnosticSession)
+def list_sessions(machine_id: int | None = None, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    visible_ids = _visible_machine_ids(db, current)
+    q = db.query(models.AIDiagnosticSession).filter(models.AIDiagnosticSession.organization_id == current.organization_id)
+    q = q.filter((models.AIDiagnosticSession.machine_id.is_(None)) | models.AIDiagnosticSession.machine_id.in_(visible_ids))
     if machine_id:
         q = q.filter_by(machine_id=machine_id)
     sessions = q.order_by(models.AIDiagnosticSession.created_at.desc()).all()
@@ -211,8 +244,10 @@ def list_sessions(machine_id: int | None = None, db: Session = Depends(get_db)):
 
 
 @router.get("/conversations")
-def list_conversations(machine_id: int | None = None, db: Session = Depends(get_db)):
-    q = db.query(models.AIConversation)
+def list_conversations(machine_id: int | None = None, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    visible_ids = _visible_machine_ids(db, current)
+    q = db.query(models.AIConversation).filter(models.AIConversation.organization_id == current.organization_id)
+    q = q.filter((models.AIConversation.machine_id.is_(None)) | models.AIConversation.machine_id.in_(visible_ids))
     if machine_id:
         q = q.filter_by(machine_id=machine_id)
     conversations = q.order_by(models.AIConversation.updated_at.desc()).all()
@@ -223,9 +258,17 @@ def list_conversations(machine_id: int | None = None, db: Session = Depends(get_
 
 
 @router.get("/conversations/{conversation_id}")
-def get_conversation(conversation_id: str, db: Session = Depends(get_db)):
-    conversation = db.query(models.AIConversation).filter_by(conversation_key=conversation_id).first()
+def get_conversation(conversation_id: str, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    conversation = db.query(models.AIConversation).filter_by(conversation_key=conversation_id, organization_id=current.organization_id).first()
     if not conversation:
+        raise HTTPException(404, "conversation not found")
+    if conversation.machine_id:
+        machine = db.query(models.Machine).filter(models.Machine.id == conversation.machine_id, models.Machine.organization_id == current.organization_id, models.Machine.archived.is_(False)).first()
+        if not machine:
+            raise HTTPException(404, "conversation not found")
+        if current.role == models.UserRole.technician.value and not db.query(models.UserMachineAssignment).filter_by(user_id=current.id, machine_id=machine.id).first():
+            raise HTTPException(404, "conversation not found")
+    else:
         raise HTTPException(404, "conversation not found")
     return {
         "conversation_id": conversation.conversation_key, "machine_id": conversation.machine_id,

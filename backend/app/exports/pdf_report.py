@@ -33,7 +33,7 @@ def _table(data, col_widths=None):
     return t
 
 
-def build_pdf_report(db: Session) -> bytes:
+def build_pdf_report(db: Session, organization_id: int | None = None) -> bytes:
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer, pagesize=A4,
@@ -52,7 +52,10 @@ def build_pdf_report(db: Session) -> bytes:
     ]
 
     # --- Summary ---
-    machines = db.query(models.Machine).filter_by(archived=False).all()
+    machine_query = db.query(models.Machine).filter_by(archived=False)
+    if organization_id is not None:
+        machine_query = machine_query.filter(models.Machine.organization_id == organization_id)
+    machines = machine_query.all()
     open_wo = db.query(models.WorkOrder).filter(models.WorkOrder.status != models.WorkOrderStatus.completed).count()
     active_alerts = db.query(models.Alert).filter_by(resolved=False).count()
     summary_rows = [
@@ -79,7 +82,8 @@ def build_pdf_report(db: Session) -> bytes:
     story.append(_table(rel_rows, col_widths=[55 * mm, 20 * mm, 25 * mm, 22 * mm, 25 * mm, 20 * mm]))
 
     # --- Failure analysis ---
-    faults = db.query(models.FaultRecord).all()
+    faults_query = db.query(models.FaultRecord).join(models.Machine).filter(models.Machine.organization_id == organization_id) if organization_id is not None else db.query(models.FaultRecord)
+    faults = faults_query.all()
     if faults:
         from collections import Counter
         cause_counts = Counter((f.cause or "unspecified") for f in faults).most_common(10)
@@ -88,7 +92,8 @@ def build_pdf_report(db: Session) -> bytes:
         story.append(_table(fa_rows, col_widths=[120 * mm, 40 * mm]))
 
     # --- Active alerts ---
-    alerts = db.query(models.Alert).filter_by(resolved=False).order_by(models.Alert.created_at.desc()).all()
+    alerts_query = db.query(models.Alert).join(models.Machine).filter(models.Alert.resolved == False) if organization_id is not None else db.query(models.Alert).filter_by(resolved=False)
+    alerts = alerts_query.order_by(models.Alert.created_at.desc()).all()
     if alerts:
         story.append(Paragraph("Active Alerts", h2))
         alert_rows = [["Severity", "Message"]] + [[a.severity, a.message] for a in alerts]
