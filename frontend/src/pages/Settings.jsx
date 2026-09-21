@@ -55,6 +55,9 @@ export default function SettingsPage() {
   const [keySaving, setKeySaving] =
     useState(false)
 
+  const [aiTesting, setAiTesting] = useState(false)
+  const [aiTestResult, setAiTestResult] = useState(null)
+
   const [assignmentUser, setAssignmentUser] =
     useState(null)
 
@@ -265,6 +268,19 @@ export default function SettingsPage() {
       })
     } finally {
       setKeySaving(false)
+    }
+  }
+
+  const testAiConnection = async () => {
+    setAiTesting(true)
+    setAiTestResult(null)
+    try {
+      const result = await api.post('/api/settings/ai-connection-test', {})
+      setAiTestResult(result)
+    } catch (e) {
+      setAiTestResult({ ok: false, message: e.message || 'AI connection test failed.' })
+    } finally {
+      setAiTesting(false)
     }
   }
 
@@ -529,7 +545,7 @@ export default function SettingsPage() {
       <div className="panel section-gap">
         <div className="panel-header">
           <span className="panel-title">
-            AI Assistant — Gemini API Key
+            AI Assistant — AI API Key
           </span>
         </div>
 
@@ -541,9 +557,7 @@ export default function SettingsPage() {
               marginBottom: 12,
             }}
           >
-            Stored in the application's
-            database and never shipped
-            in source code.
+            The provider API key is stored organization-scoped in the application database and never shipped to the frontend.
           </p>
 
           {keyStatus?.configured ? (
@@ -559,13 +573,18 @@ export default function SettingsPage() {
                 {keyStatus.last4}
               </span>
 
-              <button
-                className="btn secondary"
-                onClick={clearKey}
-              >
+              <button className="btn secondary" onClick={testAiConnection} disabled={aiTesting}>
+                {aiTesting ? 'Testing…' : 'Test AI Connection'}
+              </button>
+              <button className="btn secondary" onClick={clearKey}>
                 Remove Key
               </button>
             </div>
+            {aiTestResult && (
+              <div style={{ marginTop: 10 }} className={aiTestResult.ok ? 'badge healthy' : 'badge critical'}>
+                {aiTestResult.ok ? 'AI connection verified' : aiTestResult.message}
+              </div>
+            )}
           ) : (
             <form
               onSubmit={saveKey}
@@ -582,7 +601,7 @@ export default function SettingsPage() {
                     e.target.value
                   )
                 }
-                placeholder="Paste your Gemini API key"
+                placeholder="Paste your AI provider API key"
               />
 
               <button
