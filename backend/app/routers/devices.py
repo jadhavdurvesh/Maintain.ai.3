@@ -21,7 +21,9 @@ from ..ml.anomaly_events import create_anomaly_event
 from ..notification_service import notify_machine_workers
 from ..supabase_realtime import broadcast as supabase_broadcast
 
-router = APIRouter(prefix="/api/devices", tags=["devices"])\n\ndef _get_scoped_machine(db: Session, machine_id: int, current: CurrentUser, admin_only: bool = False):\n    if admin_only and current.role != models.UserRole.admin.value:\n        raise HTTPException(403, "administrator access required")\n    machine = db.query(models.Machine).filter(models.Machine.id == machine_id, models.Machine.organization_id == current.organization_id, models.Machine.archived.is_(False)).first()\n    if not machine:\n        raise HTTPException(404, "machine not found")\n    if current.role == models.UserRole.technician.value and not db.query(models.UserMachineAssignment).filter_by(user_id=current.id, machine_id=machine_id).first():\n        raise HTTPException(404, "machine not assigned to this worker")\n    return machine
+router = APIRouter(prefix="/api/devices", tags=["devices"])
+
+def _get_scoped_machine(db: Session, machine_id: int, current: CurrentUser, admin_only: bool = False):\n    if admin_only and current.role != models.UserRole.admin.value:\n        raise HTTPException(403, "administrator access required")\n    machine = db.query(models.Machine).filter(models.Machine.id == machine_id, models.Machine.organization_id == current.organization_id, models.Machine.archived.is_(False)).first()\n    if not machine:\n        raise HTTPException(404, "machine not found")\n    if current.role == models.UserRole.technician.value and not db.query(models.UserMachineAssignment).filter_by(user_id=current.id, machine_id=machine_id).first():\n        raise HTTPException(404, "machine not assigned to this worker")\n    return machine
 
 
 class TelemetryStream:
