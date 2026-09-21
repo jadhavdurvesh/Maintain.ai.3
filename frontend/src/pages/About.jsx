@@ -1,14 +1,15 @@
 import { usePageHeader } from '../PageHeaderContext.jsx'
-import { Database, Code2, Monitor, Bot, BrainCircuit, Users } from 'lucide-react'
+import { Database, Code2, Monitor, Bot, BrainCircuit, Users, Radio, Cpu, ShieldCheck, Smartphone } from 'lucide-react'
 
 const CREATORS = ['Durvesh M. Jadhav', 'Shrikant K. Katkar', 'Viraj V. Patil']
 
 const STACK = [
-  { label: 'Backend', value: 'FastAPI · SQLAlchemy · SQLite', icon: Database },
-  { label: 'Frontend', value: 'React · Vite · Recharts', icon: Code2 },
-  { label: 'Desktop', value: 'Electron · PyInstaller', icon: Monitor },
-  { label: 'AI Assistant', value: 'Offline knowledge-base + optional Gemini API', icon: Bot },
-  { label: 'Predictive Model', value: 'scikit-learn RandomForest', icon: BrainCircuit },
+  { label: 'Backend', value: 'FastAPI · SQLAlchemy · PostgreSQL / Neon', icon: Database },
+  { label: 'Web control center', value: 'React · Vite · Recharts', icon: Code2 },
+  { label: 'Mobile workforce', value: 'Android · Flutter Workforce Client', icon: Smartphone },
+  { label: 'Realtime', value: 'Supabase Auth · Realtime with tenant + machine scope', icon: Radio },
+  { label: 'IoT layer', value: 'Maintain.ai IoT Gateway · machine device-key telemetry', icon: Cpu },
+  { label: 'AI & ML', value: 'Online behaviour · degradation · temporal evidence · advanced models', icon: BrainCircuit },
 ]
 
 export default function About() {
@@ -22,7 +23,7 @@ export default function About() {
           MAINTENANCE INTELLIGENCE PLATFORM
         </div>
         <h1 style={{ position: 'relative', margin: 0, fontSize: 'clamp(34px, 6vw, 60px)', lineHeight: 1, letterSpacing: '-0.04em', fontWeight: 700 }}>MAINTAIN <span style={{ color: 'var(--accent)' }}>AI</span></h1>
-        <p style={{ maxWidth: 680, margin: '20px auto 0', color: 'var(--text-dim)', fontSize: 16, lineHeight: 1.7 }}>Predictive maintenance and intelligent maintenance management for modern industrial operations.</p>
+        <p style={{ maxWidth: 680, margin: '20px auto 0', color: 'var(--text-dim)', fontSize: 16, lineHeight: 1.7 }}>A multi-client predictive maintenance platform connecting engineering, workforce, mobile operations, and industrial telemetry in one organization-scoped system.</p>
         <div style={{ width: 72, height: 3, margin: '26px auto 0', borderRadius: 999, background: 'var(--accent)', boxShadow: '0 0 18px var(--accent-glow)' }} />
       </section>
 
@@ -32,6 +33,24 @@ export default function About() {
           {CREATORS.map((name) => (
             <div key={name} style={{ display: 'inline-flex', alignItems: 'center', gap: 9, padding: '10px 14px', borderRadius: 12, border: '1px solid var(--border)', background: 'var(--panel-raised)', color: 'var(--text)', fontWeight: 600 }}>
               <Users size={16} style={{ color: 'var(--accent)' }} />{name}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel section-gap">
+        <div className="panel-header" style={{ justifyContent: 'center' }}><span className="panel-title">How Maintain.ai works</span></div>
+        <div className="panel-body" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+          {[
+            ['01', 'Connect', 'Machines send telemetry through machine-specific device identity.'],
+            ['02', 'Understand', 'Telemetry becomes live health, behaviour, degradation, faults, alerts, and maintenance evidence.'],
+            ['03', 'Coordinate', 'Engineering plans work while technicians operate only on machines and work orders they are authorized to access.'],
+            ['04', 'Learn', 'Maintenance outcomes become ML evidence without presenting heuristics as unsupported failure probabilities.'],
+          ].map(([n, title, text]) => (
+            <div key={n} style={{ padding: 18, borderRadius: 14, border: '1px solid var(--border)', background: 'var(--panel-raised)' }}>
+              <div style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 11, marginBottom: 8 }}>{n}</div>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>{title}</div>
+              <div style={{ color: 'var(--text-dim)', lineHeight: 1.55, fontSize: 13 }}>{text}</div>
             </div>
           ))}
         </div>
@@ -52,6 +71,23 @@ export default function About() {
               </div>
             )
           })}
+        </div>
+      </section>
+
+      <section className="panel section-gap">
+        <div className="panel-header" style={{ justifyContent: 'center' }}><span className="panel-title">Built around isolation</span></div>
+        <div className="panel-body" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+          {[
+            ['Organization scope', 'Every tenant-owned resource resolves through the authenticated organization.'],
+            ['Machine assignment', 'Technicians receive only assigned active machines and their operational resources.'],
+            ['Application access', 'Engineering, Android, and Workforce access are explicit application permissions.'],
+            ['Realtime authorization', 'Engineering uses organization scope; mobile workforce clients use authorized machine scope.'],
+          ].map(([title, text]) => (
+            <div key={title} style={{ display: 'flex', gap: 12, padding: 16, borderRadius: 14, border: '1px solid var(--border)', background: 'var(--panel-raised)' }}>
+              <ShieldCheck size={19} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+              <div><div style={{ fontWeight: 650, marginBottom: 4 }}>{title}</div><div style={{ color: 'var(--text-dim)', fontSize: 13, lineHeight: 1.5 }}>{text}</div></div>
+            </div>
+          ))}
         </div>
       </section>
 
