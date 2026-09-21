@@ -19,11 +19,30 @@ def list_audit_log(
 ):
     q = db.query(models.AuditLog).filter(models.AuditLog.organization_id == current.organization_id)
     if current.role == models.UserRole.technician.value:
-        visible_ids = [row[0] for row in db.query(models.Machine.id).join(models.UserMachineAssignment, models.UserMachineAssignment.machine_id == models.Machine.id).filter(models.Machine.organization_id == current.organization_id, models.UserMachineAssignment.user_id == current.id).all()]
+        visible_ids = [
+            row[0] for row in db.query(models.Machine.id)
+            .join(models.UserMachineAssignment, models.UserMachineAssignment.machine_id == models.Machine.id)
+            .filter(
+                models.Machine.organization_id == current.organization_id,
+                models.UserMachineAssignment.user_id == current.id,
+            ).all()
+        ]
         q = q.filter(
             ((models.AuditLog.entity_type == "machine") & models.AuditLog.entity_id.in_(visible_ids))
-            | (models.AuditLog.entity_type.in_(["maintenance", "work_order", "fault", "alert", "component"]) & models.AuditLog.entity_id.in_(
+            | ((models.AuditLog.entity_type == "component") & models.AuditLog.entity_id.in_(
+                db.query(models.Component.id).filter(models.Component.machine_id.in_(visible_ids))
+            ))
+            | ((models.AuditLog.entity_type == "maintenance") & models.AuditLog.entity_id.in_(
                 db.query(models.MaintenanceRecord.id).filter(models.MaintenanceRecord.machine_id.in_(visible_ids))
+            ))
+            | ((models.AuditLog.entity_type == "work_order") & models.AuditLog.entity_id.in_(
+                db.query(models.WorkOrder.id).filter(models.WorkOrder.machine_id.in_(visible_ids))
+            ))
+            | ((models.AuditLog.entity_type == "fault") & models.AuditLog.entity_id.in_(
+                db.query(models.FaultRecord.id).filter(models.FaultRecord.machine_id.in_(visible_ids))
+            ))
+            | ((models.AuditLog.entity_type == "alert") & models.AuditLog.entity_id.in_(
+                db.query(models.Alert.id).filter(models.Alert.machine_id.in_(visible_ids))
             ))
         )
     if entity_type:
