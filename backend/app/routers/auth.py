@@ -1,5 +1,8 @@
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, EmailStr
+import os
+from datetime import datetime, timedelta, timezone
+import jwt
 from sqlalchemy.orm import Session
 
 from .. import models, audit
@@ -375,6 +378,36 @@ def sync_supabase_user(
             status_code=503,
             detail=f"Account synchronization could not be completed: {type(exc).__name__}",
         ) from exc
+
+@router.post("/realtime-token")
+def realtime_token(
+    current: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Issue a short-lived Supabase Realtime JWT carrying the Neon tenant context."""
+    secret = os.getenv("SUPABASE_JWT_SECRET", "").strip()
+    if not secret:
+        raise HTTPException(status_code=503, detail="Supabase Realtime signing is not configured")
+
+    user = db.get(models.User, current.id) if current.id is not None else None
+    if not user or not user.active or not user.supabase_user_id:
+        raise HTTPException(status_code=401, detail="Supabase identity is not linked to this account")
+
+    application = "engineering"
+    # get_current_user has already enforced the X-Maintain-Application header.
+    # Preserve that context when callers need Android/Workforce Realtime access.
+    # The token is intentionally short-lived and contains no secret application data.
+    payload = {
+        "sub": str(user.supabase_user_id),
+        "role": "authenticated",
+        "aud": "authenticated",
+        "org_id": str(current.organization_id),
+        "maintain_user_id": str(current.id),
+        "maintain_application": application,
+        "iat": datetime.now(timezone.utc),
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=55),
+    }
+    return {"access_token": jwt.encode(payload, secret, algorithm="HS256"), "expires_in": 3300}
 
 @router.get("/me")
 def me(
