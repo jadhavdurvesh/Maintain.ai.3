@@ -147,6 +147,10 @@ def update_work_order(wo_id: int, payload: schemas.WorkOrderUpdate, current: Cur
         if "status" in changes and changes["status"] not in {"pending", "in_progress", "completed"}:
             raise HTTPException(400, "invalid work order status")
 
+    requested_status = changes.get("status")
+    if requested_status == "completed" and work_order.status == models.WorkOrderStatus.completed:
+        return work_order
+
     for field, value in changes.items():
         setattr(work_order, field, value)
 
@@ -161,7 +165,7 @@ def update_work_order(wo_id: int, payload: schemas.WorkOrderUpdate, current: Cur
             description=work_order.problem,
             completed_date=work_order.completed_at,
             status=models.MaintenanceStatus.completed,
-            performed_by=work_order.assigned_to or current.username,
+            performed_by=current.username,
             notes=work_order.resolution_notes,
         ))
 
