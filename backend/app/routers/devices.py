@@ -29,25 +29,28 @@ class TelemetryStream:
     def __init__(self):
         self._clients = {}
 
-    async def connect(self, websocket, organization_id: int):
+    async def connect(self, websocket, organization_id: int, machine_ids: set[int] | None = None):
         await websocket.accept()
-        self._clients.setdefault(organization_id, set()).add(websocket)
+        self._clients.setdefault(organization_id, {})[websocket] = machine_ids
 
     def disconnect(self, websocket, organization_id: int | None = None):
         if organization_id is not None:
-            clients = self._clients.get(organization_id, set())
-            clients.discard(websocket)
+            clients = self._clients.get(organization_id, {})
+            clients.pop(websocket, None)
             if not clients:
                 self._clients.pop(organization_id, None)
             return
         for org_id, clients in list(self._clients.items()):
-            clients.discard(websocket)
+            clients.pop(websocket, None)
             if not clients:
                 self._clients.pop(org_id, None)
 
     async def broadcast(self, organization_id: int, event):
         stale = []
-        for client in tuple(self._clients.get(organization_id, set())):
+        machine_id = event.get("machine_id")
+        for client, allowed_machine_ids in tuple(self._clients.get(organization_id, {}).items()):
+            if allowed_machine_ids is not None and machine_id not in allowed_machine_ids:
+                continue
             try:
                 await client.send_json(event)
             except Exception:
@@ -318,6 +321,7 @@ async def telemetry_stream_websocket(websocket: WebSocket):
     db = SessionLocal()
     organization_id = None
     user_id = None
+    allowed_machine_ids = None
     try:
         if token:
             claims = verify_access_token(token)
@@ -344,6 +348,12 @@ async def telemetry_stream_websocket(websocket: WebSocket):
                         return
                     organization_id = user.organization_id
                     user_id = user.id
+                    if user.role == models.UserRole.technician:
+                        allowed_machine_ids = {row[0] for row in db.query(models.UserMachineAssignment.machine_id)
+                            .join(models.Machine, models.Machine.id == models.UserMachineAssignment.machine_id)
+                            .filter(models.UserMachineAssignment.user_id == user.id,
+                                    models.Machine.organization_id == organization_id,
+                                    models.Machine.archived.is_(False)).all()}
                 else:
                     payload = decode_access_token(token)
                     user_id = int(payload["sub"])
@@ -351,6 +361,19 @@ async def telemetry_stream_websocket(websocket: WebSocket):
                     user = db.get(models.User, user_id)
                     if not user or not user.active or user.organization_id != organization_id:
                         raise ValueError("unauthorized")
+                    access = db.query(models.UserApplicationAccess).filter(
+                        models.UserApplicationAccess.user_id == user.id,
+                        models.UserApplicationAccess.application == application,
+                        models.UserApplicationAccess.enabled.is_(True),
+                    ).first()
+                    if not access:
+                        raise ValueError("application access denied")
+                    if user.role == models.UserRole.technician:
+                        allowed_machine_ids = {row[0] for row in db.query(models.UserMachineAssignment.machine_id)
+                            .join(models.Machine, models.Machine.id == models.UserMachineAssignment.machine_id)
+                            .filter(models.UserMachineAssignment.user_id == user.id,
+                                    models.Machine.organization_id == organization_id,
+                                    models.Machine.archived.is_(False)).all()}
             except Exception:
                 await websocket.close(code=1008, reason="unauthorized")
                 return
@@ -372,7 +395,7 @@ async def telemetry_stream_websocket(websocket: WebSocket):
 
         # This stream is organization-filtered at publication time and
         # additionally rejects arbitrary client-side machine subscriptions.
-        await telemetry_stream.connect(websocket, organization_id)
+        await telemetry_stream.connect(websocket, organization_id, allowed_machine_ids)
         while True:
             message = await websocket.receive_json()
             if message.get("type") == "ping":
