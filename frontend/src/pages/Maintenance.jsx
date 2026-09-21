@@ -13,13 +13,24 @@ export default function Maintenance() {
   const [error, setError] = useState(null)
   const [form, setForm] = useState({ machine_id: '', type: 'preventive', description: '', scheduled_date: '' })
 
+  const { user } = useAuth()
+  const canAdmin = user?.role === 'admin'
+  const canComplete = user?.role === 'admin' || user?.role === 'technician'
+
   const load = () => {
-    Promise.all([
+    setError(null)
+    Promise.allSettled([
       api.get('/api/maintenance/due/upcoming'),
       api.get('/api/maintenance?limit=50'),
       api.get('/api/machines'),
-    ]).then(([u, r, m]) => { setUpcoming(u); setRecords(r); setMachines(m) })
-      .catch((e) => setError(e.message))
+    ]).then(([u, r, m]) => {
+      const failures = []
+      if (u.status === 'fulfilled') setUpcoming(u.value); else failures.push(`upcoming maintenance: ${u.reason?.message || u.reason}`)
+      if (r.status === 'fulfilled') setRecords(r.value); else failures.push(`maintenance records: ${r.reason?.message || r.reason}`)
+      if (m.status === 'fulfilled') setMachines(m.value); else failures.push(`machines: ${m.reason?.message || m.reason}`)
+      if (failures.length === 3) setError(failures.join(' | '))
+      else if (failures.length) setError(`Some maintenance data could not be loaded: ${failures.join(' | ')}`)
+    })
   }
 
   useEffect(() => { load() }, [])
