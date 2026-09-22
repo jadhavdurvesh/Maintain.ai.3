@@ -84,12 +84,16 @@ def ensure_user_auth_schema():
         additions.append("ALTER TABLE users ADD COLUMN supabase_user_id VARCHAR")
     if "active" not in user_columns:
         additions.append("ALTER TABLE users ADD COLUMN active BOOLEAN DEFAULT TRUE")
+    if "password_change_required" not in user_columns:
+        additions.append("ALTER TABLE users ADD COLUMN password_change_required BOOLEAN DEFAULT FALSE")
     if additions:
         with engine.begin() as connection:
             for statement in additions:
                 connection.execute(text(statement))
             if "active" not in user_columns:
                 connection.execute(text("UPDATE users SET active = TRUE WHERE active IS NULL"))
+            if "password_change_required" not in user_columns:
+                connection.execute(text("UPDATE users SET password_change_required = FALSE WHERE password_change_required IS NULL"))
     Base.metadata.create_all(bind=engine)
 
 
