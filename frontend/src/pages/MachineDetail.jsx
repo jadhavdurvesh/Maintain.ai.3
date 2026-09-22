@@ -171,29 +171,8 @@ export default function MachineDetail() {
       const result = await api.post(`/api/devices/${id}/enable`, {})
       if (!result?.device_key) throw new Error('Backend enabled live sensor integration but did not return a device key.')
       setRevealedKey(result.device_key)
-      setDeviceStatus({ iot_enabled: result.iot_enabled, has_key: result.has_key       <div className="panel section-gap" style={{ border: '1px solid var(--accent)', boxShadow: '0 0 28px rgba(0, 200, 255, 0.08)' }}>
-        <div className="panel-header">
-          <div>
-            <span className="panel-title">Live Machine Telemetry</span>
-            <div style={{ marginTop: 4, color: 'var(--text-faint)', fontSize: 11 }}>Real-time sensor stream from the connected machine device</div>
-          </div>
-          <span className={'badge ' + (liveConnected ? 'healthy' : 'warning')}>
-            <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: 'currentColor', marginRight: 5 }} />
-            {liveConnected ? 'Live' : 'Reconnecting'}
-          </span>
-        </div>
-        <div className="panel-body">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 10 }}>
-            {liveSensors.map(sensor => <LiveSensorCard key={sensor.key} {...sensor} />)}
-          </div>
-          <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, color: 'var(--text-faint)', fontSize: 11 }}>
-            <span>{Object.keys(liveReadings).length ? 'Telemetry is flowing into MAINTAIN AI' : 'Waiting for device telemetry…'}</span>
-            <span>Updates automatically</span>
-          </div>
-        </div>
-      </div>
-
-})
+      setDeviceStatus({ iot_enabled: result.iot_enabled, has_key: result.has_key })
+      setRevealedKey(result.device_key)
     } catch (e) {
       setDeviceError(e?.message || 'Could not enable live sensor integration.')
     } finally {
@@ -225,6 +204,28 @@ export default function MachineDetail() {
         <div className="stat-tile"><div className="stat-label">OPERATING HOURS</div><div className="stat-value">{machine.operating_hours}</div></div>
         <div className="stat-tile"><div className="stat-label">CRITICALITY</div><div className="stat-value">{machine.criticality}</div></div>
         <div className="stat-tile"><div className="stat-label">NEXT MAINTENANCE</div><div className="stat-value" style={{ fontSize: 15 }}>{machine.next_maintenance_date ? formatDate(machine.next_maintenance_date) : '—'}</div></div>
+      </div>
+
+      <div className="panel section-gap" style={{ border: '1px solid var(--accent)', boxShadow: '0 0 28px rgba(0, 200, 255, 0.08)' }}>
+        <div className="panel-header">
+          <div>
+            <span className="panel-title">Live Machine Telemetry</span>
+            <div style={{ marginTop: 4, color: 'var(--text-faint)', fontSize: 11 }}>Real-time sensor stream from the connected machine device</div>
+          </div>
+          <span className={'badge ' + (liveConnected ? 'healthy' : 'warning')}>
+            <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: 'currentColor', marginRight: 5 }} />
+            {liveConnected ? 'Live' : 'Reconnecting'}
+          </span>
+        </div>
+        <div className="panel-body">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 10 }}>
+            {liveSensors.map(sensor => <LiveSensorCard key={sensor.key} {...sensor} />)}
+          </div>
+          <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, color: 'var(--text-faint)', fontSize: 11 }}>
+            <span>{Object.keys(liveReadings).length ? 'Telemetry is flowing into MAINTAIN AI' : 'Waiting for device telemetry…'}</span>
+            <span>Updates automatically</span>
+          </div>
+        </div>
       </div>
 
       <div className="panel section-gap">
