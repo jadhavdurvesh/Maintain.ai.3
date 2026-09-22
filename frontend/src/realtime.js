@@ -123,9 +123,18 @@ export function useTelemetryStream() {
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data)
-          if (msg && msg.event === 'broadcast') {
+          if (msg?.event === 'phx_reply') {
+            const reply = msg?.payload?.response
+            if (reply?.status === 'error') {
+              setStatus('offline')
+              window.dispatchEvent(new CustomEvent('maintain-ai-realtime-status', { detail: 'offline' }))
+              ws.close(1008, 'realtime channel authorization failed')
+            }
+            return
+          }
+          if (msg?.event === 'broadcast') {
             const payload = msg.payload && (msg.payload.payload || msg.payload)
-            if (payload) {
+            if (payload?.type === 'telemetry' && payload.machine_id != null) {
               setLastMessageAt(new Date())
               window.dispatchEvent(new CustomEvent('maintain-ai-telemetry', { detail: payload }))
             }
