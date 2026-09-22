@@ -278,8 +278,10 @@ html.reduced-effects .stat-tile {
 .topbar-glass {
   flex-shrink: 0;
   position: sticky;
-  top: 14px;
+  top: 0;
   z-index: 5;
+  margin: 0;
+  align-self: stretch;
 }
 
 .topbar-inner {
