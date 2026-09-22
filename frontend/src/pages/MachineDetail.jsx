@@ -74,7 +74,24 @@ export default function MachineDetail() {
     if (deviceResult.status === 'fulfilled') setDeviceStatus(deviceResult.value)
     try { setIntelligence(await api.get(`/api/analytics/machines/${id}/intelligence`)) } catch { setIntelligence(null) }
     try { const d = await api.get(`/api/analytics/machines/${id}/degradation?limit=48`); setDegradationTimeline(d.points || []) } catch { setDegradationTimeline([]) }
-    try { const s = await api.get(`/api/devices/${id}/safety`); setSafety(s); if (s.configured) { setSafetyPolicies(s.policies || [s]); const initial = (s.policies || [s]).find(p => p.enabled) || (s.policies || [s])[0]; if (initial) { setSelectedSafetySignal(initial.monitored_reading_type); setSafetyForm({ ...initial, warning_low: initial.warning_low ?? '', warning_high: initial.warning_high ?? '', shutdown_low: initial.shutdown_low ?? '', shutdown_high: initial.shutdown_high ?? '', auto_shutdown_enabled: !!initial.auto_shutdown_enabled }) } } } catch { setSafety(null) }
+    try {
+      const s = await api.get(`/api/devices/${id}/safety`)
+      const policies = s.policies || []
+      setSafety(s)
+      setSafetyPolicies(policies)
+      const initial = policies.find(p => p.enabled) || policies[0]
+      if (initial) {
+        setSelectedSafetySignal(initial.monitored_reading_type)
+        setSafetyForm({
+          ...initial,
+          warning_low: initial.warning_low ?? '',
+          warning_high: initial.warning_high ?? '',
+          shutdown_low: initial.shutdown_low ?? '',
+          shutdown_high: initial.shutdown_high ?? '',
+          auto_shutdown_enabled: !!initial.auto_shutdown_enabled,
+        })
+      }
+    } catch { setSafety(null); setSafetyPolicies([]) }
   }
 
   useEffect(() => {
@@ -151,7 +168,13 @@ export default function MachineDetail() {
       const payload = { ...safetyForm, unit: safetyDefaults[safetyForm.monitored_reading_type]?.unit || safetyForm.unit, warning_low: safetyForm.warning_low === '' ? null : Number(safetyForm.warning_low), warning_high: safetyForm.warning_high === '' ? null : Number(safetyForm.warning_high), shutdown_low: safetyForm.shutdown_low === '' ? null : Number(safetyForm.shutdown_low), shutdown_high: safetyForm.shutdown_high === '' ? null : Number(safetyForm.shutdown_high) }
       const saved = await api.put('/api/devices/' + id + '/safety', payload)
       setSafety(saved)
-      setSafetyPolicies(saved.policies || [saved])
+      const policies = saved.policies || [saved]
+      setSafetyPolicies(policies)
+      const updated = policies.find(p => p.monitored_reading_type === safetyForm.monitored_reading_type)
+      if (updated) {
+        setSelectedSafetySignal(updated.monitored_reading_type)
+        setSafetyForm({ ...updated, warning_low: updated.warning_low ?? '', warning_high: updated.warning_high ?? '', shutdown_low: updated.shutdown_low ?? '', shutdown_high: updated.shutdown_high ?? '', auto_shutdown_enabled: !!updated.auto_shutdown_enabled })
+      }
     } finally { setSafetyBusy(false) }
   }
 
@@ -327,7 +350,7 @@ export default function MachineDetail() {
       <div className="panel section-gap">
         <div className="panel-header">
           <span className="panel-title">Machine Safety & Auto-Shutdown</span>
-          <span className={'badge ' + (safety?.enabled ? 'healthy' : 'neutral')}>{safety?.enabled ? 'Monitoring' : 'Off'}</span>
+          <span className={'badge ' + (safetyPolicies.some(p => p.enabled) ? 'healthy' : 'neutral')}>{safetyPolicies.some(p => p.enabled) ? 'Monitoring' : 'Off'}</span>
         </div>
         <div className="panel-body">
           <p style={{color:'var(--text-dim)',fontSize:13,marginBottom:14}}>
