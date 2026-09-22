@@ -609,6 +609,16 @@ async def device_websocket(websocket: WebSocket):
 
             reading, behaviour, safety, degradation = _process_reading(db, machine, payload)
             await _publish_reading(machine, reading, behaviour, safety, degradation)
+            if safety and safety.get("shutdown_requested"):
+                await websocket.send_json({
+                    "type": "shutdown",
+                    "machine_id": machine.id,
+                    "reason": safety["message"],
+                    "reading_type": reading.reading_type,
+                    "value": reading.value,
+                    "threshold": safety.get("threshold"),
+                    "event_id": safety.get("event_id"),
+                })
             await websocket.send_json({
                 "type": "reading_accepted",
                 "reading_id": reading.id,
