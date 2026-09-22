@@ -376,6 +376,28 @@ export default function MachineDetail() {
         </div>
       </div>
 
+      <div className="panel section-gap" style={{ border: '1px solid var(--accent)', boxShadow: '0 0 28px rgba(0, 200, 255, 0.08)' }}>
+        <div className="panel-header">
+          <div>
+            <span className="panel-title">Live Machine Telemetry</span>
+            <div style={{ marginTop: 4, color: 'var(--text-faint)', fontSize: 11 }}>Real-time sensor stream from the connected machine device</div>
+          </div>
+          <span className={'badge ' + (liveConnected ? 'healthy' : 'warning')}>
+            <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: 'currentColor', marginRight: 5 }} />
+            {liveConnected ? 'Live' : 'Reconnecting'}
+          </span>
+        </div>
+        <div className="panel-body">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 10 }}>
+            {liveSensors.map(sensor => <LiveSensorCard key={sensor.key} {...sensor} />)}
+          </div>
+          <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, color: 'var(--text-faint)', fontSize: 11 }}>
+            <span>{Object.keys(liveReadings).length ? 'Telemetry is flowing into MAINTAIN AI' : 'Waiting for device telemetry…'}</span>
+            <span>Updates automatically</span>
+          </div>
+        </div>
+      </div>
+
       <div className="grid-2">
         <div className="panel">
           <div className="panel-header"><span className="panel-title">Sensor / Manual Readings</span></div>
@@ -400,24 +422,6 @@ export default function MachineDetail() {
                 {readings.length === 0 && <tr><td colSpan={3} className="empty-state">No readings logged yet.</td></tr>}
               </tbody>
             </table>
-          </div>
-        </div>
-
-        <div className="panel" style={{ border: '1px solid var(--accent)', boxShadow: '0 0 24px rgba(0, 200, 255, 0.08)' }}>
-          <div className="panel-header">
-            <span className="panel-title">Live Readings <span style={{ color: 'var(--text-faint)', fontWeight: 400 }}>(Real-time)</span></span>
-            <span className={'badge ' + (liveConnected ? 'healthy' : 'warning')}>
-              <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: 'currentColor', marginRight: 5 }} />
-              {liveConnected ? 'Live' : 'Reconnecting'}
-            </span>
-          </div>
-          <div className="panel-body">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
-              {liveSensors.map(sensor => <LiveSensorCard key={sensor.key} {...sensor} />)}
-            </div>
-            <div style={{ marginTop: 12, fontSize: 11, color: 'var(--text-faint)', textAlign: 'right' }}>
-              {Object.keys(liveReadings).length ? 'Live telemetry received' : 'Waiting for device telemetry…'}
-            </div>
           </div>
         </div>
 
