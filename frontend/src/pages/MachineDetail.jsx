@@ -30,6 +30,7 @@ export default function MachineDetail() {
   const [safety, setSafety] = useState(null)
   const [safetyForm, setSafetyForm] = useState({ enabled: false, monitored_reading_type: 'temperature', unit: '°C', warning_low: '', warning_high: '', shutdown_low: '', shutdown_high: '', auto_shutdown_enabled: false })
   const [safetyPolicies, setSafetyPolicies] = useState([])
+  const [selectedSafetySignal, setSelectedSafetySignal] = useState('temperature')
   const safetyDefaults = { temperature: { label: 'Temperature', unit: '°C', warningLow: 10, warningHigh: 40, shutdownLow: 5, shutdownHigh: 45 }, vibration: { label: 'Vibration', unit: 'g', warningLow: 0.8, warningHigh: 2, shutdownLow: 0, shutdownHigh: 3 }, current: { label: 'Motor Current', unit: 'A', warningLow: 1, warningHigh: 8, shutdownLow: 0, shutdownHigh: 12 }, load: { label: 'Machine Load', unit: '%', warningLow: 10, warningHigh: 80, shutdownLow: 5, shutdownHigh: 95 }, humidity: { label: 'Humidity', unit: '%', warningLow: 10, warningHigh: 70, shutdownLow: 5, shutdownHigh: 85 } }
   const [safetyBusy, setSafetyBusy] = useState(false)
   const [safetyEvent, setSafetyEvent] = useState(null)
@@ -73,7 +74,7 @@ export default function MachineDetail() {
     if (deviceResult.status === 'fulfilled') setDeviceStatus(deviceResult.value)
     try { setIntelligence(await api.get(`/api/analytics/machines/${id}/intelligence`)) } catch { setIntelligence(null) }
     try { const d = await api.get(`/api/analytics/machines/${id}/degradation?limit=48`); setDegradationTimeline(d.points || []) } catch { setDegradationTimeline([]) }
-    try { const s = await api.get(`/api/devices/${id}/safety`); setSafety(s); if (s.configured) { setSafetyPolicies(s.policies || [s]); setSafetyForm({ ...s, warning_low: s.warning_low ?? '', warning_high: s.warning_high ?? '', shutdown_low: s.shutdown_low ?? '', shutdown_high: s.shutdown_high ?? '' }) } } catch { setSafety(null) }
+    try { const s = await api.get(`/api/devices/${id}/safety`); setSafety(s); if (s.configured) { setSafetyPolicies(s.policies || [s]); const initial = (s.policies || [s]).find(p => p.enabled) || (s.policies || [s])[0]; if (initial) { setSelectedSafetySignal(initial.monitored_reading_type); setSafetyForm({ ...initial, warning_low: initial.warning_low ?? '', warning_high: initial.warning_high ?? '', shutdown_low: initial.shutdown_low ?? '', shutdown_high: initial.shutdown_high ?? '', auto_shutdown_enabled: !!initial.auto_shutdown_enabled }) } } } catch { setSafety(null) }
   }
 
   useEffect(() => {
@@ -155,9 +156,12 @@ export default function MachineDetail() {
   }
 
   const selectSafetySignal = (type) => {
+    setSelectedSafetySignal(type)
     const existing = safetyPolicies.find(p => p.monitored_reading_type === type)
     const d = safetyDefaults[type]
-    setSafetyForm(existing ? { ...existing, warning_low: existing.warning_low ?? '', warning_high: existing.warning_high ?? '', shutdown_low: existing.shutdown_low ?? '', shutdown_high: existing.shutdown_high ?? '' } : { enabled: true, monitored_reading_type: type, unit: d.unit, warning_low: d.warningLow, warning_high: d.warningHigh, shutdown_low: d.shutdownLow, shutdown_high: d.shutdownHigh, auto_shutdown_enabled: safetyForm.auto_shutdown_enabled })
+    setSafetyForm(existing
+      ? { ...existing, warning_low: existing.warning_low ?? '', warning_high: existing.warning_high ?? '', shutdown_low: existing.shutdown_low ?? '', shutdown_high: existing.shutdown_high ?? '', auto_shutdown_enabled: !!existing.auto_shutdown_enabled }
+      : { enabled: false, monitored_reading_type: type, unit: d.unit, warning_low: d.warningLow, warning_high: d.warningHigh, shutdown_low: d.shutdownLow, shutdown_high: d.shutdownHigh, auto_shutdown_enabled: false })
   }
 
   const testSafetyShutdown = async () => {
@@ -335,7 +339,7 @@ export default function MachineDetail() {
                 const p=safetyPolicies.find(x=>x.monitored_reading_type===type)
                 const active=!!p?.enabled
                 return <button type="button" key={type} onClick={()=>selectSafetySignal(type)}
-                  style={{textAlign:'left',padding:14,borderRadius:10,border:'1px solid '+(active?'var(--accent)':'var(--border)'),background:'var(--panel-raised)',color:'inherit',cursor:'pointer'}}>
+                  style={{textAlign:'left',padding:14,borderRadius:10,border:'1px solid '+(selectedSafetySignal===type?'var(--accent)':'var(--border)'),background:'var(--panel-raised)',color:'inherit',cursor:'pointer'}}>
                   <div style={{display:'flex',justifyContent:'space-between',gap:8}}>
                     <strong>{d.label}</strong><span>{active?'✓ Armed':'○ Off'}</span>
                   </div>
