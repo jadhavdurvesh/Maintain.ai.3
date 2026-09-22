@@ -69,11 +69,13 @@ export function useTelemetryStream() {
       if (!org) {
         closeSocket()
         setStatus(org ? 'waiting-for-auth' : 'waiting-for-org')
+        window.dispatchEvent(new CustomEvent('maintain-ai-realtime-status', { detail: org ? 'waiting-for-auth' : 'waiting-for-org' }))
         return
       }
 
       cleanup()
       setStatus(retryRef.current ? 'reconnecting' : 'connecting')
+      window.dispatchEvent(new CustomEvent('maintain-ai-realtime-status', { detail: retryRef.current ? 'reconnecting' : 'connecting' }))
 
       let ws
       try {
@@ -94,6 +96,7 @@ export function useTelemetryStream() {
 
         retryRef.current = 0
         setStatus('connected')
+        window.dispatchEvent(new CustomEvent('maintain-ai-realtime-status', { detail: 'connected' }))
         const topic = 'realtime:org:' + currentOrg + ':telemetry'
         api.post('/api/auth/realtime-token', {}).then((result) => {
           if (ws.readyState !== WebSocket.OPEN) return
@@ -130,11 +133,11 @@ export function useTelemetryStream() {
         } catch {}
       }
 
-      ws.onerror = () => setStatus('offline')
+      ws.onerror = () => { setStatus('offline'); window.dispatchEvent(new CustomEvent('maintain-ai-realtime-status', { detail: 'offline' })) }
       ws.onclose = () => {
         cleanup()
         socketRef.current = null
-        if (!stopped) schedule()
+        if (!stopped) { window.dispatchEvent(new CustomEvent('maintain-ai-realtime-status', { detail: 'reconnecting' })); schedule() }
       }
     }
 
