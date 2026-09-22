@@ -210,7 +210,7 @@ export default function MachineDetail() {
         <div className="stat-tile"><div className="stat-label">NEXT MAINTENANCE</div><div className="stat-value" style={{ fontSize: 15 }}>{machine.next_maintenance_date ? formatDate(machine.next_maintenance_date) : '—'}</div></div>
       </div>
 
-      <div className="panel section-gap" style={{ border: '1px solid var(--accent)', boxShadow: '0 0 28px rgba(0, 200, 255, 0.08)' }}>
+      <div className="panel section-gap">
         <div className="panel-header">
           <div>
             <span className="panel-title">Live Machine Telemetry</span>
