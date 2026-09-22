@@ -493,16 +493,13 @@ def me(
         current.organization_id,
     )
 
+    user = db.get(models.User, current.id) if current.id is not None else None
     return {
         "user_id": current.id,
         "username": current.username,
         "role": current.role,
         "organization_id": current.organization_id,
-        "password_change_required": bool(
-            db.get(models.User, current.id).password_change_required
-            if current.id is not None and db.get(models.User, current.id)
-            else False
-        ),
+        "password_change_required": bool(user.password_change_required) if user else False,
         "organization_name": (
             organization.name
             if organization
