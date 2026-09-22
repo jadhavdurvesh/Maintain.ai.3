@@ -503,7 +503,7 @@ class MachineSafetyPolicy(Base):
     """Per-machine warning and automatic-shutdown interlock configuration."""
     __tablename__ = "machine_safety_policies"
     id = Column(Integer, primary_key=True, index=True)
-    machine_id = Column(Integer, ForeignKey("machines.id"), nullable=False, unique=True, index=True)
+    machine_id = Column(Integer, ForeignKey("machines.id"), nullable=False, index=True)
     enabled = Column(Boolean, nullable=False, default=False)
     monitored_reading_type = Column(String, nullable=False, default="temperature")
     unit = Column(String, nullable=True)
