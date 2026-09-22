@@ -181,8 +181,11 @@ class IngestPayload(BaseModel):
 
 
 def _evaluate_safety_policy(db: Session, machine: models.Machine, reading: models.SensorReading):
-    policy = db.query(models.MachineSafetyPolicy).filter_by(machine_id=machine.id).first()
-    if not policy or not policy.enabled or reading.reading_type != policy.monitored_reading_type:
+    policy = db.query(models.MachineSafetyPolicy).filter_by(
+        machine_id=machine.id,
+        monitored_reading_type=reading.reading_type,
+    ).first()
+    if not policy or not policy.enabled:
         return None
 
     value = float(reading.value)
@@ -561,6 +564,29 @@ async def device_websocket(websocket: WebSocket):
             "version": 1,
         })
 
+        pending_shutdown = (
+            db.query(models.MachineSafetyEvent)
+            .filter(
+                models.MachineSafetyEvent.machine_id == machine.id,
+                models.MachineSafetyEvent.event_type == "shutdown_threshold",
+                models.MachineSafetyEvent.shutdown_requested.is_(True),
+                models.MachineSafetyEvent.device_acknowledged.is_(False),
+            )
+            .order_by(models.MachineSafetyEvent.created_at.desc())
+            .first()
+        )
+        if pending_shutdown:
+            await websocket.send_json({
+                "type": "shutdown",
+                "machine_id": machine.id,
+                "reason": pending_shutdown.message,
+                "reading_type": pending_shutdown.reading_type,
+                "value": pending_shutdown.value,
+                "threshold": pending_shutdown.threshold,
+                "event_id": pending_shutdown.id,
+                "pending": True,
+            })
+
         while True:
             message = await websocket.receive_json()
             if message.get("type") == "ping":
@@ -601,6 +627,16 @@ async def device_websocket(websocket: WebSocket):
 
             reading, behaviour, safety, degradation = _process_reading(db, machine, payload)
             await _publish_reading(machine, reading, behaviour, safety, degradation)
+            if safety and safety.get("shutdown_requested"):
+                await websocket.send_json({
+                    "type": "shutdown",
+                    "machine_id": machine.id,
+                    "reason": safety["message"],
+                    "reading_type": reading.reading_type,
+                    "value": reading.value,
+                    "threshold": safety.get("threshold"),
+                    "event_id": safety.get("event_id"),
+                })
             await websocket.send_json({
                 "type": "reading_accepted",
                 "reading_id": reading.id,
@@ -626,11 +662,9 @@ async def device_websocket(websocket: WebSocket):
 @router.get("/{machine_id}/safety")
 def get_safety_policy(machine_id: int, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     machine = _get_scoped_machine(db, machine_id, current)
-    policy = db.query(models.MachineSafetyPolicy).filter_by(machine_id=machine.id).first()
-    if not policy:
-        return {"configured": False, "enabled": False, "auto_shutdown_enabled": False}
-    return {"configured": True, **{c.name: getattr(policy, c.name) for c in models.MachineSafetyPolicy.__table__.columns if c.name not in {"id", "machine_id"}}}
-
+    policies = db.query(models.MachineSafetyPolicy).filter_by(machine_id=machine.id).order_by(models.MachineSafetyPolicy.id.asc()).all()
+    rows = [{c.name: getattr(policy, c.name) for c in models.MachineSafetyPolicy.__table__.columns if c.name not in {"id", "machine_id"}} for policy in policies]
+    return {"configured": bool(rows), "enabled": any(bool(row.get("enabled")) for row in rows), "policies": rows, "auto_shutdown_enabled": any(bool(row.get("auto_shutdown_enabled")) for row in rows)}
 
 @router.put("/{machine_id}/safety")
 def set_safety_policy(machine_id: int, payload: SafetyPolicyPayload, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -643,8 +677,7 @@ def set_safety_policy(machine_id: int, payload: SafetyPolicyPayload, current: Cu
         raise HTTPException(400, "High warning threshold must be reached before the high shutdown threshold.")
     if payload.shutdown_low is not None and payload.shutdown_high is not None and payload.shutdown_low >= payload.shutdown_high:
         raise HTTPException(400, "Low shutdown threshold must be below high shutdown threshold.")
-
-    policy = db.query(models.MachineSafetyPolicy).filter_by(machine_id=machine_id).first()
+    policy = db.query(models.MachineSafetyPolicy).filter_by(machine_id=machine_id, monitored_reading_type=payload.monitored_reading_type).first()
     if not policy:
         policy = models.MachineSafetyPolicy(machine_id=machine_id)
         db.add(policy)
@@ -653,9 +686,8 @@ def set_safety_policy(machine_id: int, payload: SafetyPolicyPayload, current: Cu
     policy.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(policy)
-    audit.log_event(db, "machine", machine.id, "safety_policy_updated", f"Safety thresholds updated for {machine.name}")
-    return {"configured": True, **{c.name: getattr(policy, c.name) for c in models.MachineSafetyPolicy.__table__.columns if c.name not in {"id", "machine_id"}}}
-
+    audit.log_event(db, "machine", machine.id, "safety_policy_updated", f"Safety thresholds updated for {machine.name} ({policy.monitored_reading_type})")
+    return {"configured": True, "policies": [{c.name: getattr(p, c.name) for c in models.MachineSafetyPolicy.__table__.columns if c.name not in {"id", "machine_id"}} for p in db.query(models.MachineSafetyPolicy).filter_by(machine_id=machine.id).all()], **{c.name: getattr(policy, c.name) for c in models.MachineSafetyPolicy.__table__.columns if c.name not in {"id", "machine_id"}}}
 
 @router.post("/{machine_id}/safety/test-shutdown")
 async def test_shutdown(machine_id: int, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
