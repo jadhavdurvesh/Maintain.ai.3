@@ -11,6 +11,7 @@ const emptyForm = {
   full_name: '',
   email: '',
   role: 'technician',
+  application: 'workforce',
 }
 
 export default function SettingsPage() {
@@ -31,8 +32,9 @@ export default function SettingsPage() {
   const [machines, setMachines] = useState([])
   const [members, setMembers] = useState([])
   const [inviting, setInviting] = useState(false)
+  const [createdCredentials, setCreatedCredentials] = useState(null)
   const [appSaving, setAppSaving] = useState(null)
-  const [inviteForm, setInviteForm] = useState({ email: '', role: 'technician', application: 'workforce' })
+  const [inviteForm, setInviteForm] = useState({ email: '', username: '', full_name: '', role: 'technician', application: 'workforce' })
 
   const [error, setError] = useState(null)
   const [toast, setToast] = useState(null)
@@ -76,21 +78,21 @@ export default function SettingsPage() {
   const loadMembers = () => api.get('/api/users/members').then(setMembers).catch(() => {})
 
   const sendInvitation = async (e) => {
-    e.preventDefault(); setInviting(true)
-    try { await api.post('/api/users/invitations', inviteForm); setInviteForm({email:'',role:'technician',application:'workforce'}); await load(); await loadMembers(); setToast({type:'success',message:'Invitation sent.'}) }
-    catch (e) {
-      const message = e.message || ''
-      const crossOrg = message.includes('that email belongs to another organization')
-      setToast({
-        type: 'error',
-        message: crossOrg
-          ? 'This email is already a member of another organization and cannot be invited here.'
-          : `Could not send invitation: ${message}`,
-      })
+    e.preventDefault()
+    setInviting(true)
+    try {
+      const result = await api.post('/api/users/accounts', inviteForm)
+      setInviteForm({ email: '', username: '', full_name: '', role: 'technician', application: 'workforce' })
+      await load()
+      await loadMembers()
+      setCreatedCredentials(result)
+      setToast({type:'success',message:'Account created in Supabase and Maintain.ai.'})
+    } catch (e) {
+      setToast({type:'error',message:'Could not create account: ' + e.message})
+    } finally {
+      setInviting(false)
     }
-    finally { setInviting(false) }
   }
-
   const setApplication = async (userId, application, enabled) => {
     setAppSaving(userId + application)
     try { await api.post(`/api/users/${userId}/applications/${application}?enabled=${enabled}`); await loadMembers(); setToast({type:'success', message:'Application access updated.'}) }
@@ -135,13 +137,14 @@ export default function SettingsPage() {
 
     try {
       if (authRequired) {
-        await api.post('/api/users/invitations', {
+        const result = await api.post('/api/users/accounts', {
           email: form.email,
           role: form.role,
-          application: 'engineering',
+          application: form.application || 'engineering',
           username: form.username,
           full_name: form.full_name,
         })
+        setCreatedCredentials(result)
       } else {
         await api.post('/api/users', form)
       }
@@ -152,7 +155,7 @@ export default function SettingsPage() {
 
       setToast({
         type: 'success',
-        message: authRequired ? 'Organization invitation sent.' : 'User added successfully.',
+        message: authRequired ? 'Organization account created.' : 'User added successfully.',
       })
     } catch (e) {
       setToast({
@@ -173,6 +176,7 @@ export default function SettingsPage() {
       full_name: u.full_name || '',
       email: u.email || '',
       role: u.role,
+      application: 'workforce',
     })
   }
 
@@ -631,23 +635,37 @@ export default function SettingsPage() {
               </div>
         
               <div className="panel section-gap">
-                <div className="panel-header"><span className="panel-title">Invite Organization Member</span></div>
+                <div className="panel-header"><span className="panel-title">Create Organization Account</span></div>
                 <div className="panel-body">
-                  <p style={{color:'var(--text-dim)',fontSize:13,marginBottom:14}}>Send a Supabase Auth invitation from the engineering control center. The recipient creates their own password and then receives only the application access and machine assignments granted here.</p>
+                  <p style={{color:'var(--text-dim)',fontSize:13,marginBottom:14}}>
+                    Create the Supabase Auth account directly. No invitation email or SMTP is required. The generated temporary password is shown once.
+                  </p>
                   <form className="user-form-grid" onSubmit={sendInvitation}>
-                    <div className="field"><label>Email</label><input required type="email" value={inviteForm.email} onChange={e=>setInviteForm({...inviteForm,email:e.target.value})} placeholder="technician@company.com" /></div>
+                    <div className="field"><label>Username</label><input required value={inviteForm.username} onChange={e=>setInviteForm({...inviteForm,username:e.target.value})} placeholder="worker01" /></div>
+                    <div className="field"><label>Full name</label><input required value={inviteForm.full_name} onChange={e=>setInviteForm({...inviteForm,full_name:e.target.value})} placeholder="Technician Name" /></div>
+                    <div className="field"><label>Email</label><input required type="email" value={inviteForm.email} onChange={e=>setInviteForm({...inviteForm,email:e.target.value})} placeholder="technician@gmail.com" /></div>
                     <div className="field"><label>Role</label><select value={inviteForm.role} onChange={e=>setInviteForm({...inviteForm,role:e.target.value})}><option value="admin">Administrator</option><option value="technician">Technician</option><option value="viewer">Viewer</option></select></div>
                     <div className="field"><label>Primary application</label><select value={inviteForm.application} onChange={e=>setInviteForm({...inviteForm,application:e.target.value})}><option value="engineering">Engineering Control Center</option><option value="android">Operations Android</option><option value="workforce">Workforce Client</option></select></div>
-                    <div className="user-form-actions"><button className="btn" type="submit" disabled={inviting}>{inviting?'Sending…':'Send Invitation'}</button></div>
+                    <div className="user-form-actions"><button className="btn" type="submit" disabled={inviting}>{inviting?'Creating…':'Create Account'}</button></div>
                   </form>
                 </div>
               </div>
-        
-        
-      </>
-      )}
 
-      {isAdmin && (<>
+              {createdCredentials && (
+                <div className="panel section-gap">
+                  <div className="panel-header"><span className="panel-title">New Account Credentials</span><button className="btn secondary" onClick={()=>setCreatedCredentials(null)}>Close</button></div>
+                  <div className="panel-body">
+                    <p style={{color:'var(--text-dim)',fontSize:13}}>Give these credentials to the technician through a secure channel. The temporary password is not stored in Maintain.ai.</p>
+                    <div className="user-form-grid" style={{marginTop:14}}>
+                      <div className="field"><label>Email</label><input readOnly value={createdCredentials.email || ''} /></div>
+                      <div className="field"><label>Username</label><input readOnly value={createdCredentials.username || ''} /></div>
+                      <div className="field"><label>Temporary password</label><input readOnly value={createdCredentials.temporary_password || ''} /></div>
+                    </div>
+                    <p style={{color:'var(--text-faint)',fontSize:12,marginTop:12}}>The technician must change this temporary password on first Workforce login.</p>
+                  </div>
+                </div>
+              )}
+
 
               <div className="panel section-gap">
                 <div className="panel-header">
@@ -681,6 +699,11 @@ export default function SettingsPage() {
                     assigned work.
                   </div>
         
+                  {authRequired && !editing ? (
+                    <p style={{color:'var(--text-dim)',fontSize:13}}>
+                      Use <strong>Create Organization Account</strong> above for authenticated accounts. This creates the Supabase identity and the Maintain.ai organization membership together.
+                    </p>
+                  ) : (
                   <form
                     className="user-form-grid"
                     onSubmit={
@@ -803,6 +826,7 @@ export default function SettingsPage() {
                       )}
                     </div>
                   </form>
+                  )}
                 </div>
         
                 <div

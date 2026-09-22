@@ -12,6 +12,7 @@ Scope:
 ```text
 Supabase Auth
      |
+     | admin-created account (no email required)
      v
 Maintain.ai identity
      |
@@ -67,7 +68,9 @@ Corrections made:
 ### Workforce
 
 Current integration:
-- Supabase authentication.
+- Admin-created Supabase Auth account with an initial temporary password; no invitation email is required.
+- Technician signs in with email/password.
+- Maintain.ai forces a first-login password change before entering the Workforce client.
 - Maintain.ai sync/me.
 - assigned machine list.
 - work-order status operations.
@@ -78,6 +81,10 @@ Current integration:
 
 Corrections made:
 - centralized configuration
+- direct server-side Supabase account creation replaces email invitation as the default onboarding path
+- temporary passwords are generated server-side and are not stored in Maintain.ai
+- first-login password change is enforced by Maintain.ai
+- organization membership and application access are created together with the Auth identity
 - explicit workforce application context
 - notification calls carry workforce application context
 - Realtime subscribes to backend-authorized machine topics

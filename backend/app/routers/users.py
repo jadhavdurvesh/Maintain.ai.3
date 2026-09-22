@@ -1,4 +1,5 @@
 from typing import List
+import secrets
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -7,7 +8,13 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..database import get_db
 from ..deps import get_current_user, CurrentUser
-from ..supabase_auth import enabled as supabase_enabled, invite_user_by_email, sync_organization_claim
+from ..supabase_auth import (
+    enabled as supabase_enabled,
+    create_user_with_password,
+    delete_user,
+    invite_user_by_email,
+    sync_organization_claim,
+)
 
 router = APIRouter(
     prefix="/api/users",
@@ -114,6 +121,99 @@ def _applications(db: Session, user_id: int) -> list[str]:
         models.UserApplicationAccess.enabled.is_(True),
     ).all()
     return [row.application for row in rows]
+
+
+@router.post("/accounts")
+def create_account(
+    payload: InvitationIn,
+    current: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Create a real Supabase Auth account without sending an email."""
+    require_admin(current)
+    if not supabase_enabled():
+        raise HTTPException(503, "Supabase Auth is not configured")
+
+    email = payload.email.strip().lower()
+    username = (payload.username or email.split("@")[0]).strip()[:40]
+    full_name = (payload.full_name or "").strip() or None
+
+    if not email or "@" not in email:
+        raise HTTPException(400, "valid email is required")
+    if not username:
+        raise HTTPException(400, "username is required")
+    if payload.role not in {"admin", "technician", "viewer"}:
+        raise HTTPException(400, "invalid role")
+    if payload.application not in APPLICATIONS:
+        raise HTTPException(400, "invalid application")
+
+    existing_email = db.query(models.User).filter(models.User.email == email).first()
+    if existing_email:
+        raise HTTPException(409, "an account with this email already exists")
+
+    existing_username = db.query(models.User).filter(models.User.username == username).first()
+    if existing_username:
+        raise HTTPException(409, "that username is already taken")
+
+    temporary_password = secrets.token_urlsafe(12)
+
+    try:
+        created = create_user_with_password(
+            email=email,
+            password=temporary_password,
+            user_metadata={
+                "full_name": full_name,
+                "username": username,
+                "organization_id": str(current.organization_id),
+                "application": payload.application,
+            },
+            app_metadata={"organization_id": str(current.organization_id)},
+        )
+    except RuntimeError as exc:
+        raise HTTPException(502, str(exc))
+
+    supabase_id = str(created.get("id") or "")
+    if not supabase_id:
+        raise HTTPException(502, "Supabase created the account but did not return its user id")
+
+    try:
+        user = models.User(
+            username=username,
+            email=email,
+            supabase_user_id=supabase_id,
+            organization_id=current.organization_id,
+            role=models.UserRole(payload.role),
+            full_name=full_name,
+            active=True,
+            password_change_required=True,
+        )
+        db.add(user)
+        db.flush()
+        db.add(models.UserApplicationAccess(
+            user_id=user.id,
+            application=payload.application,
+            enabled=True,
+        ))
+        db.commit()
+        db.refresh(user)
+    except Exception as exc:
+        db.rollback()
+        delete_user(supabase_id)
+        raise HTTPException(503, f"Maintain.ai could not finish creating the account: {type(exc).__name__}") from exc
+
+    sync_organization_claim(supabase_id, current.organization_id)
+
+    return {
+        "user_id": user.id,
+        "username": user.username,
+        "full_name": user.full_name,
+        "email": user.email,
+        "role": user.role.value,
+        "organization_id": user.organization_id,
+        "application": payload.application,
+        "temporary_password": temporary_password,
+        "password_change_required": True,
+    }
 
 
 @router.post("/invitations", response_model=schemas.OrganizationInvitationOut)

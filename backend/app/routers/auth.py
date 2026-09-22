@@ -17,7 +17,12 @@ from ..deps import (
     CurrentUser,
     auth_required,
 )
-from ..supabase_auth import enabled as supabase_auth_enabled, verify_access_token, sync_organization_claim
+from ..supabase_auth import (
+    enabled as supabase_auth_enabled,
+    verify_access_token,
+    sync_organization_claim,
+    update_authenticated_password,
+)
 
 router = APIRouter(
     prefix="/api/auth",
@@ -41,6 +46,9 @@ class LoginIn(BaseModel):
 class WorkerLoginIn(BaseModel):
     username: str
 
+
+class PasswordChangeIn(BaseModel):
+    new_password: str
 
 class SupabaseSyncIn(BaseModel):
     organization_name: str | None = None
@@ -401,6 +409,35 @@ def sync_supabase_user(
             detail=f"Account synchronization could not be completed: {type(exc).__name__}",
         ) from exc
 
+@router.post("/password-change")
+def password_change(
+    payload: PasswordChangeIn,
+    authorization: str | None = Header(default=None),
+    current: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Supabase access token required")
+    new_password = payload.new_password
+    if len(new_password) < 8:
+        raise HTTPException(status_code=400, detail="password must be at least 8 characters")
+    if len(new_password) > 128:
+        raise HTTPException(status_code=400, detail="password is too long")
+
+    token = authorization.removeprefix("Bearer ").strip()
+    try:
+        update_authenticated_password(token, new_password)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    user = db.get(models.User, current.id) if current.id is not None else None
+    if not user:
+        raise HTTPException(status_code=401, detail="user account not found")
+    user.password_change_required = False
+    db.commit()
+    return {"success": True, "password_change_required": False}
+
+
 @router.post("/realtime-token")
 def realtime_token(
     current: CurrentUser = Depends(get_current_user),
@@ -456,11 +493,13 @@ def me(
         current.organization_id,
     )
 
+    user = db.get(models.User, current.id) if current.id is not None else None
     return {
         "user_id": current.id,
         "username": current.username,
         "role": current.role,
         "organization_id": current.organization_id,
+        "password_change_required": bool(user.password_change_required) if user else False,
         "organization_name": (
             organization.name
             if organization
