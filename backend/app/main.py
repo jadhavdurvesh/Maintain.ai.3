@@ -27,8 +27,40 @@ def _initialize_database():
         ensure_lab_ml_schema()
         ensure_tenant_schema()
         ensure_legacy_application_access_schema()
+        ensure_safety_policy_schema()
         ensure_bootstrap_organization()
     except Exception:
+        pass
+
+
+def ensure_safety_policy_schema():
+    """Migrate the safety policy table from one-policy-per-machine to one-policy-per-signal."""
+    try:
+        inspector = inspect(engine)
+        if not inspector.has_table("machine_safety_policies"):
+            return
+        if engine.dialect.name == "postgresql":
+            with engine.begin() as connection:
+                connection.execute(text("""
+                    DO $
+                    DECLARE constraint_name TEXT;
+                    BEGIN
+                        SELECT conname INTO constraint_name
+                        FROM pg_constraint
+                        WHERE conrelid = 'machine_safety_policies'::regclass
+                          AND contype = 'u'
+                          AND pg_get_constraintdef(oid) = 'UNIQUE (machine_id)';
+                        IF constraint_name IS NOT NULL THEN
+                            EXECUTE format('ALTER TABLE machine_safety_policies DROP CONSTRAINT %I', constraint_name);
+                        END IF;
+                    END $;
+                """))
+                connection.execute(text(
+                    "CREATE INDEX IF NOT EXISTS ix_machine_safety_policies_machine_id "
+                    "ON machine_safety_policies (machine_id)"
+                ))
+    except Exception:
+        # Keep startup resilient; the endpoint will surface a real DB error if migration fails.
         pass
 
 
