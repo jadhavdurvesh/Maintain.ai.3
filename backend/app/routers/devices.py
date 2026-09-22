@@ -16,6 +16,7 @@ from ..database import get_db, SessionLocal
 from ..deps import get_current_user, CurrentUser
 from ..alerts_engine import evaluate_machine
 from ..ml.online import update_online_state
+from ..ml.intelligence import process_telemetry
 from ..ml.temporal_features import materialize_windows
 from ..ml.anomaly_events import create_anomaly_event
 from ..notification_service import notify_machine_workers
