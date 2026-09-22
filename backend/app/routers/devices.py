@@ -737,10 +737,30 @@ def set_safety_policy(machine_id: int, payload: SafetyPolicyPayload, current: Cu
     for key, value in payload.model_dump().items():
         setattr(policy, key, value)
     policy.updated_at = datetime.utcnow()
+    # Persist the safety policy first. The policy itself must not be rolled back
+    # merely because an audit-write has a separate schema/runtime problem.
     db.commit()
     db.refresh(policy)
-    audit.log_event(db, "machine", machine.id, "safety_policy_updated", f"Safety thresholds updated for {machine.name} ({policy.monitored_reading_type})")
-    return {"configured": True, "policies": [{c.name: getattr(p, c.name) for c in models.MachineSafetyPolicy.__table__.columns if c.name not in {"id", "machine_id"}} for p in db.query(models.MachineSafetyPolicy).filter_by(machine_id=machine.id).all()], **{c.name: getattr(policy, c.name) for c in models.MachineSafetyPolicy.__table__.columns if c.name not in {"id", "machine_id"}}}
+
+    try:
+        audit.log_event(
+            db,
+            "machine",
+            machine.id,
+            "safety_policy_updated",
+            f"Safety thresholds updated for {machine.name} ({policy.monitored_reading_type})",
+            organization_id=current.organization_id,
+        )
+    except Exception as audit_exc:
+        # The safety configuration is already committed. Keep the machine safety
+        # control usable and surface the audit problem in server logs rather than
+        # turning a successful settings write into a misleading HTTP 500.
+        db.rollback()
+        print(f"[safety] audit write failed after policy save: {type(audit_exc).__name__}: {audit_exc}")
+
+    policies = db.query(models.MachineSafetyPolicy).filter_by(machine_id=machine.id).order_by(models.MachineSafetyPolicy.id.asc()).all()
+    rows = [{c.name: getattr(p, c.name) for c in models.MachineSafetyPolicy.__table__.columns if c.name not in {"id", "machine_id"}} for p in policies]
+    return {"configured": True, "policies": rows, **{c.name: getattr(policy, c.name) for c in models.MachineSafetyPolicy.__table__.columns if c.name not in {"id", "machine_id"}}}
 
 @router.post("/{machine_id}/safety/test-shutdown")
 async def test_shutdown(machine_id: int, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
