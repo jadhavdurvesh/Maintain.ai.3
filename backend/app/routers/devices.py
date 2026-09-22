@@ -203,6 +203,19 @@ def _evaluate_safety_policy(db: Session, machine: models.Machine, reading: model
         .first()
     )
     if recent and (datetime.utcnow() - recent.created_at).total_seconds() < 300:
+        # Do not suppress an unacknowledged automatic shutdown just because the
+        # threshold event was already recorded. A device may have connected
+        # after the first crossing (common with serverless reconnects).
+        if event_type == "shutdown_threshold" and policy.auto_shutdown_enabled and not recent.device_acknowledged:
+            return {
+                "event_id": recent.id,
+                "type": recent.event_type,
+                "shutdown_requested": True,
+                "device_command_available": machine.id in _device_command_clients,
+                "threshold": recent.threshold,
+                "message": recent.message,
+                "pending_ack": True,
+            }
         return None
 
     shutdown_requested = event_type == "shutdown_threshold" and policy.auto_shutdown_enabled
