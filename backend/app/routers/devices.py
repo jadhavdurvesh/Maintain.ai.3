@@ -153,6 +153,14 @@ def _apply_live_sensor_health(db: Session, machine: models.Machine, reading: mod
             else models.HealthStatus.critical
         )
         db.commit()
+        if machine.status == models.HealthStatus.critical:
+            _ensure_triggered_maintenance(
+                db,
+                machine,
+                trigger="corrective",
+                reason=f"{machine.name}: machine health reached a critical state.",
+                scheduled_date=datetime.utcnow(),
+            )
 
 
 class DeviceStatusOut(BaseModel):
@@ -178,6 +186,44 @@ class IngestPayload(BaseModel):
     unit: str | None = None
     recorded_at: datetime | None = None
     event_id: str | None = None
+
+
+def _ensure_triggered_maintenance(db: Session, machine: models.Machine, *, trigger: str, reason: str, scheduled_date: datetime | None = None):
+    """Create one open maintenance action for a safety/health trigger, idempotently."""
+    if trigger == "breakdown":
+        description_prefix = "AUTO-BREAKDOWN:"
+        maintenance_type = "breakdown"
+        due = scheduled_date or datetime.utcnow()
+    else:
+        description_prefix = "AUTO-CORRECTIVE:"
+        maintenance_type = "corrective"
+        due = scheduled_date or datetime.utcnow()
+
+    existing = (
+        db.query(models.MaintenanceRecord)
+        .filter(
+            models.MaintenanceRecord.machine_id == machine.id,
+            models.MaintenanceRecord.status != models.MaintenanceStatus.completed,
+            models.MaintenanceRecord.description.like(description_prefix + "%"),
+        )
+        .order_by(models.MaintenanceRecord.id.desc())
+        .first()
+    )
+    if existing:
+        return existing
+
+    record = models.MaintenanceRecord(
+        machine_id=machine.id,
+        type=maintenance_type,
+        description=f"{description_prefix} {reason}",
+        scheduled_date=due,
+        status=models.MaintenanceStatus.scheduled,
+    )
+    db.add(record)
+    machine.next_maintenance_date = due
+    db.commit()
+    db.refresh(record)
+    return record
 
 
 def _evaluate_safety_policy(db: Session, machine: models.Machine, reading: models.SensorReading):
@@ -244,6 +290,13 @@ def _evaluate_safety_policy(db: Session, machine: models.Machine, reading: model
         )
 
     if event_type == "shutdown_threshold":
+        _ensure_triggered_maintenance(
+            db,
+            machine,
+            trigger="breakdown",
+            reason=message,
+            scheduled_date=datetime.utcnow(),
+        )
         notify_machine_workers(
             db, machine.id, "safety_shutdown", "Machine Safety Limit Crossed", message,
             {"route": "machine_alert", "machine_id": machine.id, "event_id": event.id, "auto_shutdown": shutdown_requested},
