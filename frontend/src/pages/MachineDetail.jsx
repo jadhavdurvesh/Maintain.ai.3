@@ -86,31 +86,31 @@ export default function MachineDetail() {
     return () => window.clearInterval(refresh)
   }, [id, machine])
 
+  // Live telemetry is delivered through the tenant-scoped Supabase Realtime
+  // channel established by App.jsx/realtime.js. Do not open a second process-local
+  // backend WebSocket here: serverless instances are not guaranteed to share the
+  // in-memory telemetry fan-out.
   useEffect(() => {
-    let socket, retry, stopped = false
-    const connect = () => {
-      const base = import.meta.env.VITE_API_URL || window.location.origin
-      const wsBase = base.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:')
-      const token = getToken()
-      const url = wsBase + '/api/devices/stream' + (token ? '?token=' + encodeURIComponent(token) : '')
-      socket = new WebSocket(url)
-      socket.onopen = () => setLiveConnected(true)
-      socket.onclose = () => { setLiveConnected(false); if (!stopped) retry = window.setTimeout(connect, 3000) }
-      socket.onerror = () => setLiveConnected(false)
-      socket.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data)
-          if (message.type !== 'telemetry' || String(message.machine_id) !== String(id)) return
-          const reading = { value: Number(message.value), unit: message.unit || '', recorded_at: message.recorded_at }
-          setLiveReadings(prev => ({ ...prev, [message.reading_type]: reading }))
-          setLiveHistory(prev => ({ ...prev, [message.reading_type]: [...(prev[message.reading_type] || []), reading.value].slice(-24) }))
-          if (message.safety) setSafetyEvent(message.safety)
-          if (message.degradation) setDegradationTimeline(prev => [...prev, message.degradation].slice(-48))
-        } catch { /* ignore malformed stream messages */ }
-      }
+    const handleStatus = (event) => {
+      const status = event?.detail
+      setLiveConnected(status === 'connected')
     }
-    connect()
-    return () => { stopped = true; window.clearTimeout(retry); if (socket) socket.close() }
+    const handleTelemetry = (event) => {
+      const message = event?.detail
+      if (!message || message.type !== 'telemetry' || String(message.machine_id) !== String(id)) return
+      const reading = { value: Number(message.value), unit: message.unit || '', recorded_at: message.recorded_at }
+      setLiveReadings(prev => ({ ...prev, [message.reading_type]: reading }))
+      setLiveHistory(prev => ({ ...prev, [message.reading_type]: [...(prev[message.reading_type] || []), reading.value].slice(-24) }))
+      if (message.safety) setSafetyEvent(message.safety)
+      if (message.degradation) setDegradationTimeline(prev => [...prev, message.degradation].slice(-48))
+      setLiveConnected(true)
+    }
+    window.addEventListener('maintain-ai-realtime-status', handleStatus)
+    window.addEventListener('maintain-ai-telemetry', handleTelemetry)
+    return () => {
+      window.removeEventListener('maintain-ai-realtime-status', handleStatus)
+      window.removeEventListener('maintain-ai-telemetry', handleTelemetry)
+    }
   }, [id])
 
   const liveSensors = useMemo(() => ([
