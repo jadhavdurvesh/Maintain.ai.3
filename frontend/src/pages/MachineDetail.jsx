@@ -34,6 +34,7 @@ export default function MachineDetail() {
   const safetyDefaults = { temperature: { label: 'Temperature', unit: '°C', warningLow: 10, warningHigh: 40, shutdownLow: 5, shutdownHigh: 45 }, vibration: { label: 'Vibration', unit: 'g', warningLow: 0.8, warningHigh: 2, shutdownLow: 0, shutdownHigh: 3 }, current: { label: 'Motor Current', unit: 'A', warningLow: 1, warningHigh: 8, shutdownLow: 0, shutdownHigh: 12 }, load: { label: 'Machine Load', unit: '%', warningLow: 10, warningHigh: 80, shutdownLow: 5, shutdownHigh: 95 }, humidity: { label: 'Humidity', unit: '%', warningLow: 10, warningHigh: 70, shutdownLow: 5, shutdownHigh: 85 } }
   const [safetyBusy, setSafetyBusy] = useState(false)
   const [safetyEvent, setSafetyEvent] = useState(null)
+  const [safetyError, setSafetyError] = useState(null)
   const [forecast, setForecast] = useState(null)
   const [forecastModel, setForecastModel] = useState('chronos2')
   const [forecastBusy, setForecastBusy] = useState(false)
@@ -164,27 +165,68 @@ export default function MachineDetail() {
   const saveSafety = async (e) => {
     e.preventDefault()
     setSafetyBusy(true)
+    setSafetyError(null)
     try {
-      const payload = { ...safetyForm, unit: safetyDefaults[safetyForm.monitored_reading_type]?.unit || safetyForm.unit, warning_low: safetyForm.warning_low === '' ? null : Number(safetyForm.warning_low), warning_high: safetyForm.warning_high === '' ? null : Number(safetyForm.warning_high), shutdown_low: safetyForm.shutdown_low === '' ? null : Number(safetyForm.shutdown_low), shutdown_high: safetyForm.shutdown_high === '' ? null : Number(safetyForm.shutdown_high) }
-      const saved = await api.put('/api/devices/' + id + '/safety', payload)
-      setSafety(saved)
-      const policies = saved.policies || [saved]
-      setSafetyPolicies(policies)
-      const updated = policies.find(p => p.monitored_reading_type === safetyForm.monitored_reading_type)
-      if (updated) {
-        setSelectedSafetySignal(updated.monitored_reading_type)
-        setSafetyForm({ ...updated, warning_low: updated.warning_low ?? '', warning_high: updated.warning_high ?? '', shutdown_low: updated.shutdown_low ?? '', shutdown_high: updated.shutdown_high ?? '', auto_shutdown_enabled: !!updated.auto_shutdown_enabled })
+      const type = safetyForm.monitored_reading_type
+      const defaults = safetyDefaults[type]
+      const payload = {
+        enabled: !!safetyForm.enabled,
+        monitored_reading_type: type,
+        unit: defaults?.unit || safetyForm.unit || '',
+        warning_low: safetyForm.warning_low === '' ? null : Number(safetyForm.warning_low),
+        warning_high: safetyForm.warning_high === '' ? null : Number(safetyForm.warning_high),
+        shutdown_low: safetyForm.shutdown_low === '' ? null : Number(safetyForm.shutdown_low),
+        shutdown_high: safetyForm.shutdown_high === '' ? null : Number(safetyForm.shutdown_high),
+        auto_shutdown_enabled: !!safetyForm.auto_shutdown_enabled,
       }
-    } finally { setSafetyBusy(false) }
+      const saved = await api.put('/api/devices/' + id + '/safety', payload)
+      const policies = Array.isArray(saved?.policies) ? saved.policies : []
+      const updated = policies.find(p => p.monitored_reading_type === type)
+      if (!updated) throw new Error('Safety settings were accepted but the saved policy was not returned by the server.')
+      setSafety(saved)
+      setSafetyPolicies(policies)
+      setSelectedSafetySignal(type)
+      setSafetyForm({
+        ...updated,
+        warning_low: updated.warning_low ?? '',
+        warning_high: updated.warning_high ?? '',
+        shutdown_low: updated.shutdown_low ?? '',
+        shutdown_high: updated.shutdown_high ?? '',
+        auto_shutdown_enabled: !!updated.auto_shutdown_enabled,
+      })
+    } catch (err) {
+      setSafetyError(err?.message || 'Could not save safety settings.')
+    } finally {
+      setSafetyBusy(false)
+    }
   }
 
   const selectSafetySignal = (type) => {
     setSelectedSafetySignal(type)
+    setSafetyError(null)
     const existing = safetyPolicies.find(p => p.monitored_reading_type === type)
     const d = safetyDefaults[type]
     setSafetyForm(existing
-      ? { ...existing, warning_low: existing.warning_low ?? '', warning_high: existing.warning_high ?? '', shutdown_low: existing.shutdown_low ?? '', shutdown_high: existing.shutdown_high ?? '', auto_shutdown_enabled: !!existing.auto_shutdown_enabled }
-      : { enabled: false, monitored_reading_type: type, unit: d.unit, warning_low: d.warningLow, warning_high: d.warningHigh, shutdown_low: d.shutdownLow, shutdown_high: d.shutdownHigh, auto_shutdown_enabled: false })
+      ? {
+          enabled: !!existing.enabled,
+          monitored_reading_type: type,
+          unit: d.unit,
+          warning_low: existing.warning_low ?? '',
+          warning_high: existing.warning_high ?? '',
+          shutdown_low: existing.shutdown_low ?? '',
+          shutdown_high: existing.shutdown_high ?? '',
+          auto_shutdown_enabled: !!existing.auto_shutdown_enabled,
+        }
+      : {
+          enabled: false,
+          monitored_reading_type: type,
+          unit: d.unit,
+          warning_low: d.warningLow,
+          warning_high: d.warningHigh,
+          shutdown_low: d.shutdownLow,
+          shutdown_high: d.shutdownHigh,
+          auto_shutdown_enabled: false,
+        })
   }
 
   const testSafetyShutdown = async () => {
@@ -407,6 +449,10 @@ export default function MachineDetail() {
               </button>
             </div>
           </form>}
+
+          {safetyError && <div style={{marginTop:10,padding:10,borderRadius:8,background:'rgba(255,70,70,.10)',color:'var(--critical)',fontSize:12}}>
+            <strong>Could not save safety settings.</strong> {safetyError}
+          </div>}
 
           {!canEdit && <div style={{color:'var(--text-faint)',fontSize:12}}>Safety settings are managed by administrators.</div>}
 
