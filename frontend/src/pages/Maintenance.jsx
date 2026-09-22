@@ -109,16 +109,17 @@ export default function Maintenance() {
         <div className="panel">
           <div className="panel-header"><span className="panel-title">Maintenance Records</span></div>
           <table>
-            <thead><tr><th>Type</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>Type</th><th>Scheduled</th><th>Status</th><th></th></tr></thead>
             <tbody>
               {records.map((r) => (
                 <tr key={r.id}>
                   <td>{r.description || r.type}</td>
+                  <td className="mono">{r.scheduled_date ? new Date(r.scheduled_date).toLocaleDateString() : '—'}</td>
                   <td><StatusBadge status={r.status === 'completed' ? 'healthy' : 'warning'} /></td>
                   <td>{canComplete && r.status !== 'completed' && <button className="btn secondary" onClick={() => complete(r.id)}>Mark done</button>}</td>
                 </tr>
               ))}
-              {records.length === 0 && <tr><td colSpan={3} className="empty-state">Nothing scheduled yet.</td></tr>}
+              {records.length === 0 && <tr><td colSpan={4} className="empty-state">Nothing scheduled yet.</td></tr>}
             </tbody>
           </table>
         </div>
