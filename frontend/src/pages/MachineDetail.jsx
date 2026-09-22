@@ -29,6 +29,8 @@ export default function MachineDetail() {
   const [intelligence, setIntelligence] = useState(null)
   const [safety, setSafety] = useState(null)
   const [safetyForm, setSafetyForm] = useState({ enabled: false, monitored_reading_type: 'temperature', unit: '°C', warning_low: '', warning_high: '', shutdown_low: '', shutdown_high: '', auto_shutdown_enabled: false })
+  const [safetyPolicies, setSafetyPolicies] = useState([])
+  const safetyDefaults = { temperature: { label: 'Temperature', unit: '°C', warningLow: 10, warningHigh: 40, shutdownLow: 5, shutdownHigh: 45 }, vibration: { label: 'Vibration', unit: 'g', warningLow: 0.8, warningHigh: 2, shutdownLow: 0, shutdownHigh: 3 }, current: { label: 'Motor Current', unit: 'A', warningLow: 1, warningHigh: 8, shutdownLow: 0, shutdownHigh: 12 }, load: { label: 'Machine Load', unit: '%', warningLow: 10, warningHigh: 80, shutdownLow: 5, shutdownHigh: 95 }, humidity: { label: 'Humidity', unit: '%', warningLow: 10, warningHigh: 70, shutdownLow: 5, shutdownHigh: 85 } }
   const [safetyBusy, setSafetyBusy] = useState(false)
   const [safetyEvent, setSafetyEvent] = useState(null)
   const [forecast, setForecast] = useState(null)
@@ -71,7 +73,7 @@ export default function MachineDetail() {
     if (deviceResult.status === 'fulfilled') setDeviceStatus(deviceResult.value)
     try { setIntelligence(await api.get(`/api/analytics/machines/${id}/intelligence`)) } catch { setIntelligence(null) }
     try { const d = await api.get(`/api/analytics/machines/${id}/degradation?limit=48`); setDegradationTimeline(d.points || []) } catch { setDegradationTimeline([]) }
-    try { const s = await api.get(`/api/devices/${id}/safety`); setSafety(s); if (s.configured) setSafetyForm({ ...s, warning_low: s.warning_low ?? '', warning_high: s.warning_high ?? '', shutdown_low: s.shutdown_low ?? '', shutdown_high: s.shutdown_high ?? '' }) } catch { setSafety(null) }
+    try { const s = await api.get(`/api/devices/${id}/safety`); setSafety(s); if (s.configured) { setSafetyPolicies(s.policies || [s]); setSafetyForm({ ...s, warning_low: s.warning_low ?? '', warning_high: s.warning_high ?? '', shutdown_low: s.shutdown_low ?? '', shutdown_high: s.shutdown_high ?? '' }) } } catch { setSafety(null) }
   }
 
   useEffect(() => {
@@ -145,11 +147,17 @@ export default function MachineDetail() {
     e.preventDefault()
     setSafetyBusy(true)
     try {
-      const payload = { ...safetyForm, warning_low: safetyForm.warning_low === '' ? null : Number(safetyForm.warning_low), warning_high: safetyForm.warning_high === '' ? null : Number(safetyForm.warning_high), shutdown_low: safetyForm.shutdown_low === '' ? null : Number(safetyForm.shutdown_low), shutdown_high: safetyForm.shutdown_high === '' ? null : Number(safetyForm.shutdown_high) }
+      const payload = { ...safetyForm, unit: safetyDefaults[safetyForm.monitored_reading_type]?.unit || safetyForm.unit, warning_low: safetyForm.warning_low === '' ? null : Number(safetyForm.warning_low), warning_high: safetyForm.warning_high === '' ? null : Number(safetyForm.warning_high), shutdown_low: safetyForm.shutdown_low === '' ? null : Number(safetyForm.shutdown_low), shutdown_high: safetyForm.shutdown_high === '' ? null : Number(safetyForm.shutdown_high) }
       const saved = await api.put('/api/devices/' + id + '/safety', payload)
       setSafety(saved)
-      setSafetyForm({ ...saved, warning_low: saved.warning_low ?? '', warning_high: saved.warning_high ?? '', shutdown_low: saved.shutdown_low ?? '', shutdown_high: saved.shutdown_high ?? '' })
+      setSafetyPolicies(saved.policies || [saved])
     } finally { setSafetyBusy(false) }
+  }
+
+  const selectSafetySignal = (type) => {
+    const existing = safetyPolicies.find(p => p.monitored_reading_type === type)
+    const d = safetyDefaults[type]
+    setSafetyForm(existing ? { ...existing, warning_low: existing.warning_low ?? '', warning_high: existing.warning_high ?? '', shutdown_low: existing.shutdown_low ?? '', shutdown_high: existing.shutdown_high ?? '' } : { enabled: true, monitored_reading_type: type, unit: d.unit, warning_low: d.warningLow, warning_high: d.warningHigh, shutdown_low: d.shutdownLow, shutdown_high: d.shutdownHigh, auto_shutdown_enabled: safetyForm.auto_shutdown_enabled })
   }
 
   const testSafetyShutdown = async () => {
@@ -197,6 +205,169 @@ export default function MachineDetail() {
         <div className="stat-tile"><div className="stat-label">NEXT MAINTENANCE</div><div className="stat-value" style={{ fontSize: 15 }}>{machine.next_maintenance_date ? formatDate(machine.next_maintenance_date) : '—'}</div></div>
       </div>
 
+      <div className="panel section-gap">
+        <div className="panel-header">
+          <span className="panel-title">Live Sensor Integration (Optional)</span>
+          {deviceStatus?.iot_enabled && <span className="badge healthy">Enabled</span>}
+        </div>
+        <div className="panel-body">
+          <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 12 }}>
+            Manual entry above always works, with or without this. Enabling this lets an ESP32
+            (or any device) push readings directly for this machine over the network — see
+            <code style={{ margin: '0 4px' }}>firmware/esp32_example.ino</code>
+            for working example code. Off by default; nothing changes unless you turn it on.
+          </p>
+
+          {deviceError && <div style={{ marginBottom: 12, padding: 10, borderRadius: 8, background: 'rgba(255,70,70,.10)', color: 'var(--critical)', fontSize: 12 }}>{deviceError}</div>}
+
+          {!canEdit && <div style={{ marginBottom: 12, color: 'var(--text-faint)', fontSize: 12 }}>Live sensor integration is managed by administrators.</div>}
+
+          {revealedKey && (
+            <div style={{ padding: 12, background: 'var(--panel-raised)', borderRadius: 8, marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: 'var(--warning)', marginBottom: 6 }}>
+                Copy this now — it's shown only once. Paste it into the firmware's DEVICE_KEY.
+              </div>
+              <div className="mono" style={{ fontSize: 13, wordBreak: 'break-all' }}>{revealedKey}</div>
+            </div>
+          )}
+
+          {canEdit && deviceStatus?.iot_enabled ? (
+            <div className="chip-row">
+              <button className="btn secondary" onClick={enableDevice} disabled={deviceBusy}>
+                {deviceBusy ? 'Working…' : 'Regenerate Key'}
+              </button>
+              <button className="btn danger" onClick={disableDevice} disabled={deviceBusy}>
+                {deviceBusy ? 'Working…' : 'Disable'}
+              </button>
+            </div>
+          ) : canEdit ? (
+            <button className="btn" onClick={enableDevice} disabled={deviceBusy}>
+              {deviceBusy ? 'Working…' : 'Enable Live Sensor Integration'}
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="panel section-gap">
+        <div className="panel-header">
+          <span className="panel-title">Pretrained Signal Forecast</span>
+          <span className="badge neutral">Zero-shot</span>
+        </div>
+        <div className="panel-body">
+          <div className="chip-row">
+            <select value={forecastModel} onChange={e=>setForecastModel(e.target.value)}>
+              <option value="chronos2">Chronos-2</option>
+              <option value="timer">Timer</option>
+            </select>
+            <button className="btn secondary" onClick={runForecast} disabled={forecastBusy}>{forecastBusy ? 'Forecasting…' : 'Forecast Temperature'}</button>
+          </div>
+          {forecast && <div style={{ marginTop: 12 }}>
+            {forecast.available ? (
+              <div className="mono" style={{ display:'grid', gridTemplateColumns:'repeat(6,minmax(0,1fr))', gap:8 }}>
+                {forecast.forecast.slice(0,12).map((v,i)=><div key={i} style={{ padding:8, background:'var(--panel-raised)', borderRadius:6 }}>{Number(v).toFixed(2)}<div style={{fontSize:10,color:'var(--text-faint)'}}>t+{i+1}</div></div>)}
+              </div>
+            ) : <div style={{color:'var(--text-faint)',fontSize:12}}>{forecast.reason || 'Forecast unavailable.'}</div>}
+          </div>}
+          <div style={{ marginTop: 9, color:'var(--text-faint)', fontSize:11 }}>Forecasts estimate future sensor values. They are evidence for degradation analysis, not failure probabilities.</div>
+        </div>
+      </div>
+
+      <div className="panel section-gap">
+        <div className="panel-header">
+          <span className="panel-title">Degradation Timeline</span>
+          <span className="badge neutral">Online evidence · not failure probability</span>
+        </div>
+        <div className="panel-body">
+          {degradationTimeline.length ? (
+            <>
+              <div style={{display:'flex',alignItems:'end',gap:3,height:120}}>
+                {degradationTimeline.slice(-48).map((p,i) => (
+                  <div key={p.recorded_at + i} title={`${p.recorded_at} · score ${Number(p.degradation_score).toFixed(3)}`} style={{flex:1,minWidth:2,height:`${8 + Number(p.degradation_score)*100}px`,maxHeight:110,borderRadius:2,background:'var(--accent)',opacity:0.25 + Number(p.degradation_score)*0.75}} />
+                ))}
+              </div>
+              <div style={{display:'flex',justifyContent:'space-between',marginTop:8,color:'var(--text-faint)',fontSize:11}}>
+                <span>{formatDateTime(degradationTimeline[0].recorded_at)}</span>
+                <span>Latest: {Number(degradationTimeline[degradationTimeline.length-1].degradation_score).toFixed(3)}</span>
+              </div>
+              <div style={{marginTop:10,color:'var(--text-faint)',fontSize:11}}>
+                Evidence combines live sensor anomaly deviation and multi-sensor agreement. It is intentionally not presented as a calibrated failure risk.
+              </div>
+            </>
+          ) : <div className="empty-state">Collecting telemetry for the first degradation points…</div>}
+        </div>
+      </div>
+
+      <div className="panel section-gap">
+        <div className="panel-header">
+          <span className="panel-title">Machine Safety Limits & Auto-Shutdown</span>
+          <span className={'badge ' + (safety?.enabled ? 'healthy' : 'neutral')}>{safety?.enabled ? 'Monitoring' : 'Off'}</span>
+        </div>
+        <div className="panel-body">
+          <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 12 }}>Configure early warning points and hard shutdown points for one telemetry signal. Automatic shutdown is separately controlled and requires a connected safety-capable IoT device.</p>
+          {canEdit && <form onSubmit={saveSafety}>
+            <div className="chip-row" style={{ marginBottom: 10 }}>
+              <label><input type="checkbox" checked={!!safetyForm.enabled} onChange={e => setSafetyForm({...safetyForm, enabled:e.target.checked})} /> Enable limit monitoring</label>
+              <label>Signal <select value={safetyForm.monitored_reading_type} onChange={e => setSafetyForm({...safetyForm, monitored_reading_type:e.target.value})}><option value="temperature">Temperature</option><option value="vibration">Vibration</option><option value="current">Current</option><option value="load">Load</option></select></label>
+              <label>Unit <input style={{width:70}} value={safetyForm.unit || ''} onChange={e => setSafetyForm({...safetyForm, unit:e.target.value})} /></label>
+            </div>
+            <div className="grid-2" style={{ marginBottom: 10 }}>
+              <label>Warning low <input type="number" step="any" value={safetyForm.warning_low} onChange={e=>setSafetyForm({...safetyForm,warning_low:e.target.value})} /></label>
+              <label>Warning high <input type="number" step="any" value={safetyForm.warning_high} onChange={e=>setSafetyForm({...safetyForm,warning_high:e.target.value})} /></label>
+              <label>Shutdown low <input type="number" step="any" value={safetyForm.shutdown_low} onChange={e=>setSafetyForm({...safetyForm,shutdown_low:e.target.value})} /></label>
+              <label>Shutdown high <input type="number" step="any" value={safetyForm.shutdown_high} onChange={e=>setSafetyForm({...safetyForm,shutdown_high:e.target.value})} /></label>
+            </div>
+            <div className="chip-row">
+              <label><input type="checkbox" checked={!!safetyForm.auto_shutdown_enabled} onChange={e=>setSafetyForm({...safetyForm,auto_shutdown_enabled:e.target.checked})} /> Enable automatic shutdown command</label>
+              <button className="btn" type="submit" disabled={safetyBusy}>{safetyBusy ? 'Saving…' : 'Save Safety Settings'}</button>
+              <button className="btn secondary" type="button" onClick={testSafetyShutdown} disabled={safetyBusy || !deviceStatus?.iot_enabled}>Test IoT Shutdown Signal</button>
+            </div>
+          </form>}
+          {!canEdit && <div style={{color:'var(--text-faint)',fontSize:12,marginTop:8}}>Safety settings are managed by administrators.</div>}
+          <div style={{ marginTop: 10, color: 'var(--text-faint)', fontSize: 11 }}>The app sends a shutdown command to the authenticated IoT safety channel when a hard limit is crossed. For real equipment, the ESP32 should drive a properly rated relay/contactor or independent safety interlock locally; do not use a hobby GPIO as the sole protection for mains or hazardous machinery.</div>
+          {safetyEvent && <div style={{ marginTop: 10, padding: 10, borderRadius: 8, background: safetyEvent.shutdown_requested ? 'rgba(255,70,70,.10)' : 'rgba(255,180,0,.10)', color: safetyEvent.shutdown_requested ? 'var(--critical)' : 'var(--warning)', fontSize: 12 }}>{safetyEvent.message}{safetyEvent.shutdown_requested ? ' · Shutdown command issued.' : ' · Warning notification issued.'}</div>}
+        </div>
+      </div>
+      <div className="panel section-gap">
+        <div className="panel-header"><span className="panel-title">Machine Safety & Auto-Shutdown</span><span className={'badge ' + (safety?.enabled ? 'healthy' : 'neutral')}>{safety?.enabled ? 'Monitoring' : 'Off'}</span></div>
+        <div className="panel-body">
+          <p style={{color:'var(--text-dim)',fontSize:13,marginBottom:14}}>Set warning and hard-stop limits for each machine signal. Units are automatic and safety protection stays attached to the machine.</p>
+          {canEdit && <form onSubmit={saveSafety}>
+            <div className="grid-2" style={{gap:10}}>
+              {Object.entries(safetyDefaults).map(([type,d]) => {
+                const p=safetyPolicies.find(x=>x.monitored_reading_type===type)
+                const active=!!p?.enabled
+                return <button type="button" key={type} onClick={()=>selectSafetySignal(type)} style={{textAlign:'left',padding:12,borderRadius:10,border:'1px solid '+(active?'var(--accent)':'var(--border)'),background:'var(--panel-raised)',color:'inherit',cursor:'pointer'}}>
+                  <div style={{display:'flex',justifyContent:'space-between'}}><strong>{d.label}</strong><span>{active?'✓ Armed':'○ Off'}</span></div>
+                  <div style={{fontSize:11,color:'var(--text-faint)',marginTop:5}}>Warning {p?.warning_high ?? d.warningHigh} {d.unit} · Shutdown {p?.shutdown_high ?? d.shutdownHigh} {d.unit}</div>
+                </button>
+              })}
+            </div>
+            <div style={{marginTop:14,padding:14,border:'1px solid var(--border)',borderRadius:10}}>
+              <div className="chip-row" style={{marginBottom:10}}>
+                <label><input type="checkbox" checked={!!safetyForm.enabled} onChange={e=>setSafetyForm({...safetyForm,enabled:e.target.checked})}/> Enable {safetyDefaults[safetyForm.monitored_reading_type]?.label || 'signal'} monitoring</label>
+                <span className="badge neutral">Unit: {safetyDefaults[safetyForm.monitored_reading_type]?.unit || safetyForm.unit}</span>
+              </div>
+              <div className="grid-2">
+                <label>Warning low <input type="number" step="any" value={safetyForm.warning_low} onChange={e=>setSafetyForm({...safetyForm,warning_low:e.target.value})}/></label>
+                <label>Warning high <input type="number" step="any" value={safetyForm.warning_high} onChange={e=>setSafetyForm({...safetyForm,warning_high:e.target.value})}/></label>
+                <label>Shutdown low <input type="number" step="any" value={safetyForm.shutdown_low} onChange={e=>setSafetyForm({...safetyForm,shutdown_low:e.target.value})}/></label>
+                <label>Shutdown high <input type="number" step="any" value={safetyForm.shutdown_high} onChange={e=>setSafetyForm({...safetyForm,shutdown_high:e.target.value})}/></label>
+              </div>
+            </div>
+            <div className="chip-row" style={{marginTop:12}}>
+              <label><input type="checkbox" checked={!!safetyForm.auto_shutdown_enabled} onChange={e=>setSafetyForm({...safetyForm,auto_shutdown_enabled:e.target.checked})}/> Automatic shutdown</label>
+              <button className="btn" type="submit" disabled={safetyBusy}>{safetyBusy?'Saving…':'Save '+(safetyDefaults[safetyForm.monitored_reading_type]?.label || 'Safety')+' Safety'}</button>
+              <button className="btn secondary" type="button" onClick={testSafetyShutdown} disabled={safetyBusy || !deviceStatus?.iot_enabled}>Test IoT Shutdown Signal</button>
+            </div>
+          </form>}
+          {!canEdit && <div style={{color:'var(--text-faint)',fontSize:12}}>Safety settings are managed by administrators.</div>}
+          <div style={{marginTop:12,padding:11,borderRadius:8,background:deviceStatus?.iot_enabled?'rgba(50,210,160,.08)':'rgba(255,180,0,.08)',fontSize:12}}>
+            <strong>{deviceStatus?.iot_enabled?'Device integration enabled':'Device integration not enabled'}</strong> · The simulator/ESP32 safety channel must remain connected for automatic shutdown commands.
+          </div>
+          {safetyEvent && <div style={{marginTop:10,padding:12,borderRadius:8,background:safetyEvent.shutdown_requested?'rgba(255,70,70,.10)':'rgba(255,180,0,.10)',color:safetyEvent.shutdown_requested?'var(--critical)':'var(--warning)',fontSize:12}}><strong>{safetyEvent.shutdown_requested?'SAFETY SHUTDOWN':'SAFETY WARNING'}</strong><div style={{marginTop:4}}>{safetyEvent.message}</div>{safetyEvent.shutdown_requested && <div style={{marginTop:4}}>Command sent to device safety channel.</div>}</div>}
+          <div style={{marginTop:10,color:'var(--text-faint)',fontSize:11}}>For real equipment, use a properly rated relay/contactor and independent safety interlock. The cloud command is supervisory, not the sole protective device.</div>
+        </div>
+      </div>
       <div className="panel section-gap">
         <div className="panel-header">
           <span className="panel-title">Live Sensor Integration (Optional)</span>
