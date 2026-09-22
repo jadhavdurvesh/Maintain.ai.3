@@ -181,8 +181,11 @@ class IngestPayload(BaseModel):
 
 
 def _evaluate_safety_policy(db: Session, machine: models.Machine, reading: models.SensorReading):
-    policy = db.query(models.MachineSafetyPolicy).filter_by(machine_id=machine.id).first()
-    if not policy or not policy.enabled or reading.reading_type != policy.monitored_reading_type:
+    policy = db.query(models.MachineSafetyPolicy).filter_by(
+        machine_id=machine.id,
+        monitored_reading_type=reading.reading_type,
+    ).first()
+    if not policy or not policy.enabled:
         return None
 
     value = float(reading.value)
