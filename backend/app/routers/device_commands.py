@@ -23,7 +23,6 @@ class CommandAckPayload(BaseModel):
 
 @router.get("/telemetry/latest")
 def latest_telemetry(current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Return the latest sensor value for every visible machine/signal."""
     machines = db.query(models.Machine).filter(
         models.Machine.organization_id == current.organization_id,
         models.Machine.archived.is_(False),
@@ -101,7 +100,9 @@ def acknowledge_device_command(payload: CommandAckPayload, x_device_key: str = H
     return {"acknowledged": True, "event_id": event.id, "machine_id": machine.id}
 
 
-@router.post("/commands/test-shutdown/{machine_id}")
+# Keep the existing frontend URL, but put this durable implementation in a
+# router that is registered before the legacy in-process WebSocket router.
+@router.post("/{machine_id}/safety/test-shutdown")
 def queue_test_shutdown(machine_id: int, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     if current.role != models.UserRole.admin.value:
         raise HTTPException(403, "administrator access required")
