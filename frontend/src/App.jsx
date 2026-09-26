@@ -1,6 +1,7 @@
 import { Routes, Route, NavLink } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { useTelemetryStream } from './realtime.js'
+import api from './api/client.js'
 import {
   LayoutDashboard, Factory, Wrench, ClipboardList, Bot,
   AlertTriangle, Package, BarChart3, Settings as SettingsIcon, History as HistoryIcon, Info, Bug, BrainCircuit,
@@ -58,13 +59,57 @@ function Sidebar() {
   return <div className="sidebar-glass"><div className="sidebar-inner"><div className="brand"><span className={`brand-status-dot${streamStatus === "offline" || streamStatus === "reconnecting" ? " offline" : ""}`} title={`Live telemetry: ${streamStatus}`} /><div><div className="brand-mark">MAINTAIN AI</div><div className="brand-sub">predictive maintenance</div></div></div><nav className="nav-group">{NAV.map(({ to, label, icon: Icon, end }) => <NavLink key={to} to={to} end={end} className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}><Icon size={16} strokeWidth={1.75} />{label}</NavLink>)}</nav></div></div>
 }
 
+function TelemetryFallback() {
+  useEffect(() => {
+    let stopped = false
+    const poll = async () => {
+      if (stopped) return
+      try {
+        const result = await api.get(`/api/devices/telemetry/latest?ts=${Date.now()}`)
+        const rows = Array.isArray(result?.machines) ? result.machines : []
+        let fresh = false
+        const now = Date.now()
+        for (const row of rows) {
+          if (row?.machine_id == null || !row?.reading_type) continue
+          const recorded = row.recorded_at ? Date.parse(row.recorded_at) : NaN
+          if (Number.isFinite(recorded) && now - recorded < 45000) fresh = true
+          window.dispatchEvent(new CustomEvent('maintain-ai-telemetry', {
+            detail: {
+              type: 'telemetry',
+              machine_id: row.machine_id,
+              reading_id: row.reading_id,
+              reading_type: row.reading_type,
+              value: row.value,
+              unit: row.unit,
+              recorded_at: row.recorded_at,
+            },
+          }))
+        }
+        if (fresh) {
+          window.dispatchEvent(new CustomEvent('maintain-ai-realtime-status', { detail: 'connected' }))
+        }
+      } catch {
+        // Supabase Realtime remains the primary path; this fallback is best effort.
+      }
+    }
+    poll()
+    const timer = window.setInterval(poll, 2500)
+    return () => { stopped = true; window.clearInterval(timer) }
+  }, [])
+  return null
+}
+
 export default function App() {
   const [theme, setTheme] = useTheme()
   useReducedEffects()
   const { checking, needsLogin } = useAuth()
+  useEffect(() => {
+    // Keep the backend-fed telemetry stream alive even if the browser or
+    // deployment cannot maintain the Supabase Realtime socket.
+  }, [])
   if (checking) return null
   if (needsLogin) return <Login />
-  return <PageHeaderProvider><div className="app-shell"><Sidebar /><div className="main"><Topbar theme={theme} setTheme={setTheme} /><div className="content"><Routes>
+  return <PageHeaderProvider><TelemetryFallback /><div className="app-shell"><Sidebar /><div className="main"><Topbar theme={theme} setTheme={setTheme} /><div className="content"><Routes>
     <Route path="/" element={<Dashboard />} />
     <Route path="/machines" element={<Machines />} />
     <Route path="/machines/:id" element={<MachineDetail />} />
