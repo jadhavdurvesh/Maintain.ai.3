@@ -172,14 +172,48 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "Publishing release: $TAG"
 
-      - name: Publish GitHub Release
+      - name: Create or reuse GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.release-tag.outputs.tag }}
           TARGET_SHA: ${{ github.sha }}
         run: |
-          gh release create "$RELEASE_TAG" release-assets/* \
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists; reusing it."
+          else
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$TARGET_SHA" \
+              --title "MAINTAIN AI $RELEASE_TAG" \
+              --generate-notes
+          fi
+
+      - name: Upload release files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release-tag.outputs.tag }}
+        shell: bash
+        run: |
+          mapfile -d '' FILES < <(find release-assets -type f -print0)
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo 'No release files were downloaded.'
+            exit 1
+          fi
+
+          echo "Uploading ${#FILES[@]} release files..."
+          for file in "${FILES[@]}"; do
+            echo "Uploading: $file"
+            gh release upload "$RELEASE_TAG" "$file" \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber
+          done
+
+      - name: Verify published release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release-tag.outputs.tag }}
+        run: |
+          gh release view "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
-            --target "$TARGET_SHA" \
-            --title "MAINTAIN AI $RELEASE_TAG" \
-            --generate-notes
+            --json name,tagName,url,assets
+          echo "Release published successfully: $RELEASE_TAG"
