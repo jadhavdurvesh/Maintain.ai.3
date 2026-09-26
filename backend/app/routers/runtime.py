@@ -10,9 +10,6 @@ from ..deps import get_current_user, CurrentUser
 
 router = APIRouter(prefix="/api/machines", tags=["machine-runtime"])
 
-# Runtime is derived from machine telemetry. The machine.status field remains
-# the health status; this table tracks whether the asset is actually consuming
-# operating hours.
 runtime_states = Table(
     "machine_runtime_states",
     Base.metadata,
@@ -26,6 +23,7 @@ runtime_states = Table(
 _ACTIVE_STATE = "running"
 _ACTIVE_CURRENT_A = 0.5
 _ACTIVE_LOAD_PERCENT = 5.0
+_ACTIVE_VIBRATION_G = 0.05
 _TELEMETRY_TIMEOUT = timedelta(seconds=90)
 
 
@@ -59,11 +57,8 @@ def _row(db: Session, machine):
         return result
     now = datetime.utcnow()
     db.execute(runtime_states.insert().values(
-        machine_id=machine.id,
-        state="stopped",
-        started_at=None,
-        base_operating_hours=float(machine.operating_hours or 0),
-        updated_at=now,
+        machine_id=machine.id, state="stopped", started_at=None,
+        base_operating_hours=float(machine.operating_hours or 0), updated_at=now,
     ))
     db.commit()
     return db.execute(runtime_states.select().where(runtime_states.c.machine_id == machine.id)).mappings().first()
@@ -86,15 +81,6 @@ def _latest_reading(db: Session, machine_id: int, reading_type: str):
     )
 
 
-def _latest_any_reading(db: Session, machine_id: int):
-    return (
-        db.query(models.SensorReading)
-        .filter_by(machine_id=machine_id)
-        .order_by(models.SensorReading.recorded_at.desc(), models.SensorReading.id.desc())
-        .first()
-    )
-
-
 def _has_unacknowledged_shutdown(db: Session, machine_id: int) -> bool:
     event = (
         db.query(models.MachineSafetyEvent)
@@ -106,91 +92,63 @@ def _has_unacknowledged_shutdown(db: Session, machine_id: int) -> bool:
 
 
 def _apply_state(db: Session, machine, row, target_state: str, now=None):
-    """Settle accumulated hours and transition state without user controls."""
     now = now or datetime.utcnow()
-    previous = row["state"]
     settled_hours = _hours(machine, row, now)
-
-    if target_state == _ACTIVE_STATE:
-        if previous != _ACTIVE_STATE:
-            values = {
-                "state": _ACTIVE_STATE,
-                "started_at": now,
-                "base_operating_hours": settled_hours,
-                "updated_at": now,
-            }
-        else:
-            values = {"updated_at": now}
-        machine.operating_hours = settled_hours
-    else:
-        values = {
-            "state": target_state,
-            "started_at": None,
-            "base_operating_hours": settled_hours,
-            "updated_at": now,
-        }
-        machine.operating_hours = settled_hours
-
-    if any(values.get(key) != row[key] for key in values if key in row):
-        db.execute(runtime_states.update().where(runtime_states.c.machine_id == machine.id).values(**values))
-        row = db.execute(runtime_states.select().where(runtime_states.c.machine_id == machine.id)).mappings().first()
-    else:
-        row = dict(row)
-    db.flush()
-    return row
+    values = {
+        "state": target_state,
+        "started_at": now if target_state == _ACTIVE_STATE else None,
+        "base_operating_hours": settled_hours,
+        "updated_at": now,
+    }
+    if target_state == _ACTIVE_STATE and row["state"] == _ACTIVE_STATE:
+        values["started_at"] = row["started_at"]
+    machine.operating_hours = settled_hours
+    db.execute(runtime_states.update().where(runtime_states.c.machine_id == machine.id).values(**values))
+    return db.execute(runtime_states.select().where(runtime_states.c.machine_id == machine.id)).mappings().first()
 
 
-def sync_runtime_from_reading(db: Session, machine, reading):
-    """Infer runtime from current/load telemetry; called after every device reading."""
-    _ensure_table(db)
-    row = _row(db, machine)
-    now = reading.recorded_at or datetime.utcnow()
-
-    # An unacknowledged automatic safety shutdown always wins over normal
-    # sensor-derived activity. This makes the machine visibly STOPPED as soon
-    # as the safety system latches it off.
-    if _has_unacknowledged_shutdown(db, machine.id):
-        return _apply_state(db, machine, row, "stopped", now)
-
-    current = _latest_reading(db, machine.id, "current")
-    load = _latest_reading(db, machine.id, "load")
-    signals = [r for r in (current, load) if r is not None]
+def _infer_target_state(db: Session, machine_id: int):
+    current = _latest_reading(db, machine_id, "current")
+    load = _latest_reading(db, machine_id, "load")
+    vibration = _latest_reading(db, machine_id, "vibration")
+    signals = [r for r in (current, load, vibration) if r is not None]
     if not signals:
-        return row
+        return None, None
 
     latest_signal_time = max(r.recorded_at for r in signals if r.recorded_at)
-    if now - latest_signal_time > _TELEMETRY_TIMEOUT:
-        target = "stopped"
-    else:
-        current_active = current is not None and float(current.value) > _ACTIVE_CURRENT_A
-        load_active = load is not None and float(load.value) > _ACTIVE_LOAD_PERCENT
-        target = "running" if (current_active or load_active) else "idle"
-
-    return _apply_state(db, machine, row, target, now)
-
-
-def _sync_runtime_from_latest_telemetry(db: Session, machine):
-    """Reconcile state for list/detail requests, including telemetry timeouts."""
-    _ensure_table(db)
-    row = _row(db, machine)
-    now = datetime.utcnow()
-
-    if _has_unacknowledged_shutdown(db, machine.id):
-        return _apply_state(db, machine, row, "stopped", now)
-
-    current = _latest_reading(db, machine.id, "current")
-    load = _latest_reading(db, machine.id, "load")
-    signals = [r for r in (current, load) if r is not None]
-    if not signals:
-        return row
-
-    latest_signal_time = max(r.recorded_at for r in signals if r.recorded_at)
-    if now - latest_signal_time > _TELEMETRY_TIMEOUT:
-        return _apply_state(db, machine, row, "stopped", now)
+    if datetime.utcnow() - latest_signal_time > _TELEMETRY_TIMEOUT:
+        return "stopped", latest_signal_time
 
     current_active = current is not None and float(current.value) > _ACTIVE_CURRENT_A
     load_active = load is not None and float(load.value) > _ACTIVE_LOAD_PERCENT
-    return _apply_state(db, machine, row, "running" if (current_active or load_active) else "idle", now)
+    vibration_active = vibration is not None and float(vibration.value) > _ACTIVE_VIBRATION_G
+
+    # Current/load are preferred. Vibration is a fallback so machines whose
+    # connected sensor does not expose electrical load can still report runtime.
+    if current_active or load_active or vibration_active:
+        return "running", latest_signal_time
+    return "idle", latest_signal_time
+
+
+def sync_runtime_from_reading(db: Session, machine, reading):
+    """Infer runtime from telemetry/safety state; there is no manual runtime control."""
+    _ensure_table(db)
+    row = _row(db, machine)
+    now = reading.recorded_at or datetime.utcnow()
+    if _has_unacknowledged_shutdown(db, machine.id):
+        return _apply_state(db, machine, row, "stopped", now)
+    target, _ = _infer_target_state(db, machine.id)
+    return row if target is None else _apply_state(db, machine, row, target, now)
+
+
+def _sync_runtime_from_latest_telemetry(db: Session, machine):
+    _ensure_table(db)
+    row = _row(db, machine)
+    now = datetime.utcnow()
+    if _has_unacknowledged_shutdown(db, machine.id):
+        return _apply_state(db, machine, row, "stopped", now)
+    target, _ = _infer_target_state(db, machine.id)
+    return row if target is None else _apply_state(db, machine, row, target, now)
 
 
 def _snapshot(machine, row):
@@ -208,19 +166,12 @@ def _snapshot(machine, row):
 @router.get("/runtime")
 def list_runtime(current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     _ensure_table(db)
-    query = db.query(models.Machine).filter(
-        models.Machine.organization_id == current.organization_id,
-        models.Machine.archived.is_(False),
-    )
+    query = db.query(models.Machine).filter(models.Machine.organization_id == current.organization_id, models.Machine.archived.is_(False))
     if current.role == models.UserRole.technician.value:
-        query = query.join(models.UserMachineAssignment, models.UserMachineAssignment.machine_id == models.Machine.id).filter(
-            models.UserMachineAssignment.user_id == current.id
-        )
-    machines = query.all()
+        query = query.join(models.UserMachineAssignment, models.UserMachineAssignment.machine_id == models.Machine.id).filter(models.UserMachineAssignment.user_id == current.id)
     snapshots = []
-    for machine in machines:
-        row = _sync_runtime_from_latest_telemetry(db, machine)
-        snapshots.append(_snapshot(machine, row))
+    for machine in query.all():
+        snapshots.append(_snapshot(machine, _sync_runtime_from_latest_telemetry(db, machine)))
     db.commit()
     return snapshots
 
