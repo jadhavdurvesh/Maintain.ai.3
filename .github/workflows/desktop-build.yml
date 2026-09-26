@@ -122,7 +122,7 @@ jobs:
             linux) test -n "$(find desktop/dist -maxdepth 1 -type f \( -name '*.AppImage' -o -name '*.deb' \) -print -quit)" ;;
           esac
           echo 'Finished installer files:'
-          find desktop/dist -maxdepth 1 -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' \) -printf '%f %s bytes\n'
+          ls -lh desktop/dist/*.exe desktop/dist/*.dmg desktop/dist/*.AppImage desktop/dist/*.deb 2>/dev/null || true
 
       - name: Upload installer artifact only
         uses: actions/upload-artifact@v4
@@ -172,7 +172,7 @@ jobs:
         run: |
           find release-assets -type f ! \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' \) -delete
           echo 'Release payload:'
-          find release-assets -type f -printf '%P %s bytes\n'
+          find release-assets -type f -print
           test -n "$(find release-assets -type f -print -quit)"
 
       - name: Create or reuse GitHub Release
