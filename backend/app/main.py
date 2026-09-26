@@ -184,9 +184,6 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# The simulator is a separate browser origin. Keep production CORS explicit,
-# but always include the fixed simulator origin so its HTTPS fallback and
-# durable command ACK endpoints work even when CORS_ORIGINS is set by Render.
 _configured_origins = [
     o.strip()
     for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",")
@@ -203,10 +200,9 @@ app.add_middleware(
 
 app.include_router(auth.router)
 
-# device_commands is intentionally registered before devices so the durable
-# REST safety-test route wins over the legacy in-process implementation.
 _ROUTER_NAMES = (
     "device_commands",
+    "runtime",
     "machines",
     "maintenance",
     "work_orders",
