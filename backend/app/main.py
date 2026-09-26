@@ -15,8 +15,6 @@ from .routers import auth
 from .deps import get_current_user, CurrentUser
 
 # Database initialization is deliberately best-effort at import time.
-# Vercel/serverless must be able to import FastAPI even if an old database
-# needs a separate migration. API requests can then report the real DB error.
 def _initialize_database():
     try:
         Base.metadata.create_all(bind=engine)
@@ -34,7 +32,7 @@ def _initialize_database():
 
 
 def ensure_safety_policy_schema():
-    """Migrate the safety policy table from one-policy-per-machine to one-policy-per-signal."""
+    """Migrate safety policies from one-per-machine to one-per-signal."""
     try:
         inspector = inspect(engine)
         if not inspector.has_table("machine_safety_policies"):
@@ -196,7 +194,10 @@ app.add_middleware(
 
 app.include_router(auth.router)
 
+# device_commands is intentionally registered before devices so the durable
+# REST safety-test route wins over the legacy in-process implementation.
 _ROUTER_NAMES = (
+    "device_commands",
     "machines",
     "maintenance",
     "work_orders",
@@ -211,7 +212,6 @@ _ROUTER_NAMES = (
     "audit_log",
     "analytics",
     "devices",
-    "device_commands",
 )
 
 _ROUTER_LOAD_ERRORS = {}
