@@ -1,7 +1,13 @@
 {
   "name": "maintain-ai-desktop",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
+  "description": "MAINTAIN AI local intelligence desktop application",
+  "author": {
+    "name": "MAINTAIN AI",
+    "email": "jadhavdurvesh@users.noreply.github.com"
+  },
+  "homepage": "https://github.com/jadhavdurvesh/Maintain.ai.3",
   "main": "main.js",
   "scripts": {
     "dev": "electron .",
@@ -36,7 +42,8 @@
         "AppImage",
         "deb"
       ],
-      "category": "Utility"
+      "category": "Utility",
+      "maintainer": "MAINTAIN AI <jadhavdurvesh@users.noreply.github.com>"
     }
   }
 }
