@@ -1,1 +1,148 @@
-name: MAINTAIN AI Desktop Build\n\non:\n  workflow_dispatch:\n  push:\n    tags:\n      - 'v*'\n\npermissions:\n  contents: write\n\njobs:\n  build:\n    name: Build ${{ matrix.os }}\n    runs-on: ${{ matrix.os }}\n    strategy:\n      fail-fast: false\n      matrix:\n        os:\n          - windows-latest\n          - macos-latest\n          - ubuntu-latest\n\n    steps:\n      - name: Checkout\n        uses: actions/checkout@v4\n\n      - name: Setup Node.js\n        uses: actions/setup-node@v4\n        with:\n          node-version: 20\n          cache: npm\n          cache-dependency-path: |\n            frontend/package-lock.json\n            desktop/package-lock.json\n\n      - name: Install frontend dependencies\n        working-directory: frontend\n        run: npm ci\n\n      - name: Build frontend for hosted backend\n        working-directory: frontend\n        env:\n          VITE_API_URL: ${{ vars.MAINTAIN_AI_API_URL || 'https://maintain-ai-3.vercel.app' }}\n        run: npm run build\n\n      - name: Install desktop dependencies\n        working-directory: desktop\n        run: npm ci\n\n      - name: Build installer\n        working-directory: desktop\n        run: npm run dist\n\n      - name: Upload installer\n        uses: actions/upload-artifact@v4\n        with:\n          name: maintain-ai-${{ matrix.os }}\n          path: desktop/dist/*\n          if-no-files-found: error\n          retention-days: 30\n\n  release:\n    name: Publish GitHub Release\n    if: startsWith(github.ref, 'refs/tags/v')\n    needs: build\n    runs-on: ubuntu-latest\n\n    steps:\n      - name: Download all installers\n        uses: actions/download-artifact@v4\n        with:\n          path: release-assets\n          merge-multiple: true\n\n      - name: Publish release\n        env:\n          GH_TOKEN: ${{ github.token }}\n        run: |\n          gh release create "${GITHUB_REF_NAME}" release-assets/* \\n            --title "MAINTAIN AI ${GITHUB_REF_NAME}" \\n            --generate-notes\n
+name: Build MAINTAIN AI Desktop
+
+on:
+  workflow_dispatch:
+    inputs:
+      backend_url:
+        description: 'Hosted MAINTAIN AI API base URL'
+        required: false
+        default: 'https://maintain-ai-3.vercel.app'
+        type: string
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DEFAULT_API_URL: https://maintain-ai-3.vercel.app
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }} installer
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: windows
+          - os: macos-latest
+            artifact: macos
+          - os: ubuntu-latest
+            artifact: linux
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            desktop/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Resolve backend URL
+        shell: bash
+        env:
+          ACTION_API_URL: ${{ inputs.backend_url }}
+          REPO_API_URL: ${{ vars.MAINTAIN_AI_API_URL }}
+        run: |
+          API_URL="${ACTION_API_URL:-${REPO_API_URL:-${DEFAULT_API_URL}}}"
+          API_URL="${API_URL%/}"
+          echo "MAINTAIN_AI_API_URL=$API_URL" >> "$GITHUB_ENV"
+          echo "Building desktop against: $API_URL"
+
+      - name: Verify hosted backend health
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os, sys, urllib.request
+          url = os.environ['MAINTAIN_AI_API_URL'] + '/api/auth/status'
+          try:
+              with urllib.request.urlopen(url, timeout=20) as r:
+                  body = r.read().decode('utf-8', 'replace')
+                  if r.status != 200:
+                      raise RuntimeError(f'HTTP {r.status}')
+                  print(f'Backend OK: {url} -> {r.status} {body[:200]}')
+          except Exception as exc:
+              print(f'Backend health check failed: {url}: {exc}', file=sys.stderr)
+              sys.exit(1)
+          PY
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend for desktop
+        working-directory: frontend
+        env:
+          VITE_API_URL: ${{ env.MAINTAIN_AI_API_URL }}
+        run: npm run build
+
+      - name: Install desktop dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - name: Validate desktop entrypoint
+        working-directory: desktop
+        run: node --check main.js
+
+      - name: Build installer
+        working-directory: desktop
+        env:
+          MAINTAIN_AI_API_URL: ${{ env.MAINTAIN_AI_API_URL }}
+        run: npm run dist
+
+      - name: Verify installer output
+        shell: bash
+        run: |
+          test -d desktop/dist
+          test -n "$(find desktop/dist -maxdepth 1 -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' \) -print -quit)"
+          echo 'Desktop installer artifact detected.'
+          ls -lah desktop/dist
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: maintain-ai-${{ matrix.artifact }}
+          path: desktop/dist/*
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all installers
+        uses: actions/download-artifact@v4
+        with:
+          pattern: maintain-ai-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" release-assets/* \
+            --title "MAINTAIN AI ${GITHUB_REF_NAME}" \
+            --generate-notes
