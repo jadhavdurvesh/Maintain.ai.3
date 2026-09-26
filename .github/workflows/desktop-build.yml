@@ -11,7 +11,7 @@ on:
       release_tag:
         description: 'GitHub Release tag'
         required: false
-        default: 'v0.2.2'
+        default: 'v0.2.3'
         type: string
       publish_release:
         description: 'Publish only the finished installers to a GitHub Release'
@@ -71,20 +71,32 @@ jobs:
           echo "MAINTAIN_AI_API_URL=$API_URL" >> "$GITHUB_ENV"
           echo "Building desktop against: $API_URL"
 
-      - name: Verify hosted backend health
+      - name: Verify hosted backend health and resolve public Supabase config
         shell: bash
         run: |
           python - <<'PY'
-          import os, sys, urllib.request
-          url = os.environ['MAINTAIN_AI_API_URL'] + '/api/auth/status'
-          try:
-              req = urllib.request.Request(url, headers={'Accept': 'application/json', 'User-Agent': 'MAINTAIN-AI-CI'})
-              with urllib.request.urlopen(req, timeout=8) as r:
+          import json, os, sys, urllib.request
+          base = os.environ['MAINTAIN_AI_API_URL']
+          def get(path):
+              req = urllib.request.Request(base + path, headers={'Accept': 'application/json', 'User-Agent': 'MAINTAIN-AI-CI'})
+              with urllib.request.urlopen(req, timeout=10) as r:
                   if r.status != 200:
                       raise RuntimeError(f'HTTP {r.status}')
-                  print(f'Backend OK: {url} -> {r.status}')
+                  return json.loads(r.read().decode())
+          try:
+              get('/api/auth/status')
+              config = get('/api/auth/public-config')
+              url = str(config.get('supabase_url') or '').strip().rstrip('/')
+              key = str(config.get('supabase_publishable_key') or '').strip()
+              if not url.startswith('https://') or not key:
+                  raise RuntimeError('Hosted backend did not return a valid public Supabase configuration')
+              with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as env:
+                  env.write(f'VITE_SUPABASE_URL={url}\n')
+                  env.write(f'VITE_SUPABASE_PUBLISHABLE_KEY={key}\n')
+              print(f'Backend OK: {base}')
+              print(f'Public Supabase config resolved for desktop build: {url}')
           except Exception as exc:
-              print(f'Backend health check failed: {url}: {exc}', file=sys.stderr)
+              print(f'Backend/config health check failed: {base}: {exc}', file=sys.stderr)
               sys.exit(1)
           PY
 
@@ -96,6 +108,8 @@ jobs:
         working-directory: frontend
         env:
           VITE_API_URL: ${{ env.MAINTAIN_AI_API_URL }}
+          VITE_SUPABASE_URL: ${{ env.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ env.VITE_SUPABASE_PUBLISHABLE_KEY }}
         run: npm run build
 
       - name: Install desktop dependencies
@@ -160,7 +174,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           REF_NAME: ${{ github.ref_name }}
         run: |
-          if [ "$EVENT_NAME" = "push" ]; then TAG="$REF_NAME"; else TAG="${INPUT_TAG:-v0.2.2}"; fi
+          if [ "$EVENT_NAME" = "push" ]; then TAG="$REF_NAME"; else TAG="${INPUT_TAG:-v0.2.3}"; fi
           if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
             echo "Invalid release tag: $TAG"
             exit 1
@@ -190,6 +204,19 @@ jobs:
               --title "MAINTAIN AI $RELEASE_TAG" \
               --generate-notes
           fi
+
+      - name: Remove stale installer assets from release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release-tag.outputs.tag }}
+        shell: bash
+        run: |
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | while IFS= read -r asset; do
+            case "$asset" in
+              *.exe|*.dmg|*.AppImage|*.deb) ;;
+              *) echo "Removing stale non-installer asset: $asset"; gh release delete-asset "$RELEASE_TAG" "$asset" --repo "$GITHUB_REPOSITORY" --yes ;;
+            esac
+          done
 
       - name: Upload installers to release
         env:
