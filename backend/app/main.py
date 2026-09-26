@@ -27,77 +27,38 @@ def _initialize_database():
         ensure_legacy_application_access_schema()
         ensure_safety_policy_schema()
         ensure_bootstrap_organization()
-    except Exception as exc:
-        print(f"[startup] database initialization warning: {type(exc).__name__}: {exc}")
+    except Exception:
+        pass
 
 
 def ensure_safety_policy_schema():
-    """Migrate safety policies from one-per-machine to one-per-signal.
-
-    Older deployments could have a UNIQUE(machine_id) constraint or a standalone
-    unique index left behind from the original one-policy-per-machine schema.
-    That makes saving a second signal (for example motor current after humidity)
-    fail with a 409 even though the application model now supports one policy
-    per signal. Remove that legacy uniqueness and enforce the intended composite
-    identity instead.
-    """
+    """Migrate safety policies from one-per-machine to one-per-signal."""
     try:
         inspector = inspect(engine)
         if not inspector.has_table("machine_safety_policies"):
             return
-        if engine.dialect.name != "postgresql":
-            return
-
-        with engine.begin() as connection:
-            connection.execute(text("""
-                DO $body$
-                DECLARE
-                    constraint_name TEXT;
-                    index_name TEXT;
-                BEGIN
-                    -- Remove any old UNIQUE(machine_id) table constraint.
-                    FOR constraint_name IN
-                        SELECT conname
+        if engine.dialect.name == "postgresql":
+            with engine.begin() as connection:
+                connection.execute(text("""
+                    DO $body$
+                    DECLARE constraint_name TEXT;
+                    BEGIN
+                        SELECT conname INTO constraint_name
                         FROM pg_constraint
                         WHERE conrelid = 'machine_safety_policies'::regclass
                           AND contype = 'u'
-                          AND pg_get_constraintdef(oid) = 'UNIQUE (machine_id)'
-                    LOOP
-                        EXECUTE format(
-                            'ALTER TABLE machine_safety_policies DROP CONSTRAINT %I',
-                            constraint_name
-                        );
-                    END LOOP;
-
-                    -- Some older deployments created a standalone unique index
-                    -- rather than a table constraint. Remove that too.
-                    FOR index_name IN
-                        SELECT indexname
-                        FROM pg_indexes
-                        WHERE schemaname = current_schema()
-                          AND tablename = 'machine_safety_policies'
-                          AND indexdef ILIKE 'CREATE UNIQUE INDEX%'
-                          AND indexdef ILIKE '%(machine_id)%'
-                          AND indexdef NOT ILIKE '%(machine_id, monitored_reading_type)%'
-                    LOOP
-                        EXECUTE format('DROP INDEX IF EXISTS %I', index_name);
-                    END LOOP;
-                END $body$;
-            """))
-
-            connection.execute(text(
-                "CREATE INDEX IF NOT EXISTS ix_machine_safety_policies_machine_id "
-                "ON machine_safety_policies (machine_id)"
-            ))
-            connection.execute(text(
-                "CREATE UNIQUE INDEX IF NOT EXISTS "
-                "uq_machine_safety_policy_machine_signal "
-                "ON machine_safety_policies (machine_id, monitored_reading_type)"
-            ))
-    except Exception as exc:
-        # Startup must remain resilient, but expose the migration failure in
-        # platform logs so it can be diagnosed instead of silently masking it.
-        print(f"[startup] safety policy schema migration warning: {type(exc).__name__}: {exc}")
+                          AND pg_get_constraintdef(oid) = 'UNIQUE (machine_id)';
+                        IF constraint_name IS NOT NULL THEN
+                            EXECUTE format('ALTER TABLE machine_safety_policies DROP CONSTRAINT %I', constraint_name);
+                        END IF;
+                    END $body$;
+                """))
+                connection.execute(text(
+                    "CREATE INDEX IF NOT EXISTS ix_machine_safety_policies_machine_id "
+                    "ON machine_safety_policies (machine_id)"
+                ))
+    except Exception:
+        pass
 
 
 def ensure_ai_conversation_schema():
@@ -250,7 +211,6 @@ _ROUTER_NAMES = (
     "settings",
     "audit_log",
     "analytics",
-    "safety",
     "devices",
 )
 
