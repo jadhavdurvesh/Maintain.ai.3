@@ -350,18 +350,22 @@ def list_users(
     current: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    require_admin(current)
-    return (
-        db.query(models.User)
-        .filter(
-            models.User.organization_id == current.organization_id,
-        )
-        .order_by(
-            models.User.full_name.asc(),
-            models.User.username.asc(),
-        )
-        .all()
+    query = db.query(models.User).filter(
+        models.User.organization_id == current.organization_id,
     )
+
+    # User management remains administrator-only.  Non-admin clients may still
+    # need the current user's basic identity for shared engineering screens,
+    # but must never receive the organization's member directory.
+    if current.role != "admin":
+        if current.id is None:
+            return []
+        return query.filter(models.User.id == current.id).all()
+
+    return query.order_by(
+        models.User.full_name.asc(),
+        models.User.username.asc(),
+    ).all()
 
 
 @router.post(
