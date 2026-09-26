@@ -10,8 +10,10 @@ This directory is the engineering knowledge base for the whole MAINTAIN AI ecosy
 4. **[AUTHENTICATION_AND_IDENTITY.md](AUTHENTICATION_AND_IDENTITY.md)** — Supabase Auth, Maintain users, roles, application access, JWT compatibility, Realtime tokens and device identity.
 5. **[CLIENTS_AND_GATEWAYS.md](CLIENTS_AND_GATEWAYS.md)** — Web, Android, Workforce and IoT Gateway contracts.
 6. **[CROSS_CLIENT_ARCHITECTURE_AUDIT.md](CROSS_CLIENT_ARCHITECTURE_AUDIT.md)** — cross-client security audit and acceptance matrix.
-7. **[FEATURES_AND_ARCHITECTURE.md](FEATURES_AND_ARCHITECTURE.md)** — product features and intelligence architecture.
-8. **[ROADMAP.md](ROADMAP.md)** — future implementation direction.
+7. **[EXTERNAL_SERVICES.md](EXTERNAL_SERVICES.md)** — Supabase, Neon, Vercel, Resend, Firebase, Gemini and GitHub cloud boundaries.
+8. **[VERCEL_OPERATIONS.md](VERCEL_OPERATIONS.md)** — Vercel deployment/routing contract and external configuration checklist.
+9. **[FEATURES_AND_ARCHITECTURE.md](FEATURES_AND_ARCHITECTURE.md)** — product features and intelligence architecture.
+10. **[ROADMAP.md](ROADMAP.md)** — future implementation direction.
 
 ## Existing supporting documents
 
@@ -22,13 +24,14 @@ This directory is the engineering knowledge base for the whole MAINTAIN AI ecosy
 
 ## Documentation rule
 
-Documentation must distinguish three states:
+Documentation must distinguish four states:
 
 - **Implemented** — confirmed in source code.
 - **Configured externally** — depends on a cloud/project setting that is not stored in Git.
+- **Historical/project-context** — discussed or configured during earlier project work but not independently verifiable from the current repository.
 - **Planned/experimental** — intended or tested but not production-complete.
 
-Do not turn a planned architecture into a statement that it is already implemented.
+Do not turn a planned architecture or remembered setup into a statement that it is already implemented.
 
 ## Ecosystem repositories
 
@@ -50,6 +53,7 @@ Do not turn a planned architecture into a statement that it is already implement
 | Firebase Cloud Messaging | mobile push notifications |
 | Gemini | optional AI assistant enhancement |
 | Resend | possible external email/SMTP provider behind Supabase; no direct Resend client is currently present in the repository |
+| GitHub Actions | CI validation and desktop/build automation |
 
 ## Contract change rule
 
