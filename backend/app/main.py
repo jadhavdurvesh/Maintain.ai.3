@@ -184,7 +184,16 @@ app = FastAPI(
     version="0.1.0",
 )
 
-_cors_origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",") if o.strip()]
+# The simulator is a separate browser origin. Keep production CORS explicit,
+# but always include the fixed simulator origin so its HTTPS fallback and
+# durable command ACK endpoints work even when CORS_ORIGINS is set by Render.
+_configured_origins = [
+    o.strip()
+    for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",")
+    if o.strip()
+]
+_simulator_origin = "https://maintain-ai-sensor-simulator.jadhavdurvesh65.workers.dev"
+_cors_origins = list(dict.fromkeys([*_configured_origins, _simulator_origin]))
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
