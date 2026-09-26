@@ -42,7 +42,7 @@ def ensure_safety_policy_schema():
         if engine.dialect.name == "postgresql":
             with engine.begin() as connection:
                 connection.execute(text("""
-                    DO $
+                    DO $body$
                     DECLARE constraint_name TEXT;
                     BEGIN
                         SELECT conname INTO constraint_name
@@ -53,14 +53,13 @@ def ensure_safety_policy_schema():
                         IF constraint_name IS NOT NULL THEN
                             EXECUTE format('ALTER TABLE machine_safety_policies DROP CONSTRAINT %I', constraint_name);
                         END IF;
-                    END $;
+                    END $body$;
                 """))
                 connection.execute(text(
                     "CREATE INDEX IF NOT EXISTS ix_machine_safety_policies_machine_id "
                     "ON machine_safety_policies (machine_id)"
                 ))
     except Exception:
-        # Keep startup resilient; the endpoint will surface a real DB error if migration fails.
         pass
 
 
@@ -106,6 +105,7 @@ def ensure_user_work_order_schema():
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE work_orders ADD COLUMN fault_id INTEGER"))
 
+
 def ensure_maintenance_work_order_schema():
     inspector = inspect(engine)
     if not inspector.has_table("maintenance_records"):
@@ -121,7 +121,6 @@ def ensure_maintenance_work_order_schema():
     Base.metadata.create_all(bind=engine)
 
 
-
 def ensure_lab_ml_schema():
     try:
         Base.metadata.create_all(bind=engine)
@@ -129,12 +128,7 @@ def ensure_lab_ml_schema():
         pass
 
 
-
 def ensure_tenant_schema():
-    """Add tenant ownership to legacy shared tables without destroying existing data.
-    Existing rows are assigned to the bootstrap organization; new rows are scoped
-    explicitly by the authenticated organization.
-    """
     inspector = inspect(engine)
     additions = []
     if inspector.has_table("spare_parts"):
@@ -161,8 +155,8 @@ def ensure_tenant_schema():
             connection.execute(text(f"UPDATE {table} SET {column} = 1 WHERE {column} IS NULL"))
     Base.metadata.create_all(bind=engine)
 
+
 def ensure_legacy_application_access_schema():
-    """Backfill explicit engineering access for legacy password accounts."""
     inspector = inspect(engine)
     if not inspector.has_table("users") or not inspector.has_table("user_application_access"):
         return
@@ -200,12 +194,8 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-Device-Key", "X-Maintain-Application"],
 )
 
-# Authentication is mandatory and must never be hidden by an optional-router
-# import failure.
 app.include_router(auth.router)
 
-# Feature routers are isolated. A single optional dependency/import problem
-# must not crash the Vercel Python function and take authentication down with it.
 _ROUTER_NAMES = (
     "machines",
     "maintenance",
@@ -221,6 +211,7 @@ _ROUTER_NAMES = (
     "audit_log",
     "analytics",
     "devices",
+    "device_commands",
 )
 
 _ROUTER_LOAD_ERRORS = {}
@@ -236,7 +227,6 @@ for _router_name in _ROUTER_NAMES:
 @app.get("/")
 def root():
     return {"status": "ok", "service": "MAINTAIN AI backend"}
-
 
 
 @app.get("/api/system/router-status")
