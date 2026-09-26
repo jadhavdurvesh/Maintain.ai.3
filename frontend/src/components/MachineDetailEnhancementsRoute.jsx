@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react'
-import { useLocation, useParams } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import api from '../api/client.js'
 import MachineDetailEnhancements from './MachineDetailEnhancements.jsx'
 
 export default function MachineDetailEnhancementsRoute() {
   const { pathname } = useLocation()
-  const { id } = useParams()
+  const id = pathname.startsWith('/machines/') ? pathname.split('/')[2] : null
   const [data, setData] = useState(null)
   const [liveReadings, setLiveReadings] = useState({})
 
   useEffect(() => {
-    if (!pathname.startsWith('/machines/') || !id) return
+    if (!id || !id.trim()) { setData(null); return }
     let cancelled = false
+    setData(null)
     Promise.allSettled([
       api.get(`/api/machines/${id}`),
       api.get(`/api/machines/${id}/components`),
@@ -25,7 +26,7 @@ export default function MachineDetailEnhancementsRoute() {
       setData({ machine: machine.value, components: components.status === 'fulfilled' ? components.value : [], readings: readings.status === 'fulfilled' ? readings.value : [], maintenance: maintenance.status === 'fulfilled' ? maintenance.value : [], intelligence: intelligence.status === 'fulfilled' ? intelligence.value : null })
     })
     return () => { cancelled = true }
-  }, [pathname, id])
+  }, [id])
 
   useEffect(() => {
     const handle = (event) => {
@@ -37,6 +38,6 @@ export default function MachineDetailEnhancementsRoute() {
     return () => window.removeEventListener('maintain-ai-telemetry', handle)
   }, [id])
 
-  if (!pathname.startsWith('/machines/') || !data) return null
+  if (!id || !data) return null
   return <MachineDetailEnhancements {...data} liveReadings={liveReadings} />
 }
