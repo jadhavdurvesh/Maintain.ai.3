@@ -34,18 +34,11 @@ def _ensure_table(db: Session):
 def _machine_is_assigned(db: Session, machine_id: int, current: CurrentUser) -> bool:
     if current.role != models.UserRole.technician.value:
         return True
-    return db.query(models.UserMachineAssignment).filter(
-        models.UserMachineAssignment.user_id == current.id,
-        models.UserMachineAssignment.machine_id == machine_id,
-    ).first() is not None
+    return db.query(models.UserMachineAssignment).filter(models.UserMachineAssignment.user_id == current.id, models.UserMachineAssignment.machine_id == machine_id).first() is not None
 
 
 def _get_machine(db: Session, machine_id: int, current: CurrentUser):
-    machine = db.query(models.Machine).filter(
-        models.Machine.id == machine_id,
-        models.Machine.organization_id == current.organization_id,
-        models.Machine.archived.is_(False),
-    ).first()
+    machine = db.query(models.Machine).filter(models.Machine.id == machine_id, models.Machine.organization_id == current.organization_id, models.Machine.archived.is_(False)).first()
     if not machine or not _machine_is_assigned(db, machine_id, current):
         raise HTTPException(status_code=404, detail="machine not found")
     return machine
@@ -56,10 +49,7 @@ def _row(db: Session, machine):
     if result:
         return result
     now = datetime.utcnow()
-    db.execute(runtime_states.insert().values(
-        machine_id=machine.id, state="stopped", started_at=None,
-        base_operating_hours=float(machine.operating_hours or 0), updated_at=now,
-    ))
+    db.execute(runtime_states.insert().values(machine_id=machine.id, state="stopped", started_at=None, base_operating_hours=float(machine.operating_hours or 0), updated_at=now))
     db.commit()
     return db.execute(runtime_states.select().where(runtime_states.c.machine_id == machine.id)).mappings().first()
 
@@ -73,37 +63,32 @@ def _hours(machine, row, now=None):
 
 
 def _latest_reading(db: Session, machine_id: int, reading_type: str):
-    return (
-        db.query(models.SensorReading)
-        .filter_by(machine_id=machine_id, reading_type=reading_type)
-        .order_by(models.SensorReading.recorded_at.desc(), models.SensorReading.id.desc())
-        .first()
-    )
+    return db.query(models.SensorReading).filter_by(machine_id=machine_id, reading_type=reading_type).order_by(models.SensorReading.recorded_at.desc(), models.SensorReading.id.desc()).first()
 
 
 def _has_unacknowledged_shutdown(db: Session, machine_id: int) -> bool:
-    event = (
-        db.query(models.MachineSafetyEvent)
-        .filter_by(machine_id=machine_id, event_type="shutdown_threshold", shutdown_requested=True)
-        .order_by(models.MachineSafetyEvent.created_at.desc(), models.MachineSafetyEvent.id.desc())
-        .first()
-    )
+    event = db.query(models.MachineSafetyEvent).filter_by(machine_id=machine_id, event_type="shutdown_threshold", shutdown_requested=True).order_by(models.MachineSafetyEvent.created_at.desc(), models.MachineSafetyEvent.id.desc()).first()
     return bool(event and not event.device_acknowledged)
 
 
 def _apply_state(db: Session, machine, row, target_state: str, now=None):
     now = now or datetime.utcnow()
-    settled_hours = _hours(machine, row, now)
-    values = {
-        "state": target_state,
-        "started_at": now if target_state == _ACTIVE_STATE else None,
-        "base_operating_hours": settled_hours,
-        "updated_at": now,
-    }
     if target_state == _ACTIVE_STATE and row["state"] == _ACTIVE_STATE:
-        values["started_at"] = row["started_at"]
+        # Do not reset base/start time on every polling request; that would
+        # double-count runtime and make operating hours jump.
+        db.execute(runtime_states.update().where(runtime_states.c.machine_id == machine.id).values(updated_at=now))
+        db.flush()
+        return db.execute(runtime_states.select().where(runtime_states.c.machine_id == machine.id)).mappings().first()
+
+    settled_hours = _hours(machine, row, now)
+    db.execute(runtime_states.update().where(runtime_states.c.machine_id == machine.id).values(
+        state=target_state,
+        started_at=now if target_state == _ACTIVE_STATE else None,
+        base_operating_hours=settled_hours,
+        updated_at=now,
+    ))
     machine.operating_hours = settled_hours
-    db.execute(runtime_states.update().where(runtime_states.c.machine_id == machine.id).values(**values))
+    db.flush()
     return db.execute(runtime_states.select().where(runtime_states.c.machine_id == machine.id)).mappings().first()
 
 
@@ -114,24 +99,18 @@ def _infer_target_state(db: Session, machine_id: int):
     signals = [r for r in (current, load, vibration) if r is not None]
     if not signals:
         return None, None
-
     latest_signal_time = max(r.recorded_at for r in signals if r.recorded_at)
     if datetime.utcnow() - latest_signal_time > _TELEMETRY_TIMEOUT:
         return "stopped", latest_signal_time
-
     current_active = current is not None and float(current.value) > _ACTIVE_CURRENT_A
     load_active = load is not None and float(load.value) > _ACTIVE_LOAD_PERCENT
     vibration_active = vibration is not None and float(vibration.value) > _ACTIVE_VIBRATION_G
-
-    # Current/load are preferred. Vibration is a fallback so machines whose
-    # connected sensor does not expose electrical load can still report runtime.
     if current_active or load_active or vibration_active:
         return "running", latest_signal_time
     return "idle", latest_signal_time
 
 
 def sync_runtime_from_reading(db: Session, machine, reading):
-    """Infer runtime from telemetry/safety state; there is no manual runtime control."""
     _ensure_table(db)
     row = _row(db, machine)
     now = reading.recorded_at or datetime.utcnow()
@@ -169,9 +148,7 @@ def list_runtime(current: CurrentUser = Depends(get_current_user), db: Session =
     query = db.query(models.Machine).filter(models.Machine.organization_id == current.organization_id, models.Machine.archived.is_(False))
     if current.role == models.UserRole.technician.value:
         query = query.join(models.UserMachineAssignment, models.UserMachineAssignment.machine_id == models.Machine.id).filter(models.UserMachineAssignment.user_id == current.id)
-    snapshots = []
-    for machine in query.all():
-        snapshots.append(_snapshot(machine, _sync_runtime_from_latest_telemetry(db, machine)))
+    snapshots = [_snapshot(machine, _sync_runtime_from_latest_telemetry(db, machine)) for machine in query.all()]
     db.commit()
     return snapshots
 
