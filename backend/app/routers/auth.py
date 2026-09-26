@@ -18,6 +18,8 @@ from ..deps import (
     auth_required,
 )
 from ..supabase_auth import (
+    SUPABASE_URL,
+    SUPABASE_PUBLISHABLE_KEY,
     enabled as supabase_auth_enabled,
     verify_access_token,
     sync_organization_claim,
@@ -54,9 +56,6 @@ class SupabaseSyncIn(BaseModel):
     organization_name: str | None = None
     username: str | None = None
     full_name: str | None = None
-    # True when the OAuth button was clicked from "New organization".
-    # This survives the provider redirect and prevents an existing account
-    # from being silently treated as a normal sign-in.
     registration_mode: bool = False
 
 
@@ -73,6 +72,23 @@ class AuthOut(BaseModel):
 def auth_status():
     return {
         "auth_required": auth_required(),
+    }
+
+
+@router.get("/public-config")
+def public_auth_config():
+    """Return only browser-safe Supabase configuration.
+
+    This is intentionally limited to the Supabase project URL and publishable
+    key. The server-only secret key is never exposed to the frontend.
+    Desktop builds use this endpoint when Vite build-time variables are not
+    available inside the packaged Electron application.
+    """
+    if not supabase_auth_enabled():
+        raise HTTPException(status_code=503, detail="Supabase Auth is not configured on the backend")
+    return {
+        "supabase_url": SUPABASE_URL,
+        "supabase_publishable_key": SUPABASE_PUBLISHABLE_KEY,
     }
 
 
@@ -314,9 +330,6 @@ def sync_supabase_user(
         if not user and email:
             user = db.query(models.User).filter_by(email=email).first()
 
-        # "New organization" is a true registration boundary. A Supabase
-        # identity that already belongs to a Maintain.ai organization must
-        # never be silently attached to that existing organization.
         if user and payload.registration_mode:
             raise HTTPException(
                 status_code=409,
@@ -327,7 +340,6 @@ def sync_supabase_user(
                 ),
             )
 
-        # A new identity is sent to the organization/username onboarding step.
         if not user and (not payload.organization_name or not payload.username):
             return {
                 "needs_onboarding": True,
@@ -386,8 +398,6 @@ def sync_supabase_user(
                 detail=f"account is not enabled for the {application} application",
             )
 
-        # Organization claim refresh is deliberately non-fatal. The Neon
-        # organization remains the application authorization source.
         try:
             sync_organization_claim(sid, user.organization_id)
         except Exception:
@@ -444,7 +454,6 @@ def realtime_token(
     db: Session = Depends(get_db),
     x_maintain_application: str | None = Header(default=None),
 ):
-    """Issue a short-lived Supabase Realtime JWT carrying the Neon tenant context."""
     secret = os.getenv("SUPABASE_JWT_SECRET", "").strip()
     if not secret:
         raise HTTPException(status_code=503, detail="Supabase Realtime signing is not configured")
@@ -456,7 +465,6 @@ def realtime_token(
     application = (x_maintain_application or "engineering").strip().lower()
     if application not in {"engineering", "android", "workforce"}:
         raise HTTPException(status_code=400, detail="invalid application context")
-    # The token is intentionally short-lived and contains no secret application data.
     visible_machine_query = db.query(models.Machine.id).filter(
         models.Machine.organization_id == current.organization_id,
         models.Machine.archived.is_(False),
@@ -475,8 +483,6 @@ def realtime_token(
         "org_id": str(current.organization_id),
         "maintain_user_id": str(current.id),
         "maintain_application": application,
-        # Realtime RLS uses this claim for Android/workforce machine topics.
-        # Engineering clients continue to use the organization topic.
         "machine_ids": [str(machine_id) for machine_id in machine_ids],
         "iat": datetime.now(timezone.utc),
         "exp": datetime.now(timezone.utc) + timedelta(minutes=55),
