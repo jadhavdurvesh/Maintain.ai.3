@@ -1,9 +1,4 @@
-"""REST command bridge for device clients that cannot hold a WebSocket.
-
-The primary telemetry path is HTTPS ingestion + Supabase Realtime. Safety
-commands are persisted in the existing machine_safety_events table so a
-serverless deployment or a reconnecting gateway cannot lose a shutdown.
-"""
+"""Durable REST command bridge for IoT clients."""
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -16,11 +11,9 @@ router = APIRouter(prefix="/api/devices", tags=["devices"])
 
 
 def _machine_for_key(db: Session, device_key: str):
-    machine = (
-        db.query(models.Machine)
-        .filter_by(device_key=device_key, iot_enabled=True, archived=False)
-        .first()
-    )
+    machine = db.query(models.Machine).filter_by(
+        device_key=device_key, iot_enabled=True, archived=False
+    ).first()
     if not machine:
         raise HTTPException(401, "invalid or disabled device key")
     return machine
@@ -35,11 +28,6 @@ def pending_device_command(
     x_device_key: str = Header(..., alias="X-Device-Key"),
     db: Session = Depends(get_db),
 ):
-    """Return the oldest unacknowledged shutdown command for this device.
-
-    This endpoint is intentionally idempotent: polling the same command before
-    acknowledgement returns the same event instead of creating duplicates.
-    """
     machine = _machine_for_key(db, x_device_key)
     event = (
         db.query(models.MachineSafetyEvent)
@@ -53,11 +41,9 @@ def pending_device_command(
     )
     if not event:
         return {"pending": False, "machine_id": machine.id}
-
-    command_type = "shutdown_test" if event.event_type == "shutdown_test" else "shutdown"
     return {
         "pending": True,
-        "command_type": command_type,
+        "command_type": "shutdown_test" if event.event_type == "shutdown_test" else "shutdown",
         "event_id": event.id,
         "machine_id": machine.id,
         "reason": event.message,
@@ -83,13 +69,12 @@ def acknowledge_device_command(
     return {"acknowledged": True, "event_id": event.id, "machine_id": machine.id}
 
 
-@router.post("/{machine_id}/safety/test-shutdown")
-def test_shutdown_command(
+@router.post("/commands/test-shutdown/{machine_id}")
+def queue_test_shutdown(
     machine_id: int,
     current: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Persist a safety test command so both WebSocket and REST devices receive it."""
     if current.role != models.UserRole.admin.value:
         raise HTTPException(403, "administrator access required")
     machine = (
@@ -98,8 +83,7 @@ def test_shutdown_command(
             models.Machine.id == machine_id,
             models.Machine.organization_id == current.organization_id,
             models.Machine.archived.is_(False),
-        )
-        .first()
+        ).first()
     )
     if not machine:
         raise HTTPException(404, "machine not found")
@@ -119,34 +103,12 @@ def test_shutdown_command(
     db.add(event)
     db.commit()
     db.refresh(event)
-
-    audit.log_event(
-        db,
-        "machine",
-        machine.id,
-        "safety_shutdown_test",
-        f"Manual safety shutdown test queued for {machine.name}",
-        organization_id=current.organization_id,
-    )
-
-    # If the legacy long-lived device WebSocket is present in this process,
-    # deliver immediately too. REST clients will receive the same durable event
-    # through /api/devices/commands.
     try:
-        from .devices import _device_command_clients
-        client = _device_command_clients.get(machine.id)
-        if client:
-            import asyncio
-            asyncio.create_task(client.send_json({
-                "type": "shutdown_test",
-                "machine_id": machine.id,
-                "reason": event.message,
-                "reading_type": event.reading_type,
-                "value": event.value,
-                "threshold": event.threshold,
-                "event_id": event.id,
-            }))
+        audit.log_event(
+            db, "machine", machine.id, "safety_shutdown_test",
+            f"Manual safety shutdown test queued for {machine.name}",
+            organization_id=current.organization_id,
+        )
     except Exception:
-        pass
-
+        db.rollback()
     return {"sent": True, "queued": True, "machine_id": machine.id, "event_id": event.id}
