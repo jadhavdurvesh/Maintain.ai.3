@@ -7,7 +7,6 @@ import { LayoutDashboard, Factory, Wrench, ClipboardList, Bot, AlertTriangle, Pa
 import { PageHeaderProvider, useCurrentHeader } from './PageHeaderContext.jsx'
 import ThemeToggle, { useTheme, useReducedEffects } from './ThemeToggle.jsx'
 import { useAuth } from './AuthContext.jsx'
-import DemoModeToggle from './components/DemoMode.jsx'
 import MachineDetailEnhancementsRoute from './components/MachineDetailEnhancementsRoute.jsx'
 
 import Login from './pages/Login.jsx'
@@ -44,7 +43,7 @@ const NAV = [
 
 function Topbar({ theme, setTheme }) {
   const { title, actions } = useCurrentHeader()
-  return <div className="topbar-glass"><div className="topbar-inner"><div className="topbar-title">{title}</div><div className="topbar-actions">{actions}<DemoModeToggle /><ThemeToggle theme={theme} setTheme={setTheme} /></div></div></div>
+  return <div className="topbar-glass"><div className="topbar-inner"><div className="topbar-title">{title}</div><div className="topbar-actions">{actions}<ThemeToggle theme={theme} setTheme={setTheme} /></div></div></div>
 }
 
 function Sidebar() {
