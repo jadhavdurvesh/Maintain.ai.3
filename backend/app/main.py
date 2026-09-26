@@ -14,7 +14,7 @@ from .database import Base, engine
 from .routers import auth
 from .deps import get_current_user, CurrentUser
 
-# Database initialization is deliberately best-effort at import time.
+
 def _initialize_database():
     try:
         Base.metadata.create_all(bind=engine)
@@ -188,7 +188,7 @@ _cors_origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
-    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Device-Key", "X-Maintain-Application"],
 )
 
