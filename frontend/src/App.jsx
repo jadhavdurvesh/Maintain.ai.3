@@ -62,6 +62,7 @@ function Sidebar() {
 function TelemetryFallback() {
   useEffect(() => {
     let stopped = false
+    const seen = new Map()
     const poll = async () => {
       if (stopped) return
       try {
@@ -73,21 +74,17 @@ function TelemetryFallback() {
           if (row?.machine_id == null || !row?.reading_type) continue
           const recorded = row.recorded_at ? Date.parse(row.recorded_at) : NaN
           if (Number.isFinite(recorded) && now - recorded < 45000) fresh = true
+          const key = `${row.machine_id}:${row.reading_type}`
+          if (seen.get(key) === row.reading_id) continue
+          seen.set(key, row.reading_id)
           window.dispatchEvent(new CustomEvent('maintain-ai-telemetry', {
             detail: {
-              type: 'telemetry',
-              machine_id: row.machine_id,
-              reading_id: row.reading_id,
-              reading_type: row.reading_type,
-              value: row.value,
-              unit: row.unit,
-              recorded_at: row.recorded_at,
+              type: 'telemetry', machine_id: row.machine_id, reading_id: row.reading_id,
+              reading_type: row.reading_type, value: row.value, unit: row.unit, recorded_at: row.recorded_at,
             },
           }))
         }
-        if (fresh) {
-          window.dispatchEvent(new CustomEvent('maintain-ai-realtime-status', { detail: 'connected' }))
-        }
+        if (fresh) window.dispatchEvent(new CustomEvent('maintain-ai-realtime-status', { detail: 'connected' }))
       } catch {
         // Supabase Realtime remains the primary path; this fallback is best effort.
       }
@@ -103,10 +100,6 @@ export default function App() {
   const [theme, setTheme] = useTheme()
   useReducedEffects()
   const { checking, needsLogin } = useAuth()
-  useEffect(() => {
-    // Keep the backend-fed telemetry stream alive even if the browser or
-    // deployment cannot maintain the Supabase Realtime socket.
-  }, [])
   if (checking) return null
   if (needsLogin) return <Login />
   return <PageHeaderProvider><TelemetryFallback /><div className="app-shell"><Sidebar /><div className="main"><Topbar theme={theme} setTheme={setTheme} /><div className="content"><Routes>
