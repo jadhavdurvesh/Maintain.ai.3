@@ -268,12 +268,28 @@ The original certificate identifies the tested target, test date, Grade A result
 
 ## 📚 Project Documentation
 
-The implementation is documented in two living documents:
+### Ecosystem knowledge base
 
-- [`docs/FEATURES_AND_ARCHITECTURE.md`](docs/FEATURES_AND_ARCHITECTURE.md) — every major feature, data flow, current model layer, limitations, and current status.
-- [`docs/ROADMAP.md`](docs/ROADMAP.md) — next implementation phases, real predictive-risk model plan, evaluation criteria, RUL conditions, and deployment direction.
+- [`docs/README.md`](docs/README.md) — documentation hub and source hierarchy.
+- [`docs/ECOSYSTEM_ARCHITECTURE.md`](docs/ECOSYSTEM_ARCHITECTURE.md) — complete cross-platform architecture.
+- [`docs/AUTHENTICATION_AND_IDENTITY.md`](docs/AUTHENTICATION_AND_IDENTITY.md) — Supabase Auth, roles, application access, JWT/realtime/device identity.
+- [`docs/DATA_AND_SERVICE_MAP.md`](docs/DATA_AND_SERVICE_MAP.md) — data ownership and what gets data from where.
+- [`docs/CLIENTS_AND_GATEWAYS.md`](docs/CLIENTS_AND_GATEWAYS.md) — web, Android, Workforce, IoT Gateway and local intelligence contracts.
+- [`docs/BACKEND_CODE_GUIDE.md`](docs/BACKEND_CODE_GUIDE.md) — backend code responsibilities and request lifecycle.
+- [`docs/FRONTEND_CODE_GUIDE.md`](docs/FRONTEND_CODE_GUIDE.md) — React/Vite code and realtime/auth flow.
+- [`docs/MOBILE_AND_GATEWAY_CONTRACTS.md`](docs/MOBILE_AND_GATEWAY_CONTRACTS.md) — Android, Workforce and gateway implementation contracts.
+- [`docs/CROSS_CLIENT_ARCHITECTURE_AUDIT.md`](docs/CROSS_CLIENT_ARCHITECTURE_AUDIT.md) — cross-client security audit and acceptance tests.
+- [`docs/MAINTAIN_AI_SOURCE_OF_TRUTH.md`](docs/MAINTAIN_AI_SOURCE_OF_TRUTH.md) — architectural invariants and security constitution.
 
-These documents distinguish implemented functionality from experimental/optional model integrations and future work.
+### Product/implementation documents
+
+- [`docs/FEATURES_AND_ARCHITECTURE.md`](docs/FEATURES_AND_ARCHITECTURE.md) — major features and intelligence architecture.
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — implementation roadmap and ML direction.
+- [`PRODUCT_ARCHITECTURE.md`](PRODUCT_ARCHITECTURE.md) — product architecture.
+- [`SETUP.md`](SETUP.md) — development setup/troubleshooting.
+- [`DESKTOP.md`](DESKTOP.md) — desktop packaging/runtime.
+
+These documents deliberately distinguish implemented code, externally configured services, and planned/experimental work.
 
 ## 🛠️ Technology Stack
 
@@ -284,13 +300,16 @@ These documents distinguish implemented functionality from experimental/optional
 | Backend | FastAPI |
 | Backend Language | Python |
 | ORM | SQLAlchemy |
-| Database | SQLite |
-| Machine Learning | scikit-learn / Random Forest |
+| Hosted Database | PostgreSQL / Neon |
+| Local Database | SQLite |
+| Authentication | Supabase Auth + backend authorization |
+| Realtime | Supabase Realtime + WebSocket |
+| Machine Learning | scikit-learn / temporal model integrations |
 | Desktop Runtime | Electron |
-| Desktop Packaging | PyInstaller + Electron tooling |
-| IoT | ESP32 |
-| Example Sensor | DHT22 |
-| API | REST |
+| IoT | ESP32 / serial gateway |
+| Mobile | Android + Flutter Workforce |
+| Push Notifications | Firebase Cloud Messaging |
+| Optional AI | Gemini |
 
 ## 📁 Project Structure
 
@@ -299,22 +318,14 @@ Maintain.ai.3/
 ├── backend/                    # FastAPI + SQLAlchemy backend
 │   ├── app/                    # Application, models, routers and services
 │   └── requirements.txt
-│
 ├── frontend/                   # React + Vite application
-│   ├── src/
-│   │   ├── api/                # API client
-│   │   ├── components/         # Shared UI components
-│   │   └── pages/              # Application screens
-│   └── package.json
-│
 ├── desktop/                    # Electron desktop wrapper
 ├── firmware/                   # IoT firmware examples
-│   └── esp32_example.ino
-├── scripts/                    # Utility and simulation scripts
-├── .github/workflows/          # Project build workflows
-├── SETUP.md                    # Detailed setup guide
-├── DESKTOP.md                  # Desktop packaging guide
-└── README.md
+├── scripts/                    # Utility/simulation scripts
+├── supabase/                   # Supabase project SQL/policies
+├── training/                   # ML training/experiments
+├── docs/                       # Ecosystem + component documentation
+└── .github/workflows/          # CI/build workflows
 ```
 
 ## 🚀 Quick Start
@@ -344,37 +355,7 @@ Then open:
 http://localhost:5173
 ```
 
-The seed process provides four demonstration machines — a motor, pump, conveyor, and compressor — so the dashboard can be explored immediately.
-
-For the complete setup procedure and troubleshooting, see [`SETUP.md`](SETUP.md).
-
-## 🖥️ Desktop Build
-
-The desktop application packages the MAINTAIN AI frontend and backend into an installable application using Electron and PyInstaller.
-
-Supported package targets include:
-
-- Windows `.exe`
-- macOS `.dmg`
-- Linux `.AppImage`
-
-For the complete desktop build process and packaging details, see [`DESKTOP.md`](DESKTOP.md).
-
-## 🔌 Backend Configuration
-
-The backend uses SQLAlchemy for database access, allowing the application to work with SQLite locally and providing a database abstraction suitable for other SQL backends.
-
-The default development configuration uses SQLite. Database configuration is controlled through the backend environment settings.
-
-## 📚 Documentation
-
-| Document | Description |
-|---|---|
-| [`SETUP.md`](SETUP.md) | Full development setup and troubleshooting |
-| [`DESKTOP.md`](DESKTOP.md) | Desktop packaging and build instructions |
-| `backend/` | FastAPI backend implementation |
-| `frontend/` | React/Vite frontend implementation |
-| `firmware/` | ESP32/IoT integration example |
+For the complete setup procedure and troubleshooting, see [`SETUP.md`](SETUP.md) and [`docs/README.md`](docs/README.md).
 
 ---
 
