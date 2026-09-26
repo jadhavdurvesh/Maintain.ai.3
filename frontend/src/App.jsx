@@ -2,14 +2,13 @@ import { Routes, Route, NavLink } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { useTelemetryStream } from './realtime.js'
 import api from './api/client.js'
-import {
-  LayoutDashboard, Factory, Wrench, ClipboardList, Bot,
-  AlertTriangle, Package, BarChart3, Settings as SettingsIcon, History as HistoryIcon, Info, Bug, BrainCircuit,
-} from 'lucide-react'
+import { LayoutDashboard, Factory, Wrench, ClipboardList, Bot, AlertTriangle, Package, BarChart3, Settings as SettingsIcon, History as HistoryIcon, Info, Bug, BrainCircuit } from 'lucide-react'
 
 import { PageHeaderProvider, useCurrentHeader } from './PageHeaderContext.jsx'
 import ThemeToggle, { useTheme, useReducedEffects } from './ThemeToggle.jsx'
 import { useAuth } from './AuthContext.jsx'
+import DemoModeToggle from './components/DemoMode.jsx'
+import MachineDetailEnhancementsRoute from './components/MachineDetailEnhancementsRoute.jsx'
 
 import Login from './pages/Login.jsx'
 import Dashboard from './pages/Dashboard.jsx'
@@ -45,7 +44,7 @@ const NAV = [
 
 function Topbar({ theme, setTheme }) {
   const { title, actions } = useCurrentHeader()
-  return <div className="topbar-glass"><div className="topbar-inner"><div className="topbar-title">{title}</div><div className="topbar-actions">{actions}<ThemeToggle theme={theme} setTheme={setTheme} /></div></div></div>
+  return <div className="topbar-glass"><div className="topbar-inner"><div className="topbar-title">{title}</div><div className="topbar-actions">{actions}<DemoModeToggle /><ThemeToggle theme={theme} setTheme={setTheme} /></div></div></div>
 }
 
 function Sidebar() {
@@ -77,17 +76,10 @@ function TelemetryFallback() {
           const key = `${row.machine_id}:${row.reading_type}`
           if (seen.get(key) === row.reading_id) continue
           seen.set(key, row.reading_id)
-          window.dispatchEvent(new CustomEvent('maintain-ai-telemetry', {
-            detail: {
-              type: 'telemetry', machine_id: row.machine_id, reading_id: row.reading_id,
-              reading_type: row.reading_type, value: row.value, unit: row.unit, recorded_at: row.recorded_at,
-            },
-          }))
+          window.dispatchEvent(new CustomEvent('maintain-ai-telemetry', { detail: { type: 'telemetry', machine_id: row.machine_id, reading_id: row.reading_id, reading_type: row.reading_type, value: row.value, unit: row.unit, recorded_at: row.recorded_at } }))
         }
         if (fresh) window.dispatchEvent(new CustomEvent('maintain-ai-realtime-status', { detail: 'connected' }))
-      } catch {
-        // Supabase Realtime remains the primary path; this fallback is best effort.
-      }
+      } catch {}
     }
     poll()
     const timer = window.setInterval(poll, 2500)
@@ -117,5 +109,5 @@ export default function App() {
     <Route path="/history" element={<History />} />
     <Route path="/settings" element={<SettingsPage />} />
     <Route path="/about" element={<About />} />
-  </Routes></div></div></div></PageHeaderProvider>
+  </Routes><MachineDetailEnhancementsRoute /></div></div></div></PageHeaderProvider>
 }
