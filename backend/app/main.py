@@ -194,10 +194,11 @@ app.add_middleware(
 
 app.include_router(auth.router)
 
-# device_commands is intentionally registered before devices so the durable
-# REST safety-test route wins over the legacy in-process implementation.
+# device_commands and safety are intentionally registered before devices so
+# durable safety routes win over legacy in-process implementations.
 _ROUTER_NAMES = (
     "device_commands",
+    "safety",
     "machines",
     "maintenance",
     "work_orders",
