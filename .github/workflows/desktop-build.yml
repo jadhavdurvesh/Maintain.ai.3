@@ -9,12 +9,12 @@ on:
         default: 'https://maintain-ai-3.vercel.app'
         type: string
       release_tag:
-        description: 'GitHub Release tag (for example v0.2.1)'
+        description: 'GitHub Release tag'
         required: false
-        default: 'v0.2.1'
+        default: 'v0.2.2'
         type: string
       publish_release:
-        description: 'Publish the installers as a GitHub Release'
+        description: 'Publish only the finished installers to a GitHub Release'
         required: false
         default: true
         type: boolean
@@ -54,16 +54,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: |
             frontend/package-lock.json
             desktop/package-lock.json
-
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
 
       - name: Resolve backend URL
         shell: bash
@@ -83,11 +78,11 @@ jobs:
           import os, sys, urllib.request
           url = os.environ['MAINTAIN_AI_API_URL'] + '/api/auth/status'
           try:
-              with urllib.request.urlopen(url, timeout=20) as r:
-                  body = r.read().decode('utf-8', 'replace')
+              req = urllib.request.Request(url, headers={'Accept': 'application/json', 'User-Agent': 'MAINTAIN-AI-CI'})
+              with urllib.request.urlopen(req, timeout=8) as r:
                   if r.status != 200:
                       raise RuntimeError(f'HTTP {r.status}')
-                  print(f'Backend OK: {url} -> {r.status} {body[:200]}')
+                  print(f'Backend OK: {url} -> {r.status}')
           except Exception as exc:
               print(f'Backend health check failed: {url}: {exc}', file=sys.stderr)
               sys.exit(1)
@@ -95,7 +90,7 @@ jobs:
 
       - name: Install frontend dependencies
         working-directory: frontend
-        run: npm ci
+        run: npm ci --prefer-offline --no-audit --no-fund
 
       - name: Build frontend for desktop
         working-directory: frontend
@@ -105,7 +100,7 @@ jobs:
 
       - name: Install desktop dependencies
         working-directory: desktop
-        run: npm ci
+        run: npm ci --prefer-offline --no-audit --no-fund
 
       - name: Validate desktop entrypoint
         working-directory: desktop
@@ -121,17 +116,25 @@ jobs:
         shell: bash
         run: |
           test -d desktop/dist
-          test -n "$(find desktop/dist -maxdepth 1 -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' \) -print -quit)"
-          echo 'Desktop installer artifact detected.'
-          ls -lah desktop/dist
+          case "${{ matrix.artifact }}" in
+            windows) test -n "$(find desktop/dist -maxdepth 1 -type f -name '*.exe' -print -quit)" ;;
+            macos) test -n "$(find desktop/dist -maxdepth 1 -type f -name '*.dmg' -print -quit)" ;;
+            linux) test -n "$(find desktop/dist -maxdepth 1 -type f \( -name '*.AppImage' -o -name '*.deb' \) -print -quit)" ;;
+          esac
+          echo 'Finished installer files:'
+          find desktop/dist -maxdepth 1 -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' \) -printf '%f %s bytes\n'
 
-      - name: Upload installer
+      - name: Upload installer artifact only
         uses: actions/upload-artifact@v4
         with:
-          name: maintain-ai-${{ matrix.artifact }}
-          path: desktop/dist/*
+          name: maintain-ai-${{ matrix.artifact }}-installer
+          path: |
+            desktop/dist/*.exe
+            desktop/dist/*.dmg
+            desktop/dist/*.AppImage
+            desktop/dist/*.deb
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 7
 
   release:
     name: Publish GitHub Release
@@ -142,10 +145,10 @@ jobs:
       contents: write
 
     steps:
-      - name: Download all installers
+      - name: Download installer artifacts only
         uses: actions/download-artifact@v4
         with:
-          pattern: maintain-ai-*
+          pattern: maintain-ai-*-installer
           path: release-assets
           merge-multiple: true
 
@@ -157,20 +160,20 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           REF_NAME: ${{ github.ref_name }}
         run: |
-          if [ "$EVENT_NAME" = "push" ]; then
-            TAG="$REF_NAME"
-          else
-            TAG="${INPUT_TAG:-v0.2.1}"
-          fi
-
+          if [ "$EVENT_NAME" = "push" ]; then TAG="$REF_NAME"; else TAG="${INPUT_TAG:-v0.2.2}"; fi
           if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
             echo "Invalid release tag: $TAG"
-            echo 'Use a semantic version tag such as v0.2.1.'
             exit 1
           fi
-
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "Publishing release: $TAG"
+
+      - name: Remove non-installer files defensively
+        shell: bash
+        run: |
+          find release-assets -type f ! \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' \) -delete
+          echo 'Release payload:'
+          find release-assets -type f -printf '%P %s bytes\n'
+          test -n "$(find release-assets -type f -print -quit)"
 
       - name: Create or reuse GitHub Release
         env:
@@ -188,32 +191,21 @@ jobs:
               --generate-notes
           fi
 
-      - name: Upload release files
+      - name: Upload installers to release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.release-tag.outputs.tag }}
         shell: bash
         run: |
-          mapfile -d '' FILES < <(find release-assets -type f -print0)
-          if [ "${#FILES[@]}" -eq 0 ]; then
-            echo 'No release files were downloaded.'
-            exit 1
-          fi
-
-          echo "Uploading ${#FILES[@]} release files..."
-          for file in "${FILES[@]}"; do
+          for file in release-assets/*; do
+            [ -f "$file" ] || continue
             echo "Uploading: $file"
-            gh release upload "$RELEASE_TAG" "$file" \
-              --repo "$GITHUB_REPOSITORY" \
-              --clobber
+            gh release upload "$RELEASE_TAG" "$file" --repo "$GITHUB_REPOSITORY" --clobber
           done
 
-      - name: Verify published release assets
+      - name: Verify published release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.release-tag.outputs.tag }}
         run: |
-          gh release view "$RELEASE_TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --json name,tagName,url,assets
-          echo "Release published successfully: $RELEASE_TAG"
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json name,tagName,url,assets
