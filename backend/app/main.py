@@ -17,6 +17,12 @@ from .deps import get_current_user, CurrentUser
 
 def _initialize_database():
     try:
+        # Runtime state is defined in the runtime router, not models.py. Import it
+        # before the first metadata create so machine_runtime_states is created
+        # during backend startup instead of the first /api/machines request.
+        # The previous request-time-only initialization caused hosted Machines
+        # and Maintenance requests to return HTTP 500 when DDL was unavailable.
+        from .routers.runtime import runtime_states
         Base.metadata.create_all(bind=engine)
         ensure_ai_conversation_schema()
         ensure_user_auth_schema()
