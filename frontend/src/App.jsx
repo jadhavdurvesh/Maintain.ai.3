@@ -1,5 +1,5 @@
+import { Component, useEffect, useState } from 'react'
 import { Routes, Route, NavLink } from 'react-router-dom'
-import { useEffect, useState } from 'react'
 import { useTelemetryStream } from './realtime.js'
 import api from './api/client.js'
 import { LayoutDashboard, Factory, Wrench, ClipboardList, Bot, AlertTriangle, Package, BarChart3, Settings as SettingsIcon, History as HistoryIcon, Info, Bug, BrainCircuit } from 'lucide-react'
@@ -51,7 +51,7 @@ function Sidebar() {
   const [desktopStatus, setDesktopStatus] = useState(null)
   useEffect(() => {
     if (!window.maintainAI) return
-    window.maintainAI.getConnectionStatus().then(setDesktopStatus)
+    window.maintainAI.getConnectionStatus().then(setDesktopStatus).catch(() => setDesktopStatus(null))
     return window.maintainAI.onConnectionStatus(setDesktopStatus)
   }, [])
   return <div className="sidebar-glass"><div className="sidebar-inner"><div className="brand"><span className={`brand-status-dot${streamStatus === "offline" || streamStatus === "reconnecting" ? " offline" : ""}`} title={`Live telemetry: ${streamStatus}`} /><div><div className="brand-mark">MAINTAIN AI</div><div className="brand-sub">predictive maintenance</div></div></div><nav className="nav-group">{NAV.map(({ to, label, icon: Icon, end }) => <NavLink key={to} to={to} end={end} className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}><Icon size={16} strokeWidth={1.75} />{label}</NavLink>)}</nav></div></div>
@@ -87,13 +87,38 @@ function TelemetryFallback() {
   return null
 }
 
+class RouteErrorBoundary extends Component {
+  state = { error: null }
+  static getDerivedStateFromError(error) { return { error } }
+  componentDidCatch(error, info) { console.error('Maintain AI route render failed:', error, info) }
+  componentDidUpdate(prevProps) {
+    if (prevProps.routeKey !== this.props.routeKey && this.state.error) this.setState({ error: null })
+  }
+  render() {
+    if (!this.state.error) return this.props.children
+    return <div className="panel section-gap">
+      <div className="panel-header"><span className="panel-title">Machine page could not be rendered</span><span className="badge critical">Recovered</span></div>
+      <div className="panel-body">
+        <p style={{ color: 'var(--text-dim)', fontSize: 13, lineHeight: 1.6, margin: 0 }}>The application hit a frontend error while opening this page. Your data is not being deleted.</p>
+        <div className="mono" style={{ marginTop: 10, padding: 10, borderRadius: 8, background: 'var(--panel-raised)', color: 'var(--text-faint)', fontSize: 11, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{this.state.error?.message || String(this.state.error)}</div>
+        <div className="chip-row" style={{ marginTop: 12 }}><button className="btn" onClick={() => this.setState({ error: null })}>Retry page</button><button className="btn secondary" onClick={() => { window.location.hash = '#/machines' }}>Back to machines</button></div>
+      </div>
+    </div>
+  }
+}
+
+function AppLoading() {
+  return <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--bg, #0f1720)', color: 'var(--text, #e5edf5)', fontFamily: 'system-ui, sans-serif' }}><div style={{ textAlign: 'center' }}><div style={{ fontSize: 15, fontWeight: 700, letterSpacing: 1 }}>MAINTAIN AI</div><div style={{ marginTop: 8, fontSize: 12, opacity: 0.65 }}>Loading your workspace…</div></div></div>
+}
+
 export default function App() {
   const [theme, setTheme] = useTheme()
   useReducedEffects()
   const { checking, needsLogin } = useAuth()
-  if (checking) return null
+  if (checking) return <AppLoading />
   if (needsLogin) return <Login />
-  return <PageHeaderProvider><TelemetryFallback /><div className="app-shell"><Sidebar /><div className="main"><Topbar theme={theme} setTheme={setTheme} /><div className="content"><Routes>
+  const routeKey = window.location.hash
+  return <PageHeaderProvider><TelemetryFallback /><div className="app-shell"><Sidebar /><div className="main"><Topbar theme={theme} setTheme={setTheme} /><div className="content"><RouteErrorBoundary routeKey={routeKey}><Routes>
     <Route path="/" element={<Dashboard />} />
     <Route path="/machines" element={<Machines />} />
     <Route path="/machines/:id" element={<MachineDetail />} />
@@ -108,5 +133,5 @@ export default function App() {
     <Route path="/history" element={<History />} />
     <Route path="/settings" element={<SettingsPage />} />
     <Route path="/about" element={<About />} />
-  </Routes><MachineDetailEnhancementsRoute /></div></div></div></PageHeaderProvider>
+  </Routes></RouteErrorBoundary><MachineDetailEnhancementsRoute /></div></div></div></PageHeaderProvider>
 }
