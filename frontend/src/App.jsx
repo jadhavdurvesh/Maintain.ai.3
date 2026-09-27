@@ -8,6 +8,7 @@ import { PageHeaderProvider, useCurrentHeader } from './PageHeaderContext.jsx'
 import ThemeToggle, { useTheme, useReducedEffects } from './ThemeToggle.jsx'
 import { useAuth } from './AuthContext.jsx'
 import MachineDetailEnhancementsRoute from './components/MachineDetailEnhancementsRoute.jsx'
+import AlertToastLayer from './components/AlertToastLayer.jsx'
 
 import Login from './pages/Login.jsx'
 import Dashboard from './pages/Dashboard.jsx'
@@ -118,7 +119,7 @@ export default function App() {
   if (checking) return <AppLoading />
   if (needsLogin) return <Login />
   const routeKey = window.location.hash
-  return <PageHeaderProvider><TelemetryFallback /><div className="app-shell"><Sidebar /><div className="main"><Topbar theme={theme} setTheme={setTheme} /><div className="content"><RouteErrorBoundary routeKey={routeKey}><Routes>
+  return <PageHeaderProvider><TelemetryFallback /><AlertToastLayer /><div className="app-shell"><Sidebar /><div className="main"><Topbar theme={theme} setTheme={setTheme} /><div className="content"><RouteErrorBoundary routeKey={routeKey}><Routes>
     <Route path="/" element={<Dashboard />} />
     <Route path="/machines" element={<Machines />} />
     <Route path="/machines/:id" element={<MachineDetail />} />
