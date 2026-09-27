@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AlertTriangle, BellRing, CheckCircle2, X } from 'lucide-react'
+import { AlertTriangle, BellRing, X } from 'lucide-react'
 import api from '../api/client.js'
 
 const POLL_MS = 3500
 const MAX_VISIBLE = 4
 const TOAST_TTL_MS = 9000
+const NOTIFICATION_PREF_KEY = 'maintain-ai-desktop-alerts'
 
 function severityMeta(severity) {
   const value = String(severity || '').toLowerCase()
@@ -19,11 +20,39 @@ function formatTime(value) {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
+function notifyDesktop(alert) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return
+  const meta = severityMeta(alert?.severity)
+  const notification = new Notification(`MAINTAIN AI — ${meta.label} alert`, {
+    body: alert?.message || 'A new maintenance alert requires attention.',
+    tag: `maintain-ai-alert-${alert?.id ?? Date.now()}`,
+    requireInteraction: meta.label === 'Critical',
+    silent: false,
+  })
+  notification.onclick = () => {
+    window.focus()
+    window.location.hash = '#/alerts'
+    notification.close()
+  }
+}
+
 export default function AlertToastLayer() {
   const [toasts, setToasts] = useState([])
+  const [desktopEnabled, setDesktopEnabled] = useState(() => {
+    try { return localStorage.getItem(NOTIFICATION_PREF_KEY) === 'enabled' } catch { return false }
+  })
   const seenRef = useRef(new Set())
   const initializedRef = useRef(false)
   const timersRef = useRef(new Map())
+
+  const enableDesktopNotifications = useCallback(async () => {
+    if (!('Notification' in window)) return false
+    const permission = await Notification.requestPermission()
+    const enabled = permission === 'granted'
+    setDesktopEnabled(enabled)
+    try { localStorage.setItem(NOTIFICATION_PREF_KEY, enabled ? 'enabled' : 'disabled') } catch {}
+    return enabled
+  }, [])
 
   const dismiss = useCallback((id) => {
     setToasts((current) => current.filter((toast) => toast.id !== id))
@@ -38,24 +67,22 @@ export default function AlertToastLayer() {
     setToasts((current) => [toast, ...current.filter((item) => item.id !== alert.id)].slice(0, MAX_VISIBLE))
     const timer = window.setTimeout(() => dismiss(id), TOAST_TTL_MS)
     timersRef.current.set(id, timer)
+    notifyDesktop(alert)
   }, [dismiss])
 
   useEffect(() => {
     let stopped = false
-
     const poll = async () => {
       if (stopped) return
       try {
         const alerts = await api.get('/api/alerts?active_only=true')
         const rows = Array.isArray(alerts) ? alerts : []
         const currentIds = new Set(rows.map((alert) => String(alert.id)))
-
         if (!initializedRef.current) {
           rows.forEach((alert) => seenRef.current.add(String(alert.id)))
           initializedRef.current = true
           return
         }
-
         rows.forEach((alert) => {
           const id = String(alert.id)
           if (!seenRef.current.has(id)) {
@@ -63,16 +90,11 @@ export default function AlertToastLayer() {
             pushToast(alert)
           }
         })
-
-        // Prevent the in-memory set from growing forever while keeping active alerts known.
         if (seenRef.current.size > 500) {
           seenRef.current = new Set([...seenRef.current].filter((id) => currentIds.has(id)))
         }
-      } catch {
-        // Alerts are additive UI; a temporary API failure must never disrupt the application.
-      }
+      } catch {}
     }
-
     poll()
     const interval = window.setInterval(poll, POLL_MS)
     return () => {
@@ -83,31 +105,38 @@ export default function AlertToastLayer() {
     }
   }, [pushToast])
 
-  if (!toasts.length) return null
+  const supported = 'Notification' in window
+  const permission = supported ? Notification.permission : 'unsupported'
 
   return (
-    <div className="alert-toast-stack" aria-live="assertive" aria-atomic="false">
-      {toasts.map((toast) => {
-        const meta = severityMeta(toast.severity)
-        const Icon = meta.icon
-        return (
-          <div key={toast.toastId} className={`alert-toast ${meta.className}`} role="alert">
-            <div className="alert-toast-icon"><Icon size={18} /></div>
-            <div className="alert-toast-content">
-              <div className="alert-toast-heading">
-                <span>{meta.label} alert</span>
-                <span className="alert-toast-time">{formatTime(toast.created_at)}</span>
+    <>
+      {supported && permission !== 'granted' && !desktopEnabled && (
+        <button className="desktop-alert-enable" onClick={enableDesktopNotifications} title="Enable desktop notifications for new maintenance alerts">
+          <BellRing size={15} /> Enable desktop alerts
+        </button>
+      )}
+      {toasts.length > 0 && (
+        <div className="alert-toast-stack" aria-live="assertive" aria-atomic="false">
+          {toasts.map((toast) => {
+            const meta = severityMeta(toast.severity)
+            const Icon = meta.icon
+            return (
+              <div key={toast.toastId} className={`alert-toast ${meta.className}`} role="alert">
+                <div className="alert-toast-icon"><Icon size={18} /></div>
+                <div className="alert-toast-content">
+                  <div className="alert-toast-heading"><span>{meta.label} alert</span><span className="alert-toast-time">{formatTime(toast.created_at)}</span></div>
+                  <div className="alert-toast-message">{toast.message}</div>
+                  <div className="alert-toast-actions">
+                    <button className="alert-toast-link" onClick={() => { window.location.hash = '#/alerts'; dismiss(String(toast.id)) }}>View alerts</button>
+                    <button className="alert-toast-dismiss" onClick={() => dismiss(String(toast.id))}>Dismiss</button>
+                  </div>
+                </div>
+                <button className="alert-toast-close" aria-label="Dismiss alert" onClick={() => dismiss(String(toast.id))}><X size={16} /></button>
               </div>
-              <div className="alert-toast-message">{toast.message}</div>
-              <div className="alert-toast-actions">
-                <button className="alert-toast-link" onClick={() => { window.location.hash = '#/alerts'; dismiss(String(toast.id)) }}>View alerts</button>
-                <button className="alert-toast-dismiss" onClick={() => dismiss(String(toast.id))}>Dismiss</button>
-              </div>
-            </div>
-            <button className="alert-toast-close" aria-label="Dismiss alert" onClick={() => dismiss(String(toast.id))}><X size={16} /></button>
-          </div>
-        )
-      })}
-    </div>
+            )
+          })}
+        </div>
+      )}
+    </>
   )
 }
