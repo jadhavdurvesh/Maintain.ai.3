@@ -9,6 +9,7 @@ import ThemeToggle, { useTheme, useReducedEffects } from './ThemeToggle.jsx'
 import { useAuth } from './AuthContext.jsx'
 import MachineDetailEnhancementsRoute from './components/MachineDetailEnhancementsRoute.jsx'
 import AlertToastLayer from './components/AlertToastLayer.jsx'
+import './components/alert-toast.css'
 
 import Login from './pages/Login.jsx'
 import Dashboard from './pages/Dashboard.jsx'
