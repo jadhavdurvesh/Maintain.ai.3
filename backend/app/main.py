@@ -14,6 +14,7 @@ from .database import Base, engine
 from .routers import auth
 from .deps import get_current_user, CurrentUser
 from .ml.forecast_runs import MLForecastRun  # noqa: F401 - register model with SQLAlchemy metadata
+from .ml import forecast_events  # noqa: F401 - register telemetry commit listeners
 
 
 def _initialize_database():
@@ -185,8 +186,6 @@ for _router_name in _ROUTER_NAMES:
     except Exception as _exc:
         _ROUTER_LOAD_ERRORS[_router_name] = f"{type(_exc).__name__}: {_exc}"
 
-# Persistent forecast endpoints are isolated from the legacy analytics forecast
-# path so the Model Lab can move to one authoritative forecasting contract.
 try:
     from .ml.forecasting import router as forecasting_router
     app.include_router(forecasting_router)
