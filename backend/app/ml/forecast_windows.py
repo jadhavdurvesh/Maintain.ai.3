@@ -5,6 +5,7 @@ import os
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .. import models
@@ -53,7 +54,7 @@ def _window_rows(db: Session, machine_id: int, reading_type: str, window_seconds
 
 
 def _latest_run(db, machine_id, reading_type, model, window):
-    return db.query(MLForecastRun).filter(MLForecastRun.machine_id == machine_id, MLForecastRun.reading_type == reading_type, MLForecastRun.model == model, MLForecastRun.forecast_window == window, MLForecastRun.status == "completed").order_by(MLForecastRun.created_at.desc()).first()
+    return db.query(MLForecastRun).filter(MLForecastRun.machine_id == machine_id, MLForecastRun.reading_type == reading_type, MLForecastRun.model == model, MLForecastRun.forecast_window == window, MLForecastRun.status.in_(["completed", "running"])).order_by(MLForecastRun.created_at.desc()).first()
 
 
 def _latest_telemetry(db, machine_id, reading_type):
@@ -66,6 +67,8 @@ def _run_window(db, machine, reading_type, window, model, trigger="automatic", f
     if latest is None:
         return {"available": False, "window": window, "reason": "No telemetry available."}
     previous = _latest_run(db, machine.id, reading_type, model, window)
+    if previous and previous.status == "running" and not force:
+        return {"available": False, "running": True, "window": window, "reason": "A forecast for this machine/window is already running.", "run": serialize_run(previous, reused=True)}
     if previous and not force:
         if previous.input_last_reading_id == latest.id:
             return {"available": True, "skipped": True, "reason": "No new telemetry since the previous forecast.", "run": serialize_run(previous, reused=True)}
@@ -77,8 +80,15 @@ def _run_window(db, machine, reading_type, window, model, trigger="automatic", f
         return {"available": False, "window": window, "reason": f"At least 16 time buckets are required for the {window} forecast; only {len(values)} are available."}
     run = MLForecastRun(organization_id=machine.organization_id, machine_id=machine.id, reading_type=reading_type, model=model, horizon=spec["steps"], forecast_window=window, step_seconds=spec["step_seconds"], input_first_reading_id=rows[0].id, input_last_reading_id=latest.id, input_started_at=started_at, input_ended_at=latest.recorded_at, input_reading_count=len(rows), trigger=trigger, status="running")
     db.add(run)
-    db.commit()
-    db.refresh(run)
+    try:
+        db.commit()
+        db.refresh(run)
+    except IntegrityError:
+        db.rollback()
+        existing = db.query(MLForecastRun).filter_by(machine_id=machine.id, reading_type=reading_type, model=model, horizon=spec["steps"], input_last_reading_id=latest.id).first()
+        if existing:
+            return {"available": existing.status == "completed", "running": existing.status == "running", "window": window, "reason": "Forecast already reserved for this telemetry snapshot.", "run": serialize_run(existing, reused=True)}
+        raise
     try:
         result = _call_ml_service(values, spec["steps"], model)
         forecast = [float(value) for value in result.get("forecast", [])]
@@ -129,7 +139,7 @@ def machine_forecast_windows(machine_id: int, reading_type: str = "temperature",
         raise HTTPException(400, "unsupported signal")
     result = {}
     for window in WINDOWS:
-        run = _latest_run(db, machine_id, reading_type, model, window)
+        run = db.query(MLForecastRun).filter(MLForecastRun.machine_id == machine_id, MLForecastRun.reading_type == reading_type, MLForecastRun.model == model, MLForecastRun.forecast_window == window, MLForecastRun.status == "completed").order_by(MLForecastRun.created_at.desc()).first()
         result[window] = serialize_run(run) if run else {"available": False, "window": window, "reason": "No forecast generated yet."}
         result[window]["step_seconds"] = WINDOWS[window]["step_seconds"]
         result[window]["steps"] = WINDOWS[window]["steps"]
@@ -145,7 +155,7 @@ def fleet_forecast_windows(reading_type: str = "temperature", model: str = "chro
         latest = _latest_telemetry(db, machine_id, reading_type)
         machine_row = {"machine_id": machine_id, "machine_name": machine.name, "category": machine.category, "telemetry_at": latest.recorded_at.isoformat() if latest else None, "windows": {}}
         for window in WINDOWS:
-            run = _latest_run(db, machine_id, reading_type, model, window)
+            run = db.query(MLForecastRun).filter(MLForecastRun.machine_id == machine_id, MLForecastRun.reading_type == reading_type, MLForecastRun.model == model, MLForecastRun.forecast_window == window, MLForecastRun.status == "completed").order_by(MLForecastRun.created_at.desc()).first()
             machine_row["windows"][window] = serialize_run(run) if run else {"available": False, "window": window, "reason": "No forecast generated yet."}
         rows.append(machine_row)
     return {"generated_at": datetime.utcnow().isoformat(), "reading_type": reading_type, "model": model, "windows": list(WINDOWS), "machines": rows}
