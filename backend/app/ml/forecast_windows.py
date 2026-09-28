@@ -23,6 +23,7 @@ WINDOWS = {
     "30d": {"seconds": 30 * 24 * 3600, "step_seconds": 24 * 3600, "steps": 30},
 }
 SUPPORTED_SIGNALS = {"temperature", "vibration", "current", "load", "humidity"}
+SUPPORTED_MODELS = {"chronos-bolt-tiny", "timer"}
 
 
 def _visible_machine_ids(db: Session, current: CurrentUser):
@@ -85,7 +86,7 @@ def _run_window(db, machine, reading_type, window, model, trigger="automatic", f
         db.refresh(run)
     except IntegrityError:
         db.rollback()
-        existing = db.query(MLForecastRun).filter_by(machine_id=machine.id, reading_type=reading_type, model=model, horizon=spec["steps"], input_last_reading_id=latest.id).first()
+        existing = db.query(MLForecastRun).filter_by(machine_id=machine.id, reading_type=reading_type, model=model, horizon=spec["steps"], input_last_reading_id=latest.id, forecast_window=window).first()
         if existing:
             return {"available": existing.status == "completed", "running": existing.status == "running", "window": window, "reason": "Forecast already reserved for this telemetry snapshot.", "run": serialize_run(existing, reused=True)}
         raise
@@ -137,6 +138,8 @@ def machine_forecast_windows(machine_id: int, reading_type: str = "temperature",
         raise HTTPException(404, "machine not found")
     if reading_type not in SUPPORTED_SIGNALS:
         raise HTTPException(400, "unsupported signal")
+    if model not in SUPPORTED_MODELS:
+        raise HTTPException(400, "unsupported forecast model")
     result = {}
     for window in WINDOWS:
         run = db.query(MLForecastRun).filter(MLForecastRun.machine_id == machine_id, MLForecastRun.reading_type == reading_type, MLForecastRun.model == model, MLForecastRun.forecast_window == window, MLForecastRun.status == "completed").order_by(MLForecastRun.created_at.desc()).first()
@@ -144,6 +147,29 @@ def machine_forecast_windows(machine_id: int, reading_type: str = "temperature",
         result[window]["step_seconds"] = WINDOWS[window]["step_seconds"]
         result[window]["steps"] = WINDOWS[window]["steps"]
     return {"machine_id": machine_id, "reading_type": reading_type, "model": model, "windows": result}
+
+
+@router.get("/machines/{machine_id}/windows/compare")
+def compare_forecast_window(machine_id: int, window: str = "24h", reading_type: str = "temperature", current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    if machine_id not in _visible_machine_ids(db, current):
+        raise HTTPException(404, "machine not found")
+    if window not in WINDOWS:
+        raise HTTPException(400, "window must be one of 24h, 48h, 7d, 30d")
+    if reading_type not in SUPPORTED_SIGNALS:
+        raise HTTPException(400, "unsupported signal")
+    machine = db.query(models.Machine).filter_by(id=machine_id, archived=False).first()
+    results = {}
+    for model in ("chronos-bolt-tiny", "timer"):
+        try:
+            results[model] = _run_window(db, machine, reading_type, window, model, "comparison", force=False)
+        except Exception as exc:
+            db.rollback()
+            results[model] = {"available": False, "window": window, "model": model, "reason": str(exc)}
+    chronos = results.get("chronos-bolt-tiny", {})
+    timer = results.get("timer", {})
+    chronos_run = chronos.get("run", chronos)
+    timer_run = timer.get("run", timer)
+    return {"machine_id": machine_id, "reading_type": reading_type, "window": window, "models": results, "comparison": {"endpoint_delta": (timer_run.get("end_prediction") - chronos_run.get("end_prediction")) if timer_run.get("end_prediction") is not None and chronos_run.get("end_prediction") is not None else None, "same_direction": timer_run.get("trend") == chronos_run.get("trend") if timer_run.get("trend") and chronos_run.get("trend") else None}}
 
 
 @router.get("/fleet/windows")

@@ -1,8 +1,8 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, inspect, text
 
-from ..database import Base
+from ..database import Base, engine
 
 
 class MLForecastRun(Base):
@@ -16,6 +16,7 @@ class MLForecastRun(Base):
             "model",
             "horizon",
             "input_last_reading_id",
+            "forecast_window",
             name="uq_ml_forecast_input",
         ),
         Index("ix_ml_forecast_machine_signal_created", "machine_id", "reading_type", "created_at"),
@@ -48,3 +49,29 @@ class MLForecastRun(Base):
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+def ensure_forecast_schema() -> None:
+    """Upgrade the pre-window Postgres unique constraint without touching forecast rows."""
+    try:
+        inspector = inspect(engine)
+        if "ml_forecast_runs" not in inspector.get_table_names():
+            return
+        if engine.dialect.name != "postgresql":
+            return
+        constraints = inspector.get_unique_constraints("ml_forecast_runs")
+        existing = next((item for item in constraints if item.get("name") == "uq_ml_forecast_input"), None)
+        if existing and "forecast_window" in (existing.get("column_names") or []):
+            return
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE ml_forecast_runs DROP CONSTRAINT IF EXISTS uq_ml_forecast_input"))
+            connection.execute(text(
+                "ALTER TABLE ml_forecast_runs ADD CONSTRAINT uq_ml_forecast_input "
+                "UNIQUE (machine_id, reading_type, model, horizon, input_last_reading_id, forecast_window)"
+            ))
+    except Exception:
+        # Startup remains compatible with local SQLite/demo databases.
+        return
+
+
+ensure_forecast_schema()
