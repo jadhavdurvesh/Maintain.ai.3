@@ -152,10 +152,14 @@ def _run_forecast(db: Session, machine: models.Machine, reading_type: str, model
         raise HTTPException(400, "horizon must be between 1 and 64")
     rows = _recent_rows(db, machine.id, reading_type)
     if not rows:
-        return {"available": False, "machine_id": machine.id, "reading_type": reading_type, "model": model, "horizon": horizon, "reason": "No telemetry available. Forecasting is paused until a fresh sensor reading arrives."}
+        return {"available": False, "machine_id": machine.id, "reading_type": reading_type, "model": model, "horizon": horizon, "reason": "No telemetry available. Forecasting is paused until sensor telemetry exists."}
     latest = rows[0]
-    if not _telemetry_is_fresh(latest.recorded_at):
-        return {"available": False, "machine_id": machine.id, "reading_type": reading_type, "model": model, "horizon": horizon, "reason": f"Telemetry is stale (last reading {latest.recorded_at.isoformat()}); no ML inference was started."}
+    fresh = _telemetry_is_fresh(latest.recorded_at)
+    # Automatic forecasting remains strictly telemetry-driven. A manual Model
+    # Lab run is an explicit replay of stored telemetry and may use the latest
+    # historical samples even when the live stream is currently stale.
+    if not fresh and trigger != "manual":
+        return {"available": False, "machine_id": machine.id, "reading_type": reading_type, "model": model, "horizon": horizon, "reason": f"Telemetry is stale (last reading {latest.recorded_at.isoformat()}); automatic inference is paused."}
     if len(rows) < MIN_SAMPLES:
         return {"available": False, "machine_id": machine.id, "reading_type": reading_type, "model": model, "horizon": horizon, "reason": f"At least {MIN_SAMPLES} {reading_type} samples are required; only {len(rows)} are available."}
     existing = _existing_input(db, machine.id, reading_type, model, horizon, latest.id)
@@ -210,6 +214,5 @@ def automatic_forecast_for_reading(machine_id: int, reading_type: str):
         db.close()
 
 
-# Windowed horizon forecasts share the same ML service and are registered on this router.
 from .forecast_windows import router as forecast_windows_router
 router.include_router(forecast_windows_router)
