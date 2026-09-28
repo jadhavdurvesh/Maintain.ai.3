@@ -8,6 +8,7 @@ const fmt = (value, digits = 2) => value == null || Number.isNaN(Number(value)) 
 const WINDOWS = ['24h', '48h', '7d', '30d']
 const WINDOW_LABELS = { '24h': '24 hours', '48h': '48 hours', '7d': '7 days', '30d': '30 days' }
 const WINDOW_STEPS = { '24h': '24 hourly', '48h': '48 hourly', '7d': '28 × 6-hour', '30d': '30 daily' }
+const MODEL_MIN_SAMPLES = { 'chronos-bolt-tiny': 16, timer: 32 }
 
 function Badge({ children, tone = 'neutral' }) { return <span className={'badge ' + tone}>{children}</span> }
 
@@ -53,8 +54,9 @@ export default function PredictionCenter() {
   const selectedMachine=useMemo(()=>machines.find(m=>String(m.machine_id)===String(machineId)),[machines,machineId])
   const sampleCount=Number(status?.sample_count||0)
   const telemetryFresh=!!status?.telemetry_active
-  const canShortRun=!!machineId && sampleCount>=32
-  const telemetryLabel=telemetryFresh?'Telemetry active':sampleCount>=32?'Telemetry stale · manual replay available':'Waiting for telemetry'
+  const minimumSamples=MODEL_MIN_SAMPLES[model] || 32
+  const canShortRun=!!machineId && sampleCount>=minimumSamples
+  const telemetryLabel=telemetryFresh?'Telemetry active':sampleCount>=minimumSamples?'Telemetry stale · manual replay available':`Need ${minimumSamples} samples for ${model==='timer'?'Timer':'Chronos'}`
 
   const load=async(preserve=true)=>{
     try{
@@ -79,11 +81,11 @@ export default function PredictionCenter() {
   useEffect(()=>{const t=window.setInterval(()=>load(true),30000);return()=>window.clearInterval(t)},[machineId,readingType,model,horizon,historyWindow])
 
   const runNow=async()=>{
-    if(!machineId||sampleCount<32)return; setBusy(true); setError(null); setFeedback(null)
+    if(!machineId||sampleCount<minimumSamples)return; setBusy(true); setError(null); setFeedback(null)
     try{const result=await api.get(`/api/predictions/machines/${machineId}/forecast?reading_type=${encodeURIComponent(readingType)}&model=${encodeURIComponent(model)}&horizon=${horizon}`);setLatest(result);setFeedback(result?.available?{tone:'healthy',text:`Prediction saved · ${result.model} · ${horizon} steps · ${formatDateTime(result.created_at)}${telemetryFresh?'':' · replayed stored telemetry'}`}: {tone:'warning',text:result?.reason||'Prediction was not generated.'});await load(true)}catch(e){setError(e?.message||'Prediction request failed.')}finally{setBusy(false)}
   }
   const runWindow=async(windowName)=>{
-    if(!machineId||sampleCount<16)return; setWindowBusy(windowName); setError(null); setFeedback(null)
+    if(!machineId||sampleCount<minimumSamples)return; setWindowBusy(windowName); setError(null); setFeedback(null)
     try{const result=await api.get(`/api/predictions/machines/${machineId}/windows/run?window=${windowName}&reading_type=${encodeURIComponent(readingType)}&model=${encodeURIComponent(model)}`);const saved=result?.run||result;setLatest(saved);setFeedback(saved?.available?{tone:'healthy',text:`${WINDOW_LABELS[windowName]} forecast saved · ${saved.horizon} steps · ${formatDateTime(saved.created_at)}${telemetryFresh?'':' · replayed stored telemetry'}`}:{tone:'warning',text:saved?.reason||result?.reason||'Forecast was not generated.'});setHistoryWindow(windowName);await load(true)}catch(e){setError(e?.message||`${windowName} forecast failed.`)}finally{setWindowBusy('')}
   }
 
@@ -91,16 +93,16 @@ export default function PredictionCenter() {
   if(loading&&!lab)return <div className="panel"><div className="panel-body">Loading prediction system…</div></div>
 
   return <>
-    <div className="panel section-gap"><div className="panel-header"><span className="panel-title">Prediction Center</span><div style={{display:'flex',gap:8,alignItems:'center'}}><Badge tone={telemetryFresh?'healthy':'warning'}>{telemetryLabel}</Badge><span className="badge neutral">{sampleCount} samples</span></div></div><div className="panel-body" style={{paddingTop:8,paddingBottom:10}}><span style={{color:'var(--text-dim)',fontSize:12}}>Automatic forecasts require fresh telemetry. Manual Model Lab runs can replay stored telemetry so testing does not stop just because the sensor stream is currently idle.</span></div></div>
+    <div className="panel section-gap"><div className="panel-header"><span className="panel-title">Prediction Center</span><div style={{display:'flex',gap:8,alignItems:'center'}}><Badge tone={telemetryFresh?'healthy':'warning'}>{telemetryLabel}</Badge><span className="badge neutral">{sampleCount} samples</span></div></div><div className="panel-body" style={{paddingTop:8,paddingBottom:10}}><span style={{color:'var(--text-dim)',fontSize:12}}>Automatic forecasts require fresh telemetry. Manual Model Lab runs replay stored telemetry; Chronos can run with 16 samples, while Timer requires 32.</span></div></div>
 
-    <div className="panel section-gap" style={{border:'1px solid var(--accent)'}}><div className="panel-header"><span className="panel-title">Forecast configuration</span><Badge>{model==='timer'?'Timer · on-demand':'Chronos · production'}</Badge></div><div className="panel-body">
+    <div className="panel section-gap" style={{border:'1px solid var(--accent)'}}><div className="panel-header"><span className="panel-title">Forecast configuration</span><Badge>{model==='timer'?'Timer · on-demand · 32 samples':'Chronos · production · 16 samples'}</Badge></div><div className="panel-body">
       <div className="grid-2" style={{marginBottom:12}}>
         <label>Machine<select value={machineId} onChange={e=>{setMachineId(e.target.value);setLatest(null);setFeedback(null)}}>{machines.map(m=><option key={m.machine_id} value={m.machine_id}>{m.machine_name} · {m.category||'other'}</option>)}</select></label>
         <label>Signal<select value={readingType} onChange={e=>{setReadingType(e.target.value);setLatest(null);setFeedback(null)}}><option value="temperature">Temperature</option><option value="vibration">Vibration</option><option value="current">Motor Current</option><option value="load">Machine Load</option><option value="humidity">Humidity</option></select></label>
         <label>Time-series model<select value={model} onChange={e=>{setModel(e.target.value);setLatest(null);setFeedback(null)}}><option value="chronos-bolt-tiny">Chronos-Bolt-Tiny</option><option value="timer">Timer</option></select></label>
         <label>Short forecast<select value={horizon} onChange={e=>setHorizon(Number(e.target.value))}><option value="6">6 steps</option><option value="12">12 steps</option><option value="24">24 steps</option></select></label>
       </div>
-      <div className="chip-row" style={{alignItems:'center'}}><button className="btn" onClick={runNow} disabled={busy||!canShortRun}>{busy?<><RefreshCw size={14}/> Running model…</>:<><BrainCircuit size={14}/> Run short forecast</>}</button><span style={{fontSize:11,color:'var(--text-faint)'}}><Clock3 size={12} style={{verticalAlign:'-2px'}}/> {Math.round((status?.interval_seconds||300)/60)} min automatic cadence</span><span style={{fontSize:11,color:telemetryFresh?'var(--text-faint)':'var(--warning)'}}><Radio size={12} style={{verticalAlign:'-2px'}}/> {telemetryFresh?'Fresh telemetry can trigger automatic forecasting':'Live telemetry is stale; manual replay uses stored samples'}</span></div>
+      <div className="chip-row" style={{alignItems:'center'}}><button className="btn" onClick={runNow} disabled={busy||!canShortRun}>{busy?<><RefreshCw size={14}/> Running model…</>:<><BrainCircuit size={14}/> Run short forecast</>}</button><span style={{fontSize:11,color:'var(--text-faint)'}}><Clock3 size={12} style={{verticalAlign:'-2px'}}/> {Math.round((status?.interval_seconds||300)/60)} min automatic cadence</span><span style={{fontSize:11,color:telemetryFresh?'var(--text-faint)':'var(--warning)'}}><Radio size={12} style={{verticalAlign:'-2px'}}/> {telemetryFresh?'Fresh telemetry can trigger automatic forecasting':`Live telemetry is stale; manual replay uses stored samples (${sampleCount}/${minimumSamples})`}</span></div>
       {feedback&&<div style={{marginTop:12,padding:'10px 12px',borderRadius:8,border:'1px solid var(--border)',background:'var(--panel-raised)',fontSize:12,display:'flex',alignItems:'center',gap:8}}><CheckCircle2 size={15}/><span>{feedback.text}</span></div>}
     </div></div>
 
@@ -110,7 +112,7 @@ export default function PredictionCenter() {
 
     <div className="panel section-gap"><div className="panel-header"><span className="panel-title">Latest saved prediction</span><Badge tone={latest?.available?'healthy':'neutral'}>{latest?.available?'Saved':'No forecast yet'}</Badge></div><div className="panel-body">{latest?.available?<><SeriesChart actual={actual} forecast={prediction}/><div style={{display:'grid',gridTemplateColumns:'repeat(4,minmax(0,1fr))',gap:8,marginTop:12}}>{prediction.slice(0,12).map((value,i)=><div key={i} style={{padding:9,borderRadius:7,background:'var(--panel-raised)',border:'1px solid var(--border)'}}><div className="mono" style={{fontWeight:700}}>{fmt(value)}</div><div style={{fontSize:10,color:'var(--text-faint)',marginTop:3}}>t+{i+1}</div></div>)}</div><div style={{marginTop:12,fontSize:12,color:'var(--text-dim)'}}>Current observed value: <b>{fmt(lastActual)}</b> · forecast endpoint delta: <b>{endDelta==null?'—':`${endDelta>=0?'+':''}${fmt(endDelta)}`}</b>. This is a signal forecast, not a failure probability.</div></>:<div className="empty-state">Run a short forecast or one of the horizon forecasts below. The saved result and graph will appear here immediately.</div>}</div></div>
 
-    <div className="panel section-gap"><div className="panel-header"><span className="panel-title">Machine forecast horizons · {selectedMachine?.machine_name||'Machine'}</span><Badge>Saved per machine</Badge></div><div className="panel-body"><div className="stat-grid">{WINDOWS.map(name=><WindowCard key={name} windowName={name} run={windows?.[name]} onRun={runWindow} busy={windowBusy===name} canRun={sampleCount>=16}/>)}</div><div style={{marginTop:12,fontSize:11,color:'var(--text-faint)'}}>24h = 24 hourly steps · 48h = 48 hourly steps · 7d = 28 six-hour steps · 30d = 30 daily steps. These are sensor-value trajectories, not failure probabilities. Automatic runs wait for fresh telemetry; manual runs use stored history.</div></div></div>
+    <div className="panel section-gap"><div className="panel-header"><span className="panel-title">Machine forecast horizons · {selectedMachine?.machine_name||'Machine'}</span><Badge>Saved per machine</Badge></div><div className="panel-body"><div className="stat-grid">{WINDOWS.map(name=><WindowCard key={name} windowName={name} run={windows?.[name]} onRun={runWindow} busy={windowBusy===name} canRun={sampleCount>=minimumSamples}/>)}</div><div style={{marginTop:12,fontSize:11,color:'var(--text-faint)'}}>24h = 24 hourly steps · 48h = 48 hourly steps · 7d = 28 six-hour steps · 30d = 30 daily steps. These are sensor-value trajectories, not failure probabilities. Automatic runs wait for fresh telemetry; manual runs use stored history.</div></div></div>
 
     <div className="panel section-gap"><div className="panel-header"><span className="panel-title">Fleet forecast matrix</span><span className="badge neutral">{fleetWindows?.machines?.length||0} machines</span></div><div className="panel-body"><div style={{overflowX:'auto'}}><table><thead><tr><th>Machine</th><th>Telemetry</th><th>24h</th><th>48h</th><th>7d</th><th>30d</th></tr></thead><tbody>{(fleetWindows?.machines||[]).map(machine=><tr key={machine.machine_id}><td><button className="btn secondary" style={{padding:'4px 8px'}} onClick={()=>{setMachineId(String(machine.machine_id));setLatest(null)}}>{machine.machine_name}</button></td><td>{machine.telemetry_at?formatDateTime(machine.telemetry_at):<Badge tone="warning">No telemetry</Badge>}</td>{WINDOWS.map(name=>{const run=machine.windows?.[name];return <td key={name}>{run?.available?<><b className="mono">{fmt(run.end_prediction)}</b><div style={{fontSize:10,color:'var(--text-faint)'}}>{run.trend||'—'}</div></>:<span style={{fontSize:10,color:'var(--text-faint)'}}>waiting</span>}</td>})}</tr>)}{!fleetWindows?.machines?.length&&<tr><td colSpan="6" style={{textAlign:'center',padding:20,color:'var(--text-faint)'}}>No forecast data yet.</td></tr>}</tbody></table></div><div style={{marginTop:10,fontSize:11,color:'var(--text-faint)'}}>Each machine has independent saved forecast records. Machines without fresh telemetry stay idle and consume no automatic ML inference.</div></div></div>
 
