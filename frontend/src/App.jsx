@@ -25,7 +25,7 @@ import Reports from './pages/Reports.jsx'
 import SettingsPage from './pages/Settings.jsx'
 import History from './pages/History.jsx'
 import About from './pages/About.jsx'
-import PredictionCenter from './pages/PredictionCenter.jsx'
+import ModelLabConsole from './pages/ModelLabConsole.jsx'
 import ModelComparison from './pages/ModelComparison.jsx'
 
 const NAV = [
@@ -47,7 +47,7 @@ const NAV = [
 function Topbar({ theme, setTheme }) {
   const { title, actions } = useCurrentHeader()
   const onModelLab = window.location.hash === '#/model-lab'
-  return <div className="topbar-glass"><div className="topbar-inner"><div className="topbar-title">{title}</div><div className="topbar-actions">{actions}{onModelLab && <a className="btn secondary" href="#/model-lab/compare" title="Compare Chronos-Bolt-Tiny and Timer for the selected machine"><GitCompareArrows size={14}/> Compare models</a>}<ThemeToggle theme={theme} setTheme={setTheme} /></div></div></div>
+  return <div className="topbar-glass"><div className="topbar-inner"><div className="topbar-title">{title}</div><div className="topbar-actions">{actions}{onModelLab && <a className="btn secondary" href="#/model-lab/compare" title="Compare Chronos-Bolt-Tiny and Timer-Lite for the selected machine"><GitCompareArrows size={14}/> Compare models</a>}<ThemeToggle theme={theme} setTheme={setTheme} /></div></div></div>
 }
 
 function Sidebar() {
@@ -95,25 +95,14 @@ class RouteErrorBoundary extends Component {
   state = { error: null }
   static getDerivedStateFromError(error) { return { error } }
   componentDidCatch(error, info) { console.error('Maintain AI route render failed:', error, info) }
-  componentDidUpdate(prevProps) {
-    if (prevProps.routeKey !== this.props.routeKey && this.state.error) this.setState({ error: null })
-  }
+  componentDidUpdate(prevProps) { if (prevProps.routeKey !== this.props.routeKey && this.state.error) this.setState({ error: null }) }
   render() {
     if (!this.state.error) return this.props.children
-    return <div className="panel section-gap">
-      <div className="panel-header"><span className="panel-title">Machine page could not be rendered</span><span className="badge critical">Recovered</span></div>
-      <div className="panel-body">
-        <p style={{ color: 'var(--text-dim)', fontSize: 13, lineHeight: 1.6, margin: 0 }}>The application hit a frontend error while opening this page. Your data is not being deleted.</p>
-        <div className="mono" style={{ marginTop: 10, padding: 10, borderRadius: 8, background: 'var(--panel-raised)', color: 'var(--text-faint)', fontSize: 11, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{this.state.error?.message || String(this.state.error)}</div>
-        <div className="chip-row" style={{ marginTop: 12 }}><button className="btn" onClick={() => this.setState({ error: null })}>Retry page</button><button className="btn secondary" onClick={() => { window.location.hash = '#/machines' }}>Back to machines</button></div>
-      </div>
-    </div>
+    return <div className="panel section-gap"><div className="panel-header"><span className="panel-title">Machine page could not be rendered</span><span className="badge critical">Recovered</span></div><div className="panel-body"><p style={{ color: 'var(--text-dim)', fontSize: 13, lineHeight: 1.6, margin: 0 }}>The application hit a frontend error while opening this page. Your data is not being deleted.</p><div className="mono" style={{ marginTop: 10, padding: 10, borderRadius: 8, background: 'var(--panel-raised)', color: 'var(--text-faint)', fontSize: 11, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{this.state.error?.message || String(this.state.error)}</div><div className="chip-row" style={{ marginTop: 12 }}><button className="btn" onClick={() => this.setState({ error: null })}>Retry page</button><button className="btn secondary" onClick={() => { window.location.hash = '#/machines' }}>Back to machines</button></div></div></div>
   }
 }
 
-function AppLoading() {
-  return <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--bg, #0f1720)', color: 'var(--text, #e5edf5)', fontFamily: 'system-ui, sans-serif' }}><div style={{ textAlign: 'center' }}><div style={{ fontSize: 15, fontWeight: 700, letterSpacing: 1 }}>MAINTAIN AI</div><div style={{ marginTop: 8, fontSize: 12, opacity: 0.65 }}>Loading your workspace…</div></div></div>
-}
+function AppLoading() { return <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--bg, #0f1720)', color: 'var(--text, #e5edf5)', fontFamily: 'system-ui, sans-serif' }}><div style={{ textAlign: 'center' }}><div style={{ fontSize: 15, fontWeight: 700, letterSpacing: 1 }}>MAINTAIN AI</div><div style={{ marginTop: 8, fontSize: 12, opacity: 0.65 }}>Loading your workspace…</div></div></div> }
 
 export default function App() {
   const [theme, setTheme] = useTheme()
@@ -133,7 +122,7 @@ export default function App() {
     <Route path="/alerts" element={<Alerts />} />
     <Route path="/spare-parts" element={<SpareParts />} />
     <Route path="/reports" element={<Reports />} />
-    <Route path="/model-lab" element={<PredictionCenter />} />
+    <Route path="/model-lab" element={<ModelLabConsole />} />
     <Route path="/model-lab/compare" element={<ModelComparison />} />
     <Route path="/history" element={<History />} />
     <Route path="/settings" element={<SettingsPage />} />
