@@ -207,11 +207,16 @@ def manual_forecast(machine_id: int, reading_type: str = "temperature", model: s
 
 
 @router.get("/machines/{machine_id}/history")
-def forecast_history(machine_id: int, reading_type: str = "temperature", model: str = DEFAULT_MODEL, horizon: int = 12, limit: int = 20, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+def forecast_history(machine_id: int, reading_type: str = "temperature", model: str = DEFAULT_MODEL, horizon: int = 12, forecast_window: str | None = None, limit: int = 50, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     _scoped_machine(db, machine_id, current)
     limit = max(1, min(limit, 100))
-    rows = db.query(MLForecastRun).filter(MLForecastRun.machine_id == machine_id, MLForecastRun.organization_id == current.organization_id, MLForecastRun.reading_type == reading_type.lower(), MLForecastRun.model == model.lower(), MLForecastRun.horizon == horizon, MLForecastRun.status == "completed").order_by(MLForecastRun.created_at.desc()).limit(limit).all()
-    return {"runs": [serialize_run(row) for row in rows], "count": len(rows), "interval_seconds": _interval_seconds()}
+    query = db.query(MLForecastRun).filter(MLForecastRun.machine_id == machine_id, MLForecastRun.organization_id == current.organization_id, MLForecastRun.reading_type == reading_type.lower(), MLForecastRun.model == model.lower(), MLForecastRun.status == "completed")
+    if forecast_window:
+        query = query.filter(MLForecastRun.forecast_window == forecast_window)
+    else:
+        query = query.filter(MLForecastRun.horizon == horizon)
+    rows = query.order_by(MLForecastRun.created_at.desc()).limit(limit).all()
+    return {"runs": [serialize_run(row) for row in rows], "count": len(rows), "interval_seconds": _interval_seconds(), "forecast_window": forecast_window}
 
 
 @router.get("/machines/{machine_id}/status")
