@@ -1,0 +1,123 @@
+/* =========================================================
+   MAINTAIN AI — Model Lab compact workspace
+   Keeps the existing PredictionCenter data flow, but turns the
+   page into one connected workflow instead of a long stack.
+   ========================================================= */
+
+@media (min-width: 1100px) {
+  /* PredictionCenter and ModelComparison both expose the Timer option.
+     Keep this override scoped to those AI model screens. */
+  .content:has(option[value="timer"]) {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-bottom: 18px;
+  }
+
+  .content:has(option[value="timer"]) > .section-gap,
+  .content:has(option[value="timer"]) > .stat-grid.section-gap {
+    margin-bottom: 0 !important;
+  }
+
+  .content:has(option[value="timer"]) .panel-header {
+    min-height: 46px;
+    padding: 10px 16px;
+  }
+
+  .content:has(option[value="timer"]) .panel-body {
+    padding: 14px 16px;
+  }
+
+  /* Default: supporting panels stay below the core workflow. */
+  .content:has(option[value="timer"]) > .panel:has(.panel-title) {
+    order: 10;
+  }
+
+  /* Core workflow: configuration → horizons → latest forecast. */
+  .content:has(option[value="timer"]) > .panel:has(label select) {
+    order: 2;
+  }
+
+  .content:has(option[value="timer"]) > .panel:has(.stat-grid) {
+    order: 3;
+  }
+
+  .content:has(option[value="timer"]) > .panel:has(svg[aria-label="Observed telemetry and saved forecast"]) {
+    order: 4;
+    margin-top: 0 !important;
+  }
+
+  /* Summary strip directly follows the latest saved forecast. */
+  .content:has(option[value="timer"]) > .stat-grid.section-gap {
+    order: 5;
+  }
+
+  .content:has(option[value="timer"]) > .panel:has(label select) .panel-body {
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .content:has(option[value="timer"]) > .panel:has(label select) .grid-2 {
+    gap: 12px;
+    margin-bottom: 10px !important;
+  }
+
+  /* Horizon cards read as one timeline instead of four oversized blocks. */
+  .content:has(option[value="timer"]) > .panel:has(.stat-grid) .stat-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 9px;
+    margin-bottom: 0;
+  }
+
+  .content:has(option[value="timer"]) > .panel:has(.stat-grid) .stat-tile {
+    min-height: 106px !important;
+    padding: 13px 14px;
+  }
+
+  .content:has(option[value="timer"]) > .panel:has(.stat-grid) .stat-value {
+    font-size: 19px !important;
+  }
+
+  /* Forecast chart stays prominent without creating a huge vertical gap. */
+  .content:has(option[value="timer"]) > .panel:has(svg[aria-label="Observed telemetry and saved forecast"]) .panel-body {
+    padding-top: 12px;
+  }
+
+  .content:has(option[value="timer"]) > .panel:has(svg[aria-label="Observed telemetry and saved forecast"]) svg {
+    height: 190px;
+  }
+
+  /* Compact model / next / end / telemetry status strip. */
+  .content:has(option[value="timer"]) > .stat-grid.section-gap {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 9px;
+  }
+
+  .content:has(option[value="timer"]) > .stat-grid.section-gap .stat-tile {
+    padding: 12px 14px;
+  }
+
+  .content:has(option[value="timer"]) > .stat-grid.section-gap .stat-value {
+    font-size: 25px;
+  }
+
+  /* Supporting sections (fleet, history, readiness, errors) remain below
+     the connected forecast workflow instead of interrupting it. */
+  .content:has(option[value="timer"]) > .panel:not(:has(label select)):not(:has(.stat-grid)):not(:has(svg[aria-label="Observed telemetry and saved forecast"])) {
+    margin-bottom: 0 !important;
+  }
+
+  .content:has(option[value="timer"]) table {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 1099px) {
+  .content:has(option[value="timer"]) .section-gap {
+    margin-bottom: 12px;
+  }
+
+  .content:has(option[value="timer"]) .panel-body {
+    padding: 14px;
+  }
+}
