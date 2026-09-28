@@ -25,7 +25,7 @@ import Reports from './pages/Reports.jsx'
 import SettingsPage from './pages/Settings.jsx'
 import History from './pages/History.jsx'
 import About from './pages/About.jsx'
-import ModelLabConsole from './pages/ModelLabConsoleRedesigned.jsx'
+import ModelLabConsole from './pages/ModelLabConsoleStable.jsx'
 import ModelComparison from './pages/ModelComparison.jsx'
 
 const NAV = [
