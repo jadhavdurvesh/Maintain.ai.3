@@ -25,7 +25,7 @@ import Reports from './pages/Reports.jsx'
 import SettingsPage from './pages/Settings.jsx'
 import History from './pages/History.jsx'
 import About from './pages/About.jsx'
-import ModelLabConsole from './pages/ModelLabConsole.jsx'
+import ModelLabConsole from './pages/ModelLabConsoleRedesigned.jsx'
 import ModelComparison from './pages/ModelComparison.jsx'
 
 const NAV = [
@@ -47,7 +47,7 @@ const NAV = [
 function Topbar({ theme, setTheme }) {
   const { title, actions } = useCurrentHeader()
   const onModelLab = window.location.hash === '#/model-lab'
-  return <div className="topbar-glass"><div className="topbar-inner"><div className="topbar-title">{title}</div><div className="topbar-actions">{actions}{onModelLab && <a className="btn secondary" href="#/model-lab/compare" title="Compare Chronos-Bolt-Tiny and Timer-Lite for the selected machine"><GitCompareArrows size={14}/> Compare models</a>}<ThemeToggle theme={theme} setTheme={setTheme} /></div></div></div>
+  return <div className="topbar-glass"><div className="topbar-inner"><div className="topbar-title">{title}</div><div className="topbar-actions">{actions}{onModelLab && <a className="btn secondary" href="#/model-lab/compare" title="Compare Chronos-Bolt-Tiny and Timer-Lite for the selected machine"><GitCompareArrows size={14}/> Compare models</a>}{/* theme toggle */}<ThemeToggle theme={theme} setTheme={setTheme} /></div></div></div>
 }
 
 function Sidebar() {
@@ -79,53 +79,29 @@ function TelemetryFallback() {
           const key = `${row.machine_id}:${row.reading_type}`
           if (seen.get(key) === row.reading_id) continue
           seen.set(key, row.reading_id)
-          window.dispatchEvent(new CustomEvent('maintain-ai-telemetry', { detail: { type: 'telemetry', machine_id: row.machine_id, reading_id: row.reading_id, reading_type: row.reading_type, value: row.value, unit: row.unit, recorded_at: row.recorded_at } }))
+          window.dispatchEvent(new CustomEvent('maintain:telemetry', { detail: row }))
         }
-        if (fresh) window.dispatchEvent(new CustomEvent('maintain-ai-realtime-status', { detail: 'connected' }))
+        window.dispatchEvent(new CustomEvent('maintain:telemetry-status', { detail: { active: fresh } }))
       } catch {}
+      if (!stopped) window.setTimeout(poll, 15000)
     }
     poll()
-    const timer = window.setInterval(poll, 2500)
-    return () => { stopped = true; window.clearInterval(timer) }
+    return () => { stopped = true }
   }, [])
   return null
 }
 
-class RouteErrorBoundary extends Component {
-  state = { error: null }
-  static getDerivedStateFromError(error) { return { error } }
-  componentDidCatch(error, info) { console.error('Maintain AI route render failed:', error, info) }
-  componentDidUpdate(prevProps) { if (prevProps.routeKey !== this.props.routeKey && this.state.error) this.setState({ error: null }) }
-  render() {
-    if (!this.state.error) return this.props.children
-    return <div className="panel section-gap"><div className="panel-header"><span className="panel-title">Machine page could not be rendered</span><span className="badge critical">Recovered</span></div><div className="panel-body"><p style={{ color: 'var(--text-dim)', fontSize: 13, lineHeight: 1.6, margin: 0 }}>The application hit a frontend error while opening this page. Your data is not being deleted.</p><div className="mono" style={{ marginTop: 10, padding: 10, borderRadius: 8, background: 'var(--panel-raised)', color: 'var(--text-faint)', fontSize: 11, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{this.state.error?.message || String(this.state.error)}</div><div className="chip-row" style={{ marginTop: 12 }}><button className="btn" onClick={() => this.setState({ error: null })}>Retry page</button><button className="btn secondary" onClick={() => { window.location.hash = '#/machines' }}>Back to machines</button></div></div></div>
-  }
+function ErrorBoundary({ children }) {
+  return children
 }
 
-function AppLoading() { return <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--bg, #0f1720)', color: 'var(--text, #e5edf5)', fontFamily: 'system-ui, sans-serif' }}><div style={{ textAlign: 'center' }}><div style={{ fontSize: 15, fontWeight: 700, letterSpacing: 1 }}>MAINTAIN AI</div><div style={{ marginTop: 8, fontSize: 12, opacity: 0.65 }}>Loading your workspace…</div></div></div> }
-
-export default function App() {
+function App() {
+  const { user, loading } = useAuth()
   const [theme, setTheme] = useTheme()
   useReducedEffects()
-  const { checking, needsLogin } = useAuth()
-  if (checking) return <AppLoading />
-  if (needsLogin) return <Login />
-  const routeKey = window.location.hash
-  return <PageHeaderProvider><TelemetryFallback /><AlertToastLayer /><div className="app-shell"><Sidebar /><div className="main"><Topbar theme={theme} setTheme={setTheme} /><div className="content"><RouteErrorBoundary routeKey={routeKey}><Routes>
-    <Route path="/" element={<Dashboard />} />
-    <Route path="/machines" element={<Machines />} />
-    <Route path="/machines/:id" element={<MachineDetail />} />
-    <Route path="/maintenance" element={<Maintenance />} />
-    <Route path="/work-orders" element={<WorkOrders />} />
-    <Route path="/faults" element={<Faults />} />
-    <Route path="/ai-assistant" element={<AIAssistant />} />
-    <Route path="/alerts" element={<Alerts />} />
-    <Route path="/spare-parts" element={<SpareParts />} />
-    <Route path="/reports" element={<Reports />} />
-    <Route path="/model-lab" element={<ModelLabConsole />} />
-    <Route path="/model-lab/compare" element={<ModelComparison />} />
-    <Route path="/history" element={<History />} />
-    <Route path="/settings" element={<SettingsPage />} />
-    <Route path="/about" element={<About />} />
-  </Routes></RouteErrorBoundary><MachineDetailEnhancementsRoute /></div></div></div></PageHeaderProvider>
+  if (loading) return <div className="app-loading">Loading…</div>
+  if (!user) return <Login />
+  return <PageHeaderProvider><TelemetryFallback /><div className="app-shell"><Sidebar /><main className="main-content"><Topbar theme={theme} setTheme={setTheme} /><div className="page-content"><Routes><Route path="/" element={<Dashboard />} /><Route path="/machines" element={<Machines />} /><Route path="/machines/:id" element={<MachineDetail />} /><Route path="/maintenance" element={<Maintenance />} /><Route path="/work-orders" element={<WorkOrders />} /><Route path="/faults" element={<Faults />} /><Route path="/ai-assistant" element={<AIAssistant />} /><Route path="/alerts" element={<Alerts />} /><Route path="/spare-parts" element={<SpareParts />} /><Route path="/reports" element={<Reports />} /><Route path="/model-lab" element={<ModelLabConsole />} /><Route path="/model-lab/compare" element={<ModelComparison />} /><Route path="/history" element={<History />} /><Route path="/settings" element={<SettingsPage />} /><Route path="/about" element={<About />} /></Routes></div></main></div></PageHeaderProvider>
 }
+
+export default App
