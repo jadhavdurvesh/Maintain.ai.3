@@ -9,6 +9,14 @@ let unauthorizedHandler = null; export function onUnauthorized(fn) { unauthorize
 let desktopBasePromise
 async function getApiBaseUrl() { if (typeof window !== 'undefined' && window.maintainAI) { desktopBasePromise ||= window.maintainAI.backendUrl(); return desktopBasePromise } return BASE_URL }
 
+function isExecutionRequest(path) {
+  return path.startsWith('/api/predictions/') && (
+    path.includes('/forecast?') ||
+    path.includes('/windows/run?') ||
+    path.includes('/windows/compare?')
+  )
+}
+
 async function runRemoteChronosForecast(path, base, headers, signal) {
   const match = path.match(/^\/api\/analytics\/machines\/([^/]+)\/forecast\?(.*)$/)
   if (!match) return null
@@ -51,9 +59,11 @@ async function runRemoteChronosForecast(path, base, headers, signal) {
 async function request(path, options = {}) {
   const method = (options.method || 'GET').toUpperCase()
   const isGet = method === 'GET'
+  const executionRequest = isGet && isExecutionRequest(path)
   const isRemoteForecast = isGet && path.startsWith('/api/analytics/machines/') && path.includes('/forecast?') && new URLSearchParams(path.split('?')[1] || '').get('model') === 'chronos2'
+  const cacheableGet = isGet && !executionRequest
   const now = Date.now()
-  if (isGet) {
+  if (cacheableGet) {
     const c = getCache.get(path)
     if (c && now - c.time < GET_CACHE_TTL_MS) return c.data
     const p = getInFlight.get(path)
@@ -92,13 +102,13 @@ async function request(path, options = {}) {
     })
   }
 
-  if (isGet) getInFlight.set(path, fp)
+  if (cacheableGet) getInFlight.set(path, fp)
   try {
     const data = await fp
-    if (isGet) getCache.set(path, { time: Date.now(), data })
+    if (cacheableGet) getCache.set(path, { time: Date.now(), data })
     return data
   } finally {
-    if (isGet && getInFlight.get(path) === fp) getInFlight.delete(path)
+    if (cacheableGet && getInFlight.get(path) === fp) getInFlight.delete(path)
   }
 }
 export const api = { get: p => request(p), post: (p, b) => request(p, { method: 'POST', body: JSON.stringify(b) }), patch: (p, b) => request(p, { method: 'PATCH', body: JSON.stringify(b) }), put: (p, b) => request(p, { method: 'PUT', body: JSON.stringify(b) }), del: p => request(p, { method: 'DELETE' }) }; export default api
