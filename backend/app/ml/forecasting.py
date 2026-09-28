@@ -54,8 +54,12 @@ def _service_url() -> str:
 
 
 def _call_ml_service(values: list[float], horizon: int, model: str) -> dict:
-    payload_model = "amazon/chronos-bolt-tiny" if model == "chronos-bolt-tiny" else "timer"
-    body = json.dumps({"model": payload_model, "values": values[-CONTEXT_SAMPLES:], "horizon": horizon}).encode("utf-8")
+    if model == "timer":
+        from .timer import forecast as timer_forecast
+        result = timer_forecast(values, horizon)
+        return {"available": True, "model": "Timer", "forecast": result, "horizon": horizon}
+
+    body = json.dumps({"model": "amazon/chronos-bolt-tiny", "values": values[-CONTEXT_SAMPLES:], "horizon": horizon}).encode("utf-8")
     headers = {"Content-Type": "application/json"}
     api_key = os.getenv("MAINTAIN_ML_API_KEY", "").strip()
     if api_key:
@@ -80,11 +84,7 @@ def _call_ml_service(values: list[float], horizon: int, model: str) -> dict:
 
 
 def _scoped_machine(db: Session, machine_id: int, current: CurrentUser):
-    machine = db.query(models.Machine).filter(
-        models.Machine.id == machine_id,
-        models.Machine.organization_id == current.organization_id,
-        models.Machine.archived.is_(False),
-    ).first()
+    machine = db.query(models.Machine).filter(models.Machine.id == machine_id, models.Machine.organization_id == current.organization_id, models.Machine.archived.is_(False)).first()
     if not machine:
         raise HTTPException(404, "machine not found")
     if current.id is not None and current.role == models.UserRole.technician.value:
@@ -95,41 +95,16 @@ def _scoped_machine(db: Session, machine_id: int, current: CurrentUser):
 
 
 def _recent_rows(db: Session, machine_id: int, reading_type: str, limit: int = CONTEXT_SAMPLES):
-    return (
-        db.query(models.SensorReading)
-        .filter_by(machine_id=machine_id, reading_type=reading_type)
-        .order_by(models.SensorReading.recorded_at.desc(), models.SensorReading.id.desc())
-        .limit(limit)
-        .all()
-    )
+    return db.query(models.SensorReading).filter_by(machine_id=machine_id, reading_type=reading_type).order_by(models.SensorReading.recorded_at.desc(), models.SensorReading.id.desc()).limit(limit).all()
 
 
 def _existing_input(db: Session, machine_id: int, reading_type: str, model: str, horizon: int, last_id: int):
-    return db.query(MLForecastRun).filter_by(
-        machine_id=machine_id,
-        reading_type=reading_type,
-        model=model,
-        horizon=horizon,
-        input_last_reading_id=last_id,
-    ).first()
+    return db.query(MLForecastRun).filter_by(machine_id=machine_id, reading_type=reading_type, model=model, horizon=horizon, input_last_reading_id=last_id).first()
 
 
 def _new_run(db: Session, machine: models.Machine, reading_type: str, model: str, horizon: int, rows, trigger: str):
     ordered = list(reversed(rows))
-    run = MLForecastRun(
-        organization_id=machine.organization_id,
-        machine_id=machine.id,
-        reading_type=reading_type,
-        model=model,
-        horizon=horizon,
-        input_first_reading_id=ordered[0].id,
-        input_last_reading_id=ordered[-1].id,
-        input_started_at=ordered[0].recorded_at,
-        input_ended_at=ordered[-1].recorded_at,
-        input_reading_count=len(ordered),
-        trigger=trigger,
-        status="running",
-    )
+    run = MLForecastRun(organization_id=machine.organization_id, machine_id=machine.id, reading_type=reading_type, model=model, horizon=horizon, input_first_reading_id=ordered[0].id, input_last_reading_id=ordered[-1].id, input_started_at=ordered[0].recorded_at, input_ended_at=ordered[-1].recorded_at, input_reading_count=len(ordered), trigger=trigger, status="running")
     db.add(run)
     try:
         db.commit()
@@ -176,45 +151,22 @@ def _run_forecast(db: Session, machine: models.Machine, reading_type: str, model
 
     rows = _recent_rows(db, machine.id, reading_type)
     if len(rows) < MIN_SAMPLES:
-        return {
-            "available": False,
-            "machine_id": machine.id,
-            "reading_type": reading_type,
-            "model": model,
-            "horizon": horizon,
-            "reason": f"At least {MIN_SAMPLES} {reading_type} samples are required; only {len(rows)} are available.",
-        }
+        return {"available": False, "machine_id": machine.id, "reading_type": reading_type, "model": model, "horizon": horizon, "reason": f"At least {MIN_SAMPLES} {reading_type} samples are required; only {len(rows)} are available."}
 
     latest = rows[0]
     existing = _existing_input(db, machine.id, reading_type, model, horizon, latest.id)
-    if existing and existing.status == "completed":
-        return serialize_run(existing, reused=True)
-    if existing and existing.status == "running":
+    if existing and existing.status in {"completed", "running"}:
         return serialize_run(existing, reused=True)
 
     if not force:
-        last = db.query(MLForecastRun).filter(
-            MLForecastRun.machine_id == machine.id,
-            MLForecastRun.reading_type == reading_type,
-            MLForecastRun.model == model,
-            MLForecastRun.horizon == horizon,
-            MLForecastRun.status == "completed",
-        ).order_by(MLForecastRun.created_at.desc()).first()
+        last = db.query(MLForecastRun).filter(MLForecastRun.machine_id == machine.id, MLForecastRun.reading_type == reading_type, MLForecastRun.model == model, MLForecastRun.horizon == horizon, MLForecastRun.status == "completed").order_by(MLForecastRun.created_at.desc()).first()
         if last and datetime.utcnow() - last.created_at < timedelta(seconds=_interval_seconds()):
-            return {
-                "available": True,
-                "skipped": True,
-                "reason": "Forecast cadence has not elapsed; waiting for more telemetry.",
-                "next_eligible_at": (last.created_at + timedelta(seconds=_interval_seconds())).isoformat(),
-                "run": serialize_run(last),
-            }
+            return {"available": True, "skipped": True, "reason": "Forecast cadence has not elapsed; waiting for more telemetry.", "next_eligible_at": (last.created_at + timedelta(seconds=_interval_seconds())).isoformat(), "run": serialize_run(last)}
 
     run = _new_run(db, machine, reading_type, model, horizon, rows, trigger)
     if run is None:
         return {"available": False, "reason": "Forecast reservation could not be created."}
     if run.status == "completed":
-        return serialize_run(run, reused=True)
-    if run.status == "running" and run.created_at < datetime.utcnow() - timedelta(seconds=5) and run.trigger != trigger:
         return serialize_run(run, reused=True)
 
     values = [float(row.value) for row in reversed(rows)]
@@ -223,7 +175,9 @@ def _run_forecast(db: Session, machine: models.Machine, reading_type: str, model
         return serialize_run(_finish_run(db, run, result))
     except Exception as exc:
         _fail_run(db, run, exc)
-        raise HTTPException(502, str(exc)) from exc
+        if trigger == "manual":
+            raise HTTPException(502, str(exc)) from exc
+        return serialize_run(run)
 
 
 def serialize_run(run: MLForecastRun, reused: bool = False):
@@ -233,41 +187,18 @@ def serialize_run(run: MLForecastRun, reused: bool = False):
             forecast = json.loads(run.forecast_json)
         except (TypeError, ValueError):
             forecast = []
-    return {
-        "available": run.status == "completed",
-        "run_id": run.id,
-        "machine_id": run.machine_id,
-        "reading_type": run.reading_type,
-        "model": run.model,
-        "horizon": run.horizon,
-        "forecast": forecast,
-        "next_prediction": run.next_prediction,
-        "end_prediction": run.end_prediction,
-        "trend": run.trend,
-        "status": run.status,
-        "trigger": run.trigger,
-        "created_at": run.created_at.isoformat() if run.created_at else None,
-        "input_ended_at": run.input_ended_at.isoformat() if run.input_ended_at else None,
-        "input_reading_count": run.input_reading_count,
-        "error_message": run.error_message,
-        "reused": reused,
-    }
+    return {"available": run.status == "completed", "run_id": run.id, "machine_id": run.machine_id, "reading_type": run.reading_type, "model": run.model, "horizon": run.horizon, "forecast": forecast, "next_prediction": run.next_prediction, "end_prediction": run.end_prediction, "trend": run.trend, "status": run.status, "trigger": run.trigger, "created_at": run.created_at.isoformat() if run.created_at else None, "input_ended_at": run.input_ended_at.isoformat() if run.input_ended_at else None, "input_reading_count": run.input_reading_count, "error_message": run.error_message, "reused": reused}
 
 
 def automatic_forecast_for_reading(machine_id: int, reading_type: str):
-    """Background-safe coordinator invoked only after a new telemetry reading arrives."""
     if not _truthy("ML_AUTO_FORECASTS", True):
         return None
     reading_type = (reading_type or "").strip().lower()
     if reading_type not in _signals():
         return None
-
     db = SessionLocal()
     try:
-        machine = db.query(models.Machine).filter(
-            models.Machine.id == machine_id,
-            models.Machine.archived.is_(False),
-        ).first()
+        machine = db.query(models.Machine).filter(models.Machine.id == machine_id, models.Machine.archived.is_(False)).first()
         if not machine:
             return None
         return _run_forecast(db, machine, reading_type, _model(), int(os.getenv("ML_FORECAST_HORIZON", "12")), "automatic")
@@ -279,62 +210,23 @@ def automatic_forecast_for_reading(machine_id: int, reading_type: str):
 
 
 @router.get("/machines/{machine_id}/forecast")
-def manual_forecast(
-    machine_id: int,
-    reading_type: str = "temperature",
-    model: str = DEFAULT_MODEL,
-    horizon: int = 12,
-    current: CurrentUser = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
+def manual_forecast(machine_id: int, reading_type: str = "temperature", model: str = DEFAULT_MODEL, horizon: int = 12, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     machine = _scoped_machine(db, machine_id, current)
     return _run_forecast(db, machine, reading_type.lower(), model.lower(), horizon, "manual", force=True)
 
 
 @router.get("/machines/{machine_id}/history")
-def forecast_history(
-    machine_id: int,
-    reading_type: str = "temperature",
-    model: str = DEFAULT_MODEL,
-    horizon: int = 12,
-    limit: int = 20,
-    current: CurrentUser = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
+def forecast_history(machine_id: int, reading_type: str = "temperature", model: str = DEFAULT_MODEL, horizon: int = 12, limit: int = 20, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     _scoped_machine(db, machine_id, current)
     limit = max(1, min(limit, 100))
-    rows = db.query(MLForecastRun).filter(
-        MLForecastRun.machine_id == machine_id,
-        MLForecastRun.organization_id == current.organization_id,
-        MLForecastRun.reading_type == reading_type.lower(),
-        MLForecastRun.model == model.lower(),
-        MLForecastRun.horizon == horizon,
-        MLForecastRun.status == "completed",
-    ).order_by(MLForecastRun.created_at.desc()).limit(limit).all()
+    rows = db.query(MLForecastRun).filter(MLForecastRun.machine_id == machine_id, MLForecastRun.organization_id == current.organization_id, MLForecastRun.reading_type == reading_type.lower(), MLForecastRun.model == model.lower(), MLForecastRun.horizon == horizon, MLForecastRun.status == "completed").order_by(MLForecastRun.created_at.desc()).limit(limit).all()
     return {"runs": [serialize_run(row) for row in rows], "count": len(rows), "interval_seconds": _interval_seconds()}
 
 
 @router.get("/machines/{machine_id}/status")
-def forecast_status_for_machine(
-    machine_id: int,
-    reading_type: str = "temperature",
-    model: str = DEFAULT_MODEL,
-    horizon: int = 12,
-    current: CurrentUser = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
+def forecast_status_for_machine(machine_id: int, reading_type: str = "temperature", model: str = DEFAULT_MODEL, horizon: int = 12, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     _scoped_machine(db, machine_id, current)
     latest = db.query(models.SensorReading).filter_by(machine_id=machine_id, reading_type=reading_type.lower()).order_by(models.SensorReading.recorded_at.desc(), models.SensorReading.id.desc()).first()
     last = db.query(MLForecastRun).filter_by(machine_id=machine_id, reading_type=reading_type.lower(), model=model.lower(), horizon=horizon, status="completed").order_by(MLForecastRun.created_at.desc()).first()
     telemetry_active = bool(latest and (datetime.utcnow() - latest.recorded_at).total_seconds() <= max(_interval_seconds() * 3, 900))
-    return {
-        "automatic_enabled": _truthy("ML_AUTO_FORECASTS", True),
-        "telemetry_active": telemetry_active,
-        "latest_telemetry_at": latest.recorded_at.isoformat() if latest else None,
-        "last_prediction_at": last.created_at.isoformat() if last else None,
-        "interval_seconds": _interval_seconds(),
-        "next_eligible_at": (last.created_at + timedelta(seconds=_interval_seconds())).isoformat() if last else None,
-        "model": model.lower(),
-        "reading_type": reading_type.lower(),
-        "horizon": horizon,
-    }
+    return {"automatic_enabled": _truthy("ML_AUTO_FORECASTS", True), "telemetry_active": telemetry_active, "latest_telemetry_at": latest.recorded_at.isoformat() if latest else None, "last_prediction_at": last.created_at.isoformat() if last else None, "interval_seconds": _interval_seconds(), "next_eligible_at": (last.created_at + timedelta(seconds=_interval_seconds())).isoformat() if last else None, "model": model.lower(), "reading_type": reading_type.lower(), "horizon": horizon}
