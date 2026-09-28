@@ -39,6 +39,12 @@ def _interval_seconds() -> int:
         return DEFAULT_INTERVAL_SECONDS
 
 
+def _telemetry_is_fresh(recorded_at: datetime | None) -> bool:
+    if recorded_at is None:
+        return False
+    return (datetime.utcnow() - recorded_at).total_seconds() <= max(_interval_seconds() * 3, 900)
+
+
 def _model() -> str:
     value = os.getenv("ML_FORECAST_MODEL", DEFAULT_MODEL).strip().lower()
     return value if value in SUPPORTED_MODELS else DEFAULT_MODEL
@@ -145,9 +151,13 @@ def _run_forecast(db: Session, machine: models.Machine, reading_type: str, model
     if horizon < 1 or horizon > 64:
         raise HTTPException(400, "horizon must be between 1 and 64")
     rows = _recent_rows(db, machine.id, reading_type)
+    if not rows:
+        return {"available": False, "machine_id": machine.id, "reading_type": reading_type, "model": model, "horizon": horizon, "reason": "No telemetry available. Forecasting is paused until a fresh sensor reading arrives."}
+    latest = rows[0]
+    if not _telemetry_is_fresh(latest.recorded_at):
+        return {"available": False, "machine_id": machine.id, "reading_type": reading_type, "model": model, "horizon": horizon, "reason": f"Telemetry is stale (last reading {latest.recorded_at.isoformat()}); no ML inference was started."}
     if len(rows) < MIN_SAMPLES:
         return {"available": False, "machine_id": machine.id, "reading_type": reading_type, "model": model, "horizon": horizon, "reason": f"At least {MIN_SAMPLES} {reading_type} samples are required; only {len(rows)} are available."}
-    latest = rows[0]
     existing = _existing_input(db, machine.id, reading_type, model, horizon, latest.id)
     if existing and existing.status in {"completed", "running"}:
         return serialize_run(existing, reused=True)
@@ -200,32 +210,6 @@ def automatic_forecast_for_reading(machine_id: int, reading_type: str):
         db.close()
 
 
-@router.get("/machines/{machine_id}/forecast")
-def manual_forecast(machine_id: int, reading_type: str = "temperature", model: str = DEFAULT_MODEL, horizon: int = 12, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
-    machine = _scoped_machine(db, machine_id, current)
-    return _run_forecast(db, machine, reading_type.lower(), model.lower(), horizon, "manual", force=True)
-
-
-@router.get("/machines/{machine_id}/history")
-def forecast_history(machine_id: int, reading_type: str = "temperature", model: str = DEFAULT_MODEL, horizon: int = 12, forecast_window: str | None = None, limit: int = 50, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
-    _scoped_machine(db, machine_id, current)
-    limit = max(1, min(limit, 100))
-    query = db.query(MLForecastRun).filter(MLForecastRun.machine_id == machine_id, MLForecastRun.organization_id == current.organization_id, MLForecastRun.reading_type == reading_type.lower(), MLForecastRun.model == model.lower(), MLForecastRun.status == "completed")
-    if forecast_window:
-        query = query.filter(MLForecastRun.forecast_window == forecast_window)
-    else:
-        query = query.filter(MLForecastRun.horizon == horizon)
-    rows = query.order_by(MLForecastRun.created_at.desc()).limit(limit).all()
-    return {"runs": [serialize_run(row) for row in rows], "count": len(rows), "interval_seconds": _interval_seconds(), "forecast_window": forecast_window}
-
-
-@router.get("/machines/{machine_id}/status")
-def forecast_status_for_machine(machine_id: int, reading_type: str = "temperature", model: str = DEFAULT_MODEL, horizon: int = 12, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
-    _scoped_machine(db, machine_id, current)
-    latest = db.query(models.SensorReading).filter_by(machine_id=machine_id, reading_type=reading_type.lower()).order_by(models.SensorReading.recorded_at.desc(), models.SensorReading.id.desc()).first()
-    last = db.query(MLForecastRun).filter_by(machine_id=machine_id, reading_type=reading_type.lower(), model=model.lower(), horizon=horizon, status="completed").order_by(MLForecastRun.created_at.desc()).first()
-    telemetry_active = bool(latest and (datetime.utcnow() - latest.recorded_at).total_seconds() <= max(_interval_seconds() * 3, 900))
-    return {"automatic_enabled": _truthy("ML_AUTO_FORECASTS", True), "telemetry_active": telemetry_active, "latest_telemetry_at": latest.recorded_at.isoformat() if latest else None, "last_prediction_at": last.created_at.isoformat() if last else None, "interval_seconds": _interval_seconds(), "next_eligible_at": (last.created_at + timedelta(seconds=_interval_seconds())).isoformat() if last else None, "model": model.lower(), "reading_type": reading_type.lower(), "horizon": horizon}
-
+# Windowed horizon forecasts share the same ML service and are registered on this router.
 from .forecast_windows import router as forecast_windows_router
 router.include_router(forecast_windows_router)
