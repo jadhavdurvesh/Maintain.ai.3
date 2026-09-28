@@ -39,7 +39,6 @@ const NAV = [
   { to: '/spare-parts', label: 'Spare Parts', icon: Package },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/model-lab', label: 'AI Model Lab', icon: BrainCircuit },
-  { to: '/model-lab/compare', label: 'Model Comparison', icon: GitCompareArrows },
   { to: '/history', label: 'History', icon: HistoryIcon },
   { to: '/settings', label: 'Settings', icon: SettingsIcon },
   { to: '/about', label: 'About', icon: Info },
@@ -47,7 +46,8 @@ const NAV = [
 
 function Topbar({ theme, setTheme }) {
   const { title, actions } = useCurrentHeader()
-  return <div className="topbar-glass"><div className="topbar-inner"><div className="topbar-title">{title}</div><div className="topbar-actions">{actions}<ThemeToggle theme={theme} setTheme={setTheme} /></div></div></div>
+  const onModelLab = window.location.hash === '#/model-lab'
+  return <div className="topbar-glass"><div className="topbar-inner"><div className="topbar-title">{title}</div><div className="topbar-actions">{actions}{onModelLab && <a className="btn secondary" href="#/model-lab/compare" title="Compare Chronos-Bolt-Tiny and Timer for the selected machine"><GitCompareArrows size={14}/> Compare models</a>}<ThemeToggle theme={theme} setTheme={setTheme} /></div></div></div>
 }
 
 function Sidebar() {
