@@ -66,9 +66,12 @@ def _run_window(db, machine, reading_type, window, model, trigger="automatic", f
     spec = WINDOWS[window]
     latest = _latest_telemetry(db, machine.id, reading_type)
     if latest is None:
-        return {"available": False, "window": window, "reason": "No telemetry available. Forecasting is paused until a fresh sensor reading arrives."}
-    if not _telemetry_is_fresh(latest.recorded_at):
-        return {"available": False, "window": window, "reason": f"Telemetry is stale (last reading {latest.recorded_at.isoformat()}); no ML inference was started."}
+        return {"available": False, "window": window, "reason": "No telemetry available. Forecasting is paused until sensor telemetry exists."}
+    fresh = _telemetry_is_fresh(latest.recorded_at)
+    # Automatic windows require live telemetry. An explicit Model Lab run is a
+    # historical replay and can use stored telemetry when the stream is idle.
+    if not fresh and trigger != "manual":
+        return {"available": False, "window": window, "reason": f"Telemetry is stale (last reading {latest.recorded_at.isoformat()}); automatic inference is paused."}
     previous = _latest_run(db, machine.id, reading_type, model, window)
     if previous and previous.status == "running" and not force:
         return {"available": False, "running": True, "window": window, "reason": "A forecast for this machine/window is already running.", "run": serialize_run(previous, reused=True)}
