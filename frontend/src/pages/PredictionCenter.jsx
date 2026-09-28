@@ -5,6 +5,8 @@ import { formatDateTime } from '../utils/dates.js'
 import { usePageHeader } from '../PageHeaderContext.jsx'
 
 const fmt = (value, digits = 2) => value == null || Number.isNaN(Number(value)) ? '—' : Number(value).toFixed(digits)
+const WINDOWS = ['24h', '48h', '7d', '30d']
+const WINDOW_LABELS = { '24h': '24 hours', '48h': '48 hours', '7d': '7 days', '30d': '30 days' }
 
 function Badge({ children, tone = 'neutral' }) {
   return <span className={'badge ' + tone}>{children}</span>
@@ -38,6 +40,21 @@ function SeriesChart({ actual = [], forecast = [] }) {
   </div>
 }
 
+function WindowCard({ windowName, run }) {
+  const available = !!run?.available
+  return <div className="stat-tile" style={{minHeight:125}}>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+      <div className="stat-label"><Clock3 size={13}/> {WINDOW_LABELS[windowName]}</div>
+      <Badge tone={available ? 'healthy' : 'warning'}>{available ? 'Forecasted' : 'Waiting'}</Badge>
+    </div>
+    {available ? <>
+      <div className="stat-value" style={{fontSize:20,marginTop:8}}>{fmt(run.end_prediction)}</div>
+      <div style={{fontSize:11,color:'var(--text-faint)'}}>endpoint · {run.trend || '—'} · {run.step_seconds >= 86400 ? 'daily' : run.step_seconds >= 21600 ? '6-hour' : 'hourly'} steps</div>
+      <div style={{fontSize:10,color:'var(--text-faint)',marginTop:5}}>saved {formatDateTime(run.created_at)}</div>
+    </> : <div style={{fontSize:12,color:'var(--text-faint)',marginTop:12}}>{run?.reason || 'Waiting for enough telemetry.'}</div>}
+  </div>
+}
+
 export default function PredictionCenter() {
   usePageHeader('AI Monitoring / Model Lab')
   const [lab, setLab] = useState(null)
@@ -49,6 +66,8 @@ export default function PredictionCenter() {
   const [history, setHistory] = useState([])
   const [actual, setActual] = useState([])
   const [status, setStatus] = useState(null)
+  const [windows, setWindows] = useState(null)
+  const [fleetWindows, setFleetWindows] = useState(null)
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -63,13 +82,17 @@ export default function PredictionCenter() {
       const id = machineId || String(labResult?.fleet?.machines?.[0]?.machine_id || '')
       if (!machineId && id) setMachineId(id)
       if (!id) return
-      const [s, h, readings] = await Promise.all([
+      const [s, h, readings, w, fw] = await Promise.all([
         api.get(`/api/predictions/machines/${id}/status?reading_type=${encodeURIComponent(readingType)}&model=${encodeURIComponent(model)}&horizon=${horizon}`),
         api.get(`/api/predictions/machines/${id}/history?reading_type=${encodeURIComponent(readingType)}&model=${encodeURIComponent(model)}&horizon=${horizon}&limit=20`),
         api.get(`/api/machines/${id}/readings?limit=64`),
+        api.get(`/api/predictions/machines/${id}/windows?reading_type=${encodeURIComponent(readingType)}&model=${encodeURIComponent(model)}`),
+        api.get(`/api/predictions/fleet/windows?reading_type=${encodeURIComponent(readingType)}&model=${encodeURIComponent(model)}`),
       ])
       setStatus(s)
       setHistory(h?.runs || [])
+      setWindows(w?.windows || null)
+      setFleetWindows(fw || null)
       setActual((readings || []).filter(r => r.reading_type === readingType).sort((a,b) => new Date(a.recorded_at) - new Date(b.recorded_at)).map(r => Number(r.value)).filter(Number.isFinite).slice(-32))
       if (!preserveResult || !latest) setLatest(h?.runs?.[0] || null)
       setError(null)
@@ -107,7 +130,7 @@ export default function PredictionCenter() {
   return <>
     <div className="panel section-gap">
       <div className="panel-header"><span className="panel-title">Prediction Center</span><Badge tone={status?.telemetry_active ? 'healthy' : 'warning'}>{status?.telemetry_active ? 'Telemetry active' : 'Waiting for telemetry'}</Badge></div>
-      <div className="panel-body"><p style={{color:'var(--text-dim)',fontSize:13,lineHeight:1.6,margin:0}}>Predictions are now durable records. New forecasts are created from new telemetry only, deduplicated by the exact input reading, and throttled so the ML service is not called repeatedly without new data.</p></div>
+      <div className="panel-body"><p style={{color:'var(--text-dim)',fontSize:13,lineHeight:1.6,margin:0}}>The Model Lab now separates <b>signal forecasting</b> from future failure-risk readiness. Forecasts are durable records, tied to real telemetry, deduplicated by input, and generated automatically only after new sensor data arrives.</p></div>
     </div>
 
     <div className="panel section-gap" style={{border:'1px solid var(--accent)'}}>
@@ -117,17 +140,42 @@ export default function PredictionCenter() {
           <label>Machine<select value={machineId} onChange={e=>{setMachineId(e.target.value);setLatest(null)}}>{machines.map(m => <option key={m.machine_id} value={m.machine_id}>{m.machine_name} · {m.category || 'other'}</option>)}</select></label>
           <label>Signal<select value={readingType} onChange={e=>{setReadingType(e.target.value);setLatest(null)}}><option value="temperature">Temperature</option><option value="vibration">Vibration</option><option value="current">Motor Current</option><option value="load">Machine Load</option><option value="humidity">Humidity</option></select></label>
           <label>Time-series model<select value={model} onChange={e=>{setModel(e.target.value);setLatest(null)}}><option value="chronos-bolt-tiny">Chronos-Bolt-Tiny</option><option value="timer">Timer</option></select></label>
-          <label>Forecast horizon<select value={horizon} onChange={e=>setHorizon(Number(e.target.value))}><option value="6">6 steps</option><option value="12">12 steps</option><option value="24">24 steps</option></select></label>
+          <label>Short forecast<select value={horizon} onChange={e=>setHorizon(Number(e.target.value))}><option value="6">6 steps</option><option value="12">12 steps</option><option value="24">24 steps</option></select></label>
         </div>
         <div className="chip-row">
           <button className="btn" onClick={runNow} disabled={busy || !machineId}>{busy ? 'Running model…' : 'Run now'}</button>
-          <span style={{fontSize:11,color:'var(--text-faint)'}}><Clock3 size={12} style={{verticalAlign:'-2px'}}/> Automatic cadence: {Math.round((status?.interval_seconds || 300) / 60)} min after new telemetry</span>
+          <span style={{fontSize:11,color:'var(--text-faint)'}}><Clock3 size={12} style={{verticalAlign:'-2px'}}/> Short forecast cadence: {Math.round((status?.interval_seconds || 300) / 60)} min after new telemetry</span>
           <span style={{fontSize:11,color:'var(--text-faint)'}}><Radio size={12} style={{verticalAlign:'-2px'}}/> {status?.telemetry_active ? 'New telemetry can trigger forecasting' : 'No recent telemetry: no automatic forecast calls'}</span>
         </div>
       </div>
     </div>
 
     {error && <div className="panel section-gap"><div className="panel-body" style={{color:'var(--critical)',fontSize:12}}>{error}</div></div>}
+
+    <div className="panel section-gap">
+      <div className="panel-header"><span className="panel-title">Machine forecast horizons · {selectedMachine?.machine_name || 'Machine'}</span><Badge>Signal forecast</Badge></div>
+      <div className="panel-body">
+        <div className="stat-grid">
+          {WINDOWS.map(name => <WindowCard key={name} windowName={name} run={windows?.[name]} />)}
+        </div>
+        <div style={{marginTop:12,fontSize:11,color:'var(--text-faint)'}}>These are future <b>sensor-value trajectories</b>, not 24h/48h/7d/30d failure probabilities. The existing Risk Data Readiness section below is a separate label-readiness system for future calibrated risk models.</div>
+      </div>
+    </div>
+
+    <div className="panel section-gap">
+      <div className="panel-header"><span className="panel-title">Fleet forecast matrix</span><span className="badge neutral">{fleetWindows?.machines?.length || 0} machines · {WINDOW_LABELS['24h']} / {WINDOW_LABELS['48h']} / {WINDOW_LABELS['7d']} / {WINDOW_LABELS['30d']}</span></div>
+      <div className="panel-body">
+        <div style={{overflowX:'auto'}}><table><thead><tr><th>Machine</th><th>Telemetry</th><th>24h</th><th>48h</th><th>7d</th><th>30d</th></tr></thead><tbody>
+          {(fleetWindows?.machines || []).map(machine => <tr key={machine.machine_id}>
+            <td><button className="btn secondary" style={{padding:'4px 8px'}} onClick={() => {setMachineId(String(machine.machine_id));setLatest(null)}}>{machine.machine_name}</button></td>
+            <td>{machine.telemetry_at ? formatDateTime(machine.telemetry_at) : <Badge tone="warning">No telemetry</Badge>}</td>
+            {WINDOWS.map(name => { const run = machine.windows?.[name]; return <td key={name}>{run?.available ? <div><b className="mono">{fmt(run.end_prediction)}</b><div style={{fontSize:10,color:'var(--text-faint)'}}>{run.trend || '—'}</div></div> : <span style={{fontSize:10,color:'var(--text-faint)'}}>waiting</span>}</td> })}
+          </tr>)}
+          {!fleetWindows?.machines?.length && <tr><td colSpan="6" style={{textAlign:'center',padding:20,color:'var(--text-faint)'}}>No machines with forecast data yet.</td></tr>}
+        </tbody></table></div>
+        <div style={{marginTop:10,fontSize:11,color:'var(--text-faint)'}}>Each machine has its own saved forecast records. The fleet table is a read-only aggregate; selecting a machine opens its detailed forecast below. A machine with no new telemetry remains idle and does not consume ML inference resources.</div>
+      </div>
+    </div>
 
     <div className="stat-grid section-gap">
       <div className="stat-tile"><div className="stat-label"><BrainCircuit size={14}/> MODEL</div><div className="stat-value" style={{fontSize:18}}>{latest?.model || model}</div><div style={{fontSize:11,color:'var(--text-faint)'}}>{selectedMachine?.machine_name || 'Machine'}</div></div>
@@ -140,6 +188,8 @@ export default function PredictionCenter() {
 
     <div className="panel section-gap"><div className="panel-header"><span className="panel-title"><History size={15} style={{verticalAlign:'-3px',marginRight:6}}/>Prediction history</span><span className="badge neutral">{history.length} saved</span></div><div className="panel-body"><table><thead><tr><th>Created</th><th>Trigger</th><th>Input end</th><th>Next</th><th>Endpoint</th><th>Trend</th><th>Status</th></tr></thead><tbody>{history.length ? history.map(run => <tr key={run.run_id}><td>{formatDateTime(run.created_at)}</td><td>{run.trigger}</td><td>{formatDateTime(run.input_ended_at)}</td><td className="mono">{fmt(run.next_prediction)}</td><td className="mono">{fmt(run.end_prediction)}</td><td>{run.trend === 'Increasing' ? <TrendingUp size={14}/> : run.trend === 'Decreasing' ? <TrendingDown size={14}/> : 'Stable'}</td><td><Badge tone="healthy">saved</Badge></td></tr>) : <tr><td colSpan="7" style={{textAlign:'center',padding:20,color:'var(--text-faint)'}}>No saved forecasts yet. Once enough telemetry arrives, automatic forecasting will create the first record.</td></tr>}</tbody></table></div></div>
 
-    <div className="grid-2 section-gap"><div className="panel"><div className="panel-header"><span className="panel-title">Automatic forecasting</span><RefreshCw size={15}/></div><div className="panel-body" style={{fontSize:12,color:'var(--text-dim)',lineHeight:1.6}}><b>It does not run on a timer by itself.</b> The coordinator is invoked only after a new sensor reading commits. It then checks minimum history, telemetry freshness, cadence, and whether the exact input reading has already been forecast. If telemetry stops, no new prediction calls are made.</div></div><div className="panel"><div className="panel-header"><span className="panel-title">Model roles</span><Timer size={15}/></div><div className="panel-body" style={{fontSize:12,color:'var(--text-dim)',lineHeight:1.6}}><b>Chronos-Bolt-Tiny</b> is the default production forecast model for the constrained Render ML service. <b>Timer</b> is the secondary time-series model and can be selected for comparison when enabled. Neither model produces an uncalibrated failure probability.</div></div></div>
+    <div className="grid-2 section-gap"><div className="panel"><div className="panel-header"><span className="panel-title">Automatic forecasting</span><RefreshCw size={15}/></div><div className="panel-body" style={{fontSize:12,color:'var(--text-dim)',lineHeight:1.6}}><b>It does not run on a timer by itself.</b> The coordinator is invoked only after a new sensor reading commits. It then checks minimum history, telemetry freshness, cadence, and whether the exact input reading has already been forecast. If telemetry stops, no new prediction calls are made. Long horizons are resampled before inference: 24h/48h use hourly steps, 7d uses 6-hour steps, and 30d uses daily steps.</div></div><div className="panel"><div className="panel-header"><span className="panel-title">Model roles</span><Timer size={15}/></div><div className="panel-body" style={{fontSize:12,color:'var(--text-dim)',lineHeight:1.6}}><b>Chronos-Bolt-Tiny</b> is the default production forecast model for the constrained Render ML service. <b>Timer</b> is the secondary time-series model and can be selected for comparison when enabled. Neither model produces an uncalibrated failure probability. Chronos-Bolt supports prediction lengths up to 64 steps, so the four windows are mapped to 24, 48, 28 and 30 model steps respectively.</div></div></div>
+
+    <div className="panel section-gap"><div className="panel-header"><span className="panel-title">Risk Data Readiness</span><span className="badge neutral">Not a signal forecast</span></div><div className="panel-body"><div style={{display:'grid',gap:8}}>{Object.entries(lab?.risk_readiness?.horizons || {}).map(([h,v]) => <div key={h} style={{display:'grid',gridTemplateColumns:'55px 1fr 1fr',gap:8,alignItems:'center',fontSize:12}}><span className="mono">{h}</span><span>Labels: <b>{v.complete_labels}</b></span><span>Positive: <b>{v.positive_outcomes}</b> · Negative: <b>{v.negative_outcomes}</b></span></div>)}</div><div style={{marginTop:12,color:'var(--text-faint)',fontSize:11}}>These 24h/48h/7d/30d entries describe whether enough leakage-safe failure outcomes exist for future calibrated risk models. They are deliberately not converted into failure probabilities until the corresponding models are trained and validated.</div></div></div>
   </>
 }

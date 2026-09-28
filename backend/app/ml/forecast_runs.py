@@ -1,12 +1,12 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 
 from ..database import Base
 
 
 class MLForecastRun(Base):
-    """Durable point-in-time forecast generated from a concrete telemetry snapshot."""
+    """Durable forecast generated from a concrete telemetry snapshot."""
 
     __tablename__ = "ml_forecast_runs"
     __table_args__ = (
@@ -20,6 +20,7 @@ class MLForecastRun(Base):
         ),
         Index("ix_ml_forecast_machine_signal_created", "machine_id", "reading_type", "created_at"),
         Index("ix_ml_forecast_machine_created", "machine_id", "created_at"),
+        Index("ix_ml_forecast_machine_window_created", "machine_id", "forecast_window", "created_at"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -28,6 +29,8 @@ class MLForecastRun(Base):
     reading_type = Column(String, nullable=False, index=True)
     model = Column(String, nullable=False, default="chronos-bolt-tiny")
     horizon = Column(Integer, nullable=False, default=12)
+    forecast_window = Column(String, nullable=True, index=True)
+    step_seconds = Column(Integer, nullable=True)
 
     input_first_reading_id = Column(Integer, nullable=True)
     input_last_reading_id = Column(Integer, nullable=False, index=True)

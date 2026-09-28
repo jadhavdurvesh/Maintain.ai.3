@@ -58,13 +58,11 @@ def _call_ml_service(values: list[float], horizon: int, model: str) -> dict:
         from .timer import forecast as timer_forecast
         result = timer_forecast(values, horizon)
         return {"available": True, "model": "Timer", "forecast": result, "horizon": horizon}
-
     body = json.dumps({"model": "amazon/chronos-bolt-tiny", "values": values[-CONTEXT_SAMPLES:], "horizon": horizon}).encode("utf-8")
     headers = {"Content-Type": "application/json"}
     api_key = os.getenv("MAINTAIN_ML_API_KEY", "").strip()
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
-
     request = Request(f"{_service_url()}/v1/forecast", data=body, headers=headers, method="POST")
     try:
         with urlopen(request, timeout=float(os.getenv("ML_FORECAST_TIMEOUT_SECONDS", "90"))) as response:
@@ -74,7 +72,6 @@ def _call_ml_service(values: list[float], horizon: int, model: str) -> dict:
         raise RuntimeError(f"ML service HTTP {exc.code}: {detail[:500]}") from exc
     except URLError as exc:
         raise RuntimeError(f"ML service unavailable: {exc.reason}") from exc
-
     if not result.get("available"):
         raise RuntimeError(result.get("reason") or "ML service did not return a forecast")
     forecast = [float(value) for value in result.get("forecast", [])]
@@ -148,27 +145,22 @@ def _run_forecast(db: Session, machine: models.Machine, reading_type: str, model
         raise HTTPException(400, f"unsupported signal: {reading_type}")
     if horizon < 1 or horizon > 64:
         raise HTTPException(400, "horizon must be between 1 and 64")
-
     rows = _recent_rows(db, machine.id, reading_type)
     if len(rows) < MIN_SAMPLES:
         return {"available": False, "machine_id": machine.id, "reading_type": reading_type, "model": model, "horizon": horizon, "reason": f"At least {MIN_SAMPLES} {reading_type} samples are required; only {len(rows)} are available."}
-
     latest = rows[0]
     existing = _existing_input(db, machine.id, reading_type, model, horizon, latest.id)
     if existing and existing.status in {"completed", "running"}:
         return serialize_run(existing, reused=True)
-
     if not force:
         last = db.query(MLForecastRun).filter(MLForecastRun.machine_id == machine.id, MLForecastRun.reading_type == reading_type, MLForecastRun.model == model, MLForecastRun.horizon == horizon, MLForecastRun.status == "completed").order_by(MLForecastRun.created_at.desc()).first()
         if last and datetime.utcnow() - last.created_at < timedelta(seconds=_interval_seconds()):
             return {"available": True, "skipped": True, "reason": "Forecast cadence has not elapsed; waiting for more telemetry.", "next_eligible_at": (last.created_at + timedelta(seconds=_interval_seconds())).isoformat(), "run": serialize_run(last)}
-
     run = _new_run(db, machine, reading_type, model, horizon, rows, trigger)
     if run is None:
         return {"available": False, "reason": "Forecast reservation could not be created."}
     if run.status == "completed":
         return serialize_run(run, reused=True)
-
     values = [float(row.value) for row in reversed(rows)]
     try:
         result = _call_ml_service(values, horizon, model)
@@ -187,7 +179,7 @@ def serialize_run(run: MLForecastRun, reused: bool = False):
             forecast = json.loads(run.forecast_json)
         except (TypeError, ValueError):
             forecast = []
-    return {"available": run.status == "completed", "run_id": run.id, "machine_id": run.machine_id, "reading_type": run.reading_type, "model": run.model, "horizon": run.horizon, "forecast": forecast, "next_prediction": run.next_prediction, "end_prediction": run.end_prediction, "trend": run.trend, "status": run.status, "trigger": run.trigger, "created_at": run.created_at.isoformat() if run.created_at else None, "input_ended_at": run.input_ended_at.isoformat() if run.input_ended_at else None, "input_reading_count": run.input_reading_count, "error_message": run.error_message, "reused": reused}
+    return {"available": run.status == "completed", "run_id": run.id, "machine_id": run.machine_id, "reading_type": run.reading_type, "model": run.model, "horizon": run.horizon, "forecast": forecast, "next_prediction": run.next_prediction, "end_prediction": run.end_prediction, "trend": run.trend, "status": run.status, "trigger": run.trigger, "forecast_window": run.forecast_window, "step_seconds": run.step_seconds, "created_at": run.created_at.isoformat() if run.created_at else None, "input_ended_at": run.input_ended_at.isoformat() if run.input_ended_at else None, "input_reading_count": run.input_reading_count, "error_message": run.error_message, "reused": reused}
 
 
 def automatic_forecast_for_reading(machine_id: int, reading_type: str):
@@ -230,3 +222,6 @@ def forecast_status_for_machine(machine_id: int, reading_type: str = "temperatur
     last = db.query(MLForecastRun).filter_by(machine_id=machine_id, reading_type=reading_type.lower(), model=model.lower(), horizon=horizon, status="completed").order_by(MLForecastRun.created_at.desc()).first()
     telemetry_active = bool(latest and (datetime.utcnow() - latest.recorded_at).total_seconds() <= max(_interval_seconds() * 3, 900))
     return {"automatic_enabled": _truthy("ML_AUTO_FORECASTS", True), "telemetry_active": telemetry_active, "latest_telemetry_at": latest.recorded_at.isoformat() if latest else None, "last_prediction_at": last.created_at.isoformat() if last else None, "interval_seconds": _interval_seconds(), "next_eligible_at": (last.created_at + timedelta(seconds=_interval_seconds())).isoformat() if last else None, "model": model.lower(), "reading_type": reading_type.lower(), "horizon": horizon}
+
+from .forecast_windows import router as forecast_windows_router
+router.include_router(forecast_windows_router)
