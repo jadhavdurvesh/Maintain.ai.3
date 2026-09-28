@@ -1,0 +1,72 @@
+/* Prediction Center-only layout fix. The saved-forecast chart is unique to this page. */
+@media (min-width: 1100px) {
+  .content:has(svg[aria-label="Observed telemetry and saved forecast"]) > .panel:first-child {
+    order: 1 !important;
+  }
+
+  .content:has(svg[aria-label="Observed telemetry and saved forecast"]) > .panel:has(label select) {
+    order: 2 !important;
+  }
+
+  .content:has(svg[aria-label="Observed telemetry and saved forecast"]) > .panel:has(.stat-grid) {
+    order: 3 !important;
+  }
+
+  .content:has(svg[aria-label="Observed telemetry and saved forecast"]) > .panel:has(svg[aria-label="Observed telemetry and saved forecast"]) {
+    order: 4 !important;
+  }
+
+  .content:has(svg[aria-label="Observed telemetry and saved forecast"]) > .stat-grid.section-gap {
+    order: 5 !important;
+  }
+
+  .content:has(svg[aria-label="Observed telemetry and saved forecast"]) > .panel:not(:first-child):not(:has(label select)):not(:has(.stat-grid)):not(:has(svg[aria-label="Observed telemetry and saved forecast"])) {
+    order: 10 !important;
+  }
+
+  .content:has(svg[aria-label="Observed telemetry and saved forecast"]) > .panel:has(label select) .panel-body {
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .content:has(svg[aria-label="Observed telemetry and saved forecast"]) > .panel:has(label select) .grid-2 {
+    gap: 12px;
+    margin-bottom: 10px !important;
+  }
+
+  .content:has(svg[aria-label="Observed telemetry and saved forecast"]) > .panel:has(.stat-grid) .stat-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 9px;
+    margin-bottom: 0;
+  }
+
+  .content:has(svg[aria-label="Observed telemetry and saved forecast"]) > .panel:has(.stat-grid) .stat-tile {
+    min-height: 106px !important;
+    padding: 13px 14px;
+  }
+
+  .content:has(svg[aria-label="Observed telemetry and saved forecast"]) > .panel:has(.stat-grid) .stat-value {
+    font-size: 19px !important;
+  }
+
+  .content:has(svg[aria-label="Observed telemetry and saved forecast"]) > .panel:has(svg[aria-label="Observed telemetry and saved forecast"]) .panel-body {
+    padding-top: 12px;
+  }
+
+  .content:has(svg[aria-label="Observed telemetry and saved forecast"]) > .panel:has(svg[aria-label="Observed telemetry and saved forecast"]) svg {
+    height: 190px;
+  }
+
+  .content:has(svg[aria-label="Observed telemetry and saved forecast"]) > .stat-grid.section-gap {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 9px;
+  }
+
+  .content:has(svg[aria-label="Observed telemetry and saved forecast"]) > .stat-grid.section-gap .stat-tile {
+    padding: 12px 14px;
+  }
+
+  .content:has(svg[aria-label="Observed telemetry and saved forecast"]) > .stat-grid.section-gap .stat-value {
+    font-size: 25px;
+  }
+}
