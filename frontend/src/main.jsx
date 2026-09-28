@@ -5,6 +5,7 @@ import { AuthProvider } from './AuthContext.jsx'
 import App from './App.jsx'
 import './index.css'
 import './skeleton.css'
+import './model-lab-overrides.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
