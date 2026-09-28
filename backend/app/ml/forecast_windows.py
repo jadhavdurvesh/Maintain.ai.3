@@ -72,9 +72,9 @@ def _run_window(db, machine, reading_type, window, model, trigger="automatic", f
         return {"available": False, "running": True, "window": window, "reason": "A forecast for this machine/window is already running.", "run": serialize_run(previous, reused=True)}
     if previous and not force:
         if previous.input_last_reading_id == latest.id:
-            return {"available": True, "skipped": True, "reason": "No new telemetry since the previous forecast.", "run": serialize_run(previous, reused=True)}
+            return {"available": True, "skipped": True, "window": window, "reason": "No new telemetry since the previous forecast.", "run": serialize_run(previous, reused=True)}
         if datetime.utcnow() - previous.created_at < timedelta(seconds=max(_interval_seconds(), spec["step_seconds"] // 2)):
-            return {"available": True, "skipped": True, "reason": "Forecast cadence has not elapsed yet.", "run": serialize_run(previous, reused=True)}
+            return {"available": True, "skipped": True, "window": window, "reason": "Forecast cadence has not elapsed yet.", "run": serialize_run(previous, reused=True)}
     rows = _window_rows(db, machine.id, reading_type, spec["seconds"], spec["step_seconds"])
     values, started_at, ended_at = _bucket_series(rows, spec["step_seconds"])
     if len(values) < 16:
@@ -147,6 +147,24 @@ def machine_forecast_windows(machine_id: int, reading_type: str = "temperature",
         result[window]["step_seconds"] = WINDOWS[window]["step_seconds"]
         result[window]["steps"] = WINDOWS[window]["steps"]
     return {"machine_id": machine_id, "reading_type": reading_type, "model": model, "windows": result}
+
+
+@router.get("/machines/{machine_id}/windows/run")
+def run_forecast_window(machine_id: int, window: str = "24h", reading_type: str = "temperature", model: str = "chronos-bolt-tiny", current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    if machine_id not in _visible_machine_ids(db, current):
+        raise HTTPException(404, "machine not found")
+    if window not in WINDOWS:
+        raise HTTPException(400, "window must be one of 24h, 48h, 7d, 30d")
+    if reading_type not in SUPPORTED_SIGNALS:
+        raise HTTPException(400, "unsupported signal")
+    if model not in SUPPORTED_MODELS:
+        raise HTTPException(400, "unsupported forecast model")
+    machine = db.query(models.Machine).filter_by(id=machine_id, archived=False).first()
+    try:
+        return _run_window(db, machine, reading_type, window, model, "manual", force=True)
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(502, str(exc)) from exc
 
 
 @router.get("/machines/{machine_id}/windows/compare")
