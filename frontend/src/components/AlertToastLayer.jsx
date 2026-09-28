@@ -42,6 +42,7 @@ export default function AlertToastLayer() {
     try { return localStorage.getItem(NOTIFICATION_PREF_KEY) === 'enabled' } catch { return false }
   })
   const seenRef = useRef(new Set())
+  const dismissedRef = useRef(new Set())
   const initializedRef = useRef(false)
   const timersRef = useRef(new Map())
 
@@ -56,6 +57,7 @@ export default function AlertToastLayer() {
 
   const dismiss = useCallback((id) => {
     const normalizedId = String(id)
+    dismissedRef.current.add(normalizedId)
     setToasts((current) => current.filter((toast) => String(toast.id) !== normalizedId))
     const timer = timersRef.current.get(normalizedId)
     if (timer) window.clearTimeout(timer)
@@ -64,6 +66,7 @@ export default function AlertToastLayer() {
 
   const pushToast = useCallback((alert) => {
     const id = String(alert.id)
+    if (dismissedRef.current.has(id)) return
     const toast = { ...alert, id, toastId: `${id}-${Date.now()}` }
     setToasts((current) => [toast, ...current.filter((item) => String(item.id) !== id)].slice(0, MAX_VISIBLE))
     const existingTimer = timersRef.current.get(id)
@@ -93,6 +96,9 @@ export default function AlertToastLayer() {
             pushToast(alert)
           }
         })
+        // If an alert is no longer active, forget its dismissed marker so a later
+        // genuinely new alert with the same database lifecycle can surface again.
+        dismissedRef.current = new Set([...dismissedRef.current].filter((id) => currentIds.has(id)))
         if (seenRef.current.size > 500) {
           seenRef.current = new Set([...seenRef.current].filter((id) => currentIds.has(id)))
         }
