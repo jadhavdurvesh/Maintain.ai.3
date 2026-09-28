@@ -55,16 +55,19 @@ export default function AlertToastLayer() {
   }, [])
 
   const dismiss = useCallback((id) => {
-    setToasts((current) => current.filter((toast) => toast.id !== id))
-    const timer = timersRef.current.get(id)
+    const normalizedId = String(id)
+    setToasts((current) => current.filter((toast) => String(toast.id) !== normalizedId))
+    const timer = timersRef.current.get(normalizedId)
     if (timer) window.clearTimeout(timer)
-    timersRef.current.delete(id)
+    timersRef.current.delete(normalizedId)
   }, [])
 
   const pushToast = useCallback((alert) => {
     const id = String(alert.id)
-    const toast = { ...alert, toastId: `${id}-${Date.now()}` }
-    setToasts((current) => [toast, ...current.filter((item) => item.id !== alert.id)].slice(0, MAX_VISIBLE))
+    const toast = { ...alert, id, toastId: `${id}-${Date.now()}` }
+    setToasts((current) => [toast, ...current.filter((item) => String(item.id) !== id)].slice(0, MAX_VISIBLE))
+    const existingTimer = timersRef.current.get(id)
+    if (existingTimer) window.clearTimeout(existingTimer)
     const timer = window.setTimeout(() => dismiss(id), TOAST_TTL_MS)
     timersRef.current.set(id, timer)
     notifyDesktop(alert)
@@ -127,11 +130,11 @@ export default function AlertToastLayer() {
                   <div className="alert-toast-heading"><span>{meta.label} alert</span><span className="alert-toast-time">{formatTime(toast.created_at)}</span></div>
                   <div className="alert-toast-message">{toast.message}</div>
                   <div className="alert-toast-actions">
-                    <button className="alert-toast-link" onClick={() => { window.location.hash = '#/alerts'; dismiss(String(toast.id)) }}>View alerts</button>
-                    <button className="alert-toast-dismiss" onClick={() => dismiss(String(toast.id))}>Dismiss</button>
+                    <button className="alert-toast-link" onClick={() => { window.location.hash = '#/alerts'; dismiss(toast.id) }}>View alerts</button>
+                    <button className="alert-toast-dismiss" onClick={() => dismiss(toast.id)}>Dismiss</button>
                   </div>
                 </div>
-                <button className="alert-toast-close" aria-label="Dismiss alert" onClick={() => dismiss(String(toast.id))}><X size={16} /></button>
+                <button className="alert-toast-close" aria-label="Dismiss alert" onClick={() => dismiss(toast.id)}><X size={16} /></button>
               </div>
             )
           })}
