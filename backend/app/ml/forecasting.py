@@ -157,7 +157,9 @@ def _run_forecast(db: Session, machine: models.Machine, reading_type: str, model
     fresh = _telemetry_is_fresh(latest.recorded_at)
     if not fresh and trigger != "manual":
         return {"available": False, "machine_id": machine.id, "reading_type": reading_type, "model": model, "horizon": horizon, "reason": f"Telemetry is stale (last reading {latest.recorded_at.isoformat()}); automatic inference is paused."}
-    minimum_samples = 32 if model == "timer" else MIN_SAMPLES
+    # Both configured production paths use the same 16-sample contract. Timer
+    # requests are served by Timer-Lite on the memory-constrained ML service.
+    minimum_samples = MIN_SAMPLES
     if len(rows) < minimum_samples:
         return {"available": False, "machine_id": machine.id, "reading_type": reading_type, "model": model, "horizon": horizon, "reason": f"At least {minimum_samples} {reading_type} samples are required for {model}; only {len(rows)} are available."}
     existing = _existing_input(db, machine.id, reading_type, model, horizon, latest.id)
