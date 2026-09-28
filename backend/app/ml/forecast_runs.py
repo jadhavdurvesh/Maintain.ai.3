@@ -70,5 +70,8 @@ def ensure_forecast_schema() -> None:
                 "UNIQUE (machine_id, reading_type, model, horizon, input_last_reading_id, forecast_window)"
             ))
     except Exception:
-        # Startup must remain compatible with local SQLite/demo databases; create_all handles new schemas.
+        # Startup remains compatible with local SQLite/demo databases.
         return
+
+
+ensure_forecast_schema()
