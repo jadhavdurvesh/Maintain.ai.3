@@ -54,11 +54,10 @@ def _service_url() -> str:
 
 
 def _call_ml_service(values: list[float], horizon: int, model: str) -> dict:
-    if model == "timer":
-        from .timer import forecast as timer_forecast
-        result = timer_forecast(values, horizon)
-        return {"available": True, "model": "Timer", "forecast": result, "horizon": horizon}
-    body = json.dumps({"model": "amazon/chronos-bolt-tiny", "values": values[-CONTEXT_SAMPLES:], "horizon": horizon}).encode("utf-8")
+    if model not in SUPPORTED_MODELS:
+        raise RuntimeError(f"Unsupported forecast model: {model}")
+    model_id = "amazon/chronos-bolt-tiny" if model == "chronos-bolt-tiny" else "timer"
+    body = json.dumps({"model": model_id, "values": values[-CONTEXT_SAMPLES:], "horizon": horizon}).encode("utf-8")
     headers = {"Content-Type": "application/json"}
     api_key = os.getenv("MAINTAIN_ML_API_KEY", "").strip()
     if api_key:
@@ -73,7 +72,7 @@ def _call_ml_service(values: list[float], horizon: int, model: str) -> dict:
     except URLError as exc:
         raise RuntimeError(f"ML service unavailable: {exc.reason}") from exc
     if not result.get("available"):
-        raise RuntimeError(result.get("reason") or "ML service did not return a forecast")
+        raise RuntimeError(result.get("reason") or f"{model} did not return a forecast")
     forecast = [float(value) for value in result.get("forecast", [])]
     if not forecast:
         raise RuntimeError("ML service returned an empty forecast")
