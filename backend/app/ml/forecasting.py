@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/predictions", tags=["predictions"])
 
 DEFAULT_MODEL = "chronos-bolt-tiny"
 DEFAULT_INTERVAL_SECONDS = 300
-MIN_SAMPLES = 32
+MIN_SAMPLES = 16
 CONTEXT_SAMPLES = 128
 SUPPORTED_MODELS = {"chronos-bolt-tiny", "timer"}
 SUPPORTED_SIGNALS = {"temperature", "vibration", "current", "load", "humidity"}
@@ -155,13 +155,11 @@ def _run_forecast(db: Session, machine: models.Machine, reading_type: str, model
         return {"available": False, "machine_id": machine.id, "reading_type": reading_type, "model": model, "horizon": horizon, "reason": "No telemetry available. Forecasting is paused until sensor telemetry exists."}
     latest = rows[0]
     fresh = _telemetry_is_fresh(latest.recorded_at)
-    # Automatic forecasting remains strictly telemetry-driven. A manual Model
-    # Lab run is an explicit replay of stored telemetry and may use the latest
-    # historical samples even when the live stream is currently stale.
     if not fresh and trigger != "manual":
         return {"available": False, "machine_id": machine.id, "reading_type": reading_type, "model": model, "horizon": horizon, "reason": f"Telemetry is stale (last reading {latest.recorded_at.isoformat()}); automatic inference is paused."}
-    if len(rows) < MIN_SAMPLES:
-        return {"available": False, "machine_id": machine.id, "reading_type": reading_type, "model": model, "horizon": horizon, "reason": f"At least {MIN_SAMPLES} {reading_type} samples are required; only {len(rows)} are available."}
+    minimum_samples = 32 if model == "timer" else MIN_SAMPLES
+    if len(rows) < minimum_samples:
+        return {"available": False, "machine_id": machine.id, "reading_type": reading_type, "model": model, "horizon": horizon, "reason": f"At least {minimum_samples} {reading_type} samples are required for {model}; only {len(rows)} are available."}
     existing = _existing_input(db, machine.id, reading_type, model, horizon, latest.id)
     if existing and existing.status in {"completed", "running"}:
         return serialize_run(existing, reused=True)
