@@ -13,15 +13,12 @@ from .bootstrap import ensure_bootstrap_organization
 from .database import Base, engine
 from .routers import auth
 from .deps import get_current_user, CurrentUser
+from .ml.forecast_runs import MLForecastRun  # noqa: F401 - register model with SQLAlchemy metadata
+from .ml import forecast_events  # noqa: F401 - register telemetry commit listeners
 
 
 def _initialize_database():
     try:
-        # Runtime state is defined in the runtime router, not models.py. Import it
-        # before the first metadata create so machine_runtime_states is created
-        # during backend startup instead of the first /api/machines request.
-        # The previous request-time-only initialization caused hosted Machines
-        # and Maintenance requests to return HTTP 500 when DDL was unavailable.
         from .routers.runtime import runtime_states
         Base.metadata.create_all(bind=engine)
         ensure_ai_conversation_schema()
@@ -38,7 +35,6 @@ def _initialize_database():
 
 
 def ensure_safety_policy_schema():
-    """Migrate safety policies from one-per-machine to one-per-signal."""
     try:
         inspector = inspect(engine)
         if not inspector.has_table("machine_safety_policies"):
@@ -59,10 +55,7 @@ def ensure_safety_policy_schema():
                         END IF;
                     END $body$;
                 """))
-                connection.execute(text(
-                    "CREATE INDEX IF NOT EXISTS ix_machine_safety_policies_machine_id "
-                    "ON machine_safety_policies (machine_id)"
-                ))
+                connection.execute(text("CREATE INDEX IF NOT EXISTS ix_machine_safety_policies_machine_id ON machine_safety_policies (machine_id)"))
     except Exception:
         pass
 
@@ -118,10 +111,7 @@ def ensure_maintenance_work_order_schema():
     with engine.begin() as connection:
         if "source_work_order_id" not in columns:
             connection.execute(text("ALTER TABLE maintenance_records ADD COLUMN source_work_order_id INTEGER"))
-        connection.execute(text(
-            "CREATE UNIQUE INDEX IF NOT EXISTS uq_maintenance_source_work_order "
-            "ON maintenance_records(source_work_order_id)"
-        ))
+        connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_maintenance_source_work_order ON maintenance_records(source_work_order_id)"))
     Base.metadata.create_all(bind=engine)
 
 
@@ -165,14 +155,7 @@ def ensure_legacy_application_access_schema():
     if not inspector.has_table("users") or not inspector.has_table("user_application_access"):
         return
     with engine.begin() as connection:
-        connection.execute(text(
-            "INSERT INTO user_application_access (user_id, application, enabled, created_at) "
-            "SELECT u.id, 'engineering', TRUE, CURRENT_TIMESTAMP "
-            "FROM users u "
-            "WHERE u.password_hash IS NOT NULL "
-            "AND NOT EXISTS (SELECT 1 FROM user_application_access a "
-            "WHERE a.user_id = u.id AND a.application = 'engineering')"
-        ))
+        connection.execute(text("INSERT INTO user_application_access (user_id, application, enabled, created_at) SELECT u.id, 'engineering', TRUE, CURRENT_TIMESTAMP FROM users u WHERE u.password_hash IS NOT NULL AND NOT EXISTS (SELECT 1 FROM user_application_access a WHERE a.user_id = u.id AND a.application = 'engineering')"))
 
 
 _initialize_database()
@@ -184,47 +167,16 @@ if os.getenv("SEED_DEMO_DATA", "").lower() == "true":
     except Exception:
         pass
 
-app = FastAPI(
-    title="MAINTAIN AI",
-    description="AI-powered predictive maintenance & intelligent maintenance management system",
-    version="0.1.0",
-)
+app = FastAPI(title="MAINTAIN AI", description="AI-powered predictive maintenance & intelligent maintenance management system", version="0.1.0")
 
-_configured_origins = [
-    o.strip()
-    for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",")
-    if o.strip()
-]
+_configured_origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",") if o.strip()]
 _simulator_origin = "https://maintain-ai-sensor-simulator.jadhavdurvesh65.workers.dev"
 _cors_origins = list(dict.fromkeys([*_configured_origins, _simulator_origin]))
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_cors_origins,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Device-Key", "X-Maintain-Application"],
-)
+app.add_middleware(CORSMiddleware, allow_origins=_cors_origins, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], allow_headers=["Authorization", "Content-Type", "X-Device-Key", "X-Maintain-Application"])
 
 app.include_router(auth.router)
 
-_ROUTER_NAMES = (
-    "device_commands",
-    "runtime",
-    "machines",
-    "maintenance",
-    "work_orders",
-    "alerts",
-    "faults",
-    "notifications",
-    "spare_parts",
-    "ai_assistant",
-    "reports",
-    "users",
-    "settings",
-    "audit_log",
-    "analytics",
-    "devices",
-)
-
+_ROUTER_NAMES = ("device_commands", "runtime", "machines", "maintenance", "work_orders", "alerts", "faults", "notifications", "spare_parts", "ai_assistant", "reports", "users", "settings", "audit_log", "analytics", "devices")
 _ROUTER_LOAD_ERRORS = {}
 
 for _router_name in _ROUTER_NAMES:
@@ -234,17 +186,18 @@ for _router_name in _ROUTER_NAMES:
     except Exception as _exc:
         _ROUTER_LOAD_ERRORS[_router_name] = f"{type(_exc).__name__}: {_exc}"
 
+try:
+    from .ml.forecasting import router as forecasting_router
+    app.include_router(forecasting_router)
+except Exception as _exc:
+    _ROUTER_LOAD_ERRORS["forecasting"] = f"{type(_exc).__name__}: {_exc}"
 
 @app.get("/")
 def root():
     return {"status": "ok", "service": "MAINTAIN AI backend"}
 
-
 @app.get("/api/system/router-status")
 def router_status(current: CurrentUser = Depends(get_current_user)):
     if current.role != models.UserRole.admin.value:
         raise HTTPException(status_code=403, detail="administrator access required")
-    return {
-        "loaded": [name for name in _ROUTER_NAMES if name not in _ROUTER_LOAD_ERRORS],
-        "failed": _ROUTER_LOAD_ERRORS,
-    }
+    return {"loaded": [name for name in _ROUTER_NAMES if name not in _ROUTER_LOAD_ERRORS], "failed": _ROUTER_LOAD_ERRORS}

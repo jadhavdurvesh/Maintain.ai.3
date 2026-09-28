@@ -25,7 +25,7 @@ import Reports from './pages/Reports.jsx'
 import SettingsPage from './pages/Settings.jsx'
 import History from './pages/History.jsx'
 import About from './pages/About.jsx'
-import ModelLab from './pages/ModelLab.jsx'
+import PredictionCenter from './pages/PredictionCenter.jsx'
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -131,7 +131,7 @@ export default function App() {
     <Route path="/alerts" element={<Alerts />} />
     <Route path="/spare-parts" element={<SpareParts />} />
     <Route path="/reports" element={<Reports />} />
-    <Route path="/model-lab" element={<ModelLab />} />
+    <Route path="/model-lab" element={<PredictionCenter />} />
     <Route path="/history" element={<History />} />
     <Route path="/settings" element={<SettingsPage />} />
     <Route path="/about" element={<About />} />
