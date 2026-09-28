@@ -12,7 +12,7 @@ from .. import models
 from ..database import SessionLocal, get_db
 from ..deps import CurrentUser, get_current_user
 from .forecast_runs import MLForecastRun
-from .forecasting import _call_ml_service, _interval_seconds, _model, serialize_run
+from .forecasting import _call_ml_service, _interval_seconds, _model, _telemetry_is_fresh, serialize_run
 
 router = APIRouter(prefix="", tags=["prediction-windows"])
 
@@ -66,7 +66,9 @@ def _run_window(db, machine, reading_type, window, model, trigger="automatic", f
     spec = WINDOWS[window]
     latest = _latest_telemetry(db, machine.id, reading_type)
     if latest is None:
-        return {"available": False, "window": window, "reason": "No telemetry available."}
+        return {"available": False, "window": window, "reason": "No telemetry available. Forecasting is paused until a fresh sensor reading arrives."}
+    if not _telemetry_is_fresh(latest.recorded_at):
+        return {"available": False, "window": window, "reason": f"Telemetry is stale (last reading {latest.recorded_at.isoformat()}); no ML inference was started."}
     previous = _latest_run(db, machine.id, reading_type, model, window)
     if previous and previous.status == "running" and not force:
         return {"available": False, "running": True, "window": window, "reason": "A forecast for this machine/window is already running.", "run": serialize_run(previous, reused=True)}
