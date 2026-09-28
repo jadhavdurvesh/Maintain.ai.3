@@ -192,6 +192,12 @@ try:
 except Exception as _exc:
     _ROUTER_LOAD_ERRORS["forecasting"] = f"{type(_exc).__name__}: {_exc}"
 
+try:
+    from .ml.forecast_status import router as forecast_status_router
+    app.include_router(forecast_status_router)
+except Exception as _exc:
+    _ROUTER_LOAD_ERRORS["forecast_status"] = f"{type(_exc).__name__}: {_exc}"
+
 @app.get("/")
 def root():
     return {"status": "ok", "service": "MAINTAIN AI backend"}
