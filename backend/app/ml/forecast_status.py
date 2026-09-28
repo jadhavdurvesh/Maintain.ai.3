@@ -9,7 +9,7 @@ from .. import models
 from ..database import get_db
 from ..deps import CurrentUser, get_current_user
 from .forecast_runs import MLForecastRun, serialize_run
-from .forecasting import _interval_seconds, _telemetry_is_fresh
+from .forecasting import _interval_seconds, _telemetry_is_fresh, MIN_SAMPLES
 
 router = APIRouter(prefix="/api/predictions", tags=["prediction-status"])
 
@@ -28,7 +28,8 @@ def machine_forecast_status(machine_id: int, reading_type: str = "temperature", 
     latest = db.query(models.SensorReading).filter_by(machine_id=machine_id, reading_type=reading_type).order_by(models.SensorReading.recorded_at.desc(), models.SensorReading.id.desc()).first()
     latest_run = db.query(MLForecastRun).filter_by(machine_id=machine_id, reading_type=reading_type, model=model, horizon=horizon).filter(MLForecastRun.status == "completed").order_by(MLForecastRun.created_at.desc()).first()
     fresh = bool(latest and _telemetry_is_fresh(latest.recorded_at))
-    return {"machine_id": machine_id, "reading_type": reading_type, "model": model, "horizon": horizon, "telemetry_active": fresh, "latest_telemetry_at": latest.recorded_at.isoformat() if latest else None, "latest_telemetry_id": latest.id if latest else None, "latest_value": float(latest.value) if latest else None, "sample_count": db.query(models.SensorReading.id).filter_by(machine_id=machine_id, reading_type=reading_type).count(), "interval_seconds": _interval_seconds(), "minimum_samples": 32, "latest_run": serialize_run(latest_run) if latest_run else None}
+    sample_count = db.query(models.SensorReading.id).filter_by(machine_id=machine_id, reading_type=reading_type).count()
+    return {"machine_id": machine_id, "reading_type": reading_type, "model": model, "horizon": horizon, "telemetry_active": fresh, "latest_telemetry_at": latest.recorded_at.isoformat() if latest else None, "latest_telemetry_id": latest.id if latest else None, "latest_value": float(latest.value) if latest else None, "sample_count": sample_count, "interval_seconds": _interval_seconds(), "minimum_samples": MIN_SAMPLES, "latest_run": serialize_run(latest_run) if latest_run else None}
 
 
 @router.get("/machines/{machine_id}/history")
