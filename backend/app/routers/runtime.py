@@ -87,7 +87,6 @@ def _row(db: Session, machine):
         db.commit()
         return db.execute(runtime_states.select().where(runtime_states.c.machine_id == machine.id)).mappings().first()
     except Exception:
-        # A runtime bookkeeping failure must never take down /api/machines.
         db.rollback()
         return _fallback_row(machine)
 
@@ -120,9 +119,6 @@ def _has_unacknowledged_shutdown(db: Session, machine_id: int) -> bool:
         ).order_by(models.MachineSafetyEvent.created_at.desc(), models.MachineSafetyEvent.id.desc()).first()
         return bool(event and not event.device_acknowledged)
     except Exception:
-        # If the optional safety-event history is unavailable, runtime state
-        # still needs to remain readable. Device safety endpoints remain the
-        # authoritative shutdown path.
         return False
 
 
@@ -150,7 +146,6 @@ def _apply_state(db: Session, machine, row, target_state: str, now=None):
         return db.execute(runtime_states.select().where(runtime_states.c.machine_id == machine.id)).mappings().first()
     except Exception:
         db.rollback()
-        # Keep the API usable even if runtime persistence is temporarily unavailable.
         return {
             "machine_id": machine.id,
             "state": target_state,
@@ -161,25 +156,60 @@ def _apply_state(db: Session, machine, row, target_state: str, now=None):
 
 
 def _infer_target_state(db: Session, machine_id: int):
-    current = _latest_reading(db, machine_id, "current")
-    load = _latest_reading(db, machine_id, "load")
-    vibration = _latest_reading(db, machine_id, "vibration")
-    signals = [r for r in (current, load, vibration) if r is not None]
+    """Infer runtime from the machine's actual telemetry vocabulary."""
+    active_types = {
+        "current", "load", "spindle_load", "motor_load", "pump_load",
+        "burner_load", "fan_speed", "speed", "line_speed", "conveyor_speed",
+        "spindle_rpm", "wheel_rpm", "rpm", "screw_rpm", "joint_1",
+        "hydraulic_pressure", "injection_pressure", "steam_pressure",
+        "vibration", "spindle_vibration", "chuck_vibration",
+    }
+
+    try:
+        readings = (
+            db.query(models.SensorReading)
+            .filter(models.SensorReading.machine_id == machine_id)
+            .order_by(models.SensorReading.recorded_at.desc(), models.SensorReading.id.desc())
+            .limit(64)
+            .all()
+        )
+    except Exception:
+        return None, None
+
+    latest_by_type = {}
+    for reading in readings:
+        if reading.reading_type not in latest_by_type:
+            latest_by_type[reading.reading_type] = reading
+
+    signals = [r for reading_type, r in latest_by_type.items() if reading_type in active_types]
     if not signals:
         return None, None
 
     timestamps = [_utc_naive(r.recorded_at) for r in signals if r.recorded_at]
     if not timestamps:
         return None, None
+
     latest_signal_time = max(timestamps)
     if datetime.utcnow() - latest_signal_time > _TELEMETRY_TIMEOUT:
         return "stopped", latest_signal_time
 
-    current_active = current is not None and float(current.value) > _ACTIVE_CURRENT_A
-    load_active = load is not None and float(load.value) > _ACTIVE_LOAD_PERCENT
-    vibration_active = vibration is not None and float(vibration.value) > _ACTIVE_VIBRATION_G
-    if current_active or load_active or vibration_active:
-        return "running", latest_signal_time
+    for reading in signals:
+        value = float(reading.value)
+        kind = reading.reading_type
+        if kind == "current" and value > _ACTIVE_CURRENT_A:
+            return "running", latest_signal_time
+        if kind in {
+            "load", "spindle_load", "motor_load", "pump_load", "burner_load",
+            "fan_speed", "speed", "line_speed", "conveyor_speed"
+        } and value > _ACTIVE_LOAD_PERCENT:
+            return "running", latest_signal_time
+        if kind in {"spindle_rpm", "wheel_rpm", "rpm", "screw_rpm", "joint_1"} and abs(value) > 1:
+            return "running", latest_signal_time
+        if kind in {"hydraulic_pressure", "injection_pressure", "steam_pressure"} and value > 1:
+            return "running", latest_signal_time
+        if kind in {"vibration", "spindle_vibration", "chuck_vibration"} and value > _ACTIVE_VIBRATION_G:
+            return "running", latest_signal_time
+
     return "idle", latest_signal_time
 
 

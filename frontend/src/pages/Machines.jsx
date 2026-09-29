@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api/client.js'
 import StatusBadge from '../components/StatusBadge.jsx'
@@ -13,9 +13,13 @@ const SPECIALIZED_CATEGORIES=Object.entries(SPECIALIZED_MACHINE_PROFILES).filter
 const OTHER_MACHINE_TYPES=[['robot','Robot'],...SPECIALIZED_CATEGORIES,['other_equipment','Other equipment']]
 function RuntimeBadge({state}){const labels={running:'Running',idle:'Idle',stopped:'Stopped',maintenance:'Maintenance',fault:'Fault'};return <span className={`runtime-badge runtime-${state||'stopped'}`}><span className="runtime-dot"/>{labels[state]||'Stopped'}</span>}
 export default function Machines(){const [machines,setMachines]=useState(null);const [runtime,setRuntime]=useState({});const [error,setError]=useState(null);const [showForm,setShowForm]=useState(false);const [form,setForm]=useState(EMPTY_FORM);const [specializedType,setSpecializedType]=useState('');const [robotType,setRobotType]=useState('');const navigate=useNavigate();const {authRequired,user}=useAuth();const canManageMachines=!authRequired||user?.role==='admin';usePageHeader('Machines & Assets',canManageMachines?<button className="btn" onClick={()=>setShowForm(s=>!s)}>{showForm?'Cancel':'+ Add Machine'}</button>:null)
- const refreshRuntime=useCallback(()=>api.get('/api/machines/runtime').then(items=>{const next={};(Array.isArray(items)?items:[]).forEach(i=>{next[i.machine_id]=i});setRuntime(next)}).catch(()=>{}),[])
- const load=useCallback(()=>{setError(null);return api.get('/api/machines').then(r=>{setMachines(Array.isArray(r)?r:[]);return refreshRuntime()}).catch(e=>{setMachines([]);setError(e.message||'Unable to load machines.')})},[refreshRuntime])
- useEffect(()=>{load()},[load]);useEffect(()=>{if(!machines)return;const t=window.setInterval(refreshRuntime,3000);return()=>window.clearInterval(t)},[machines,refreshRuntime])
+ const refreshRuntime=useCallback(()=>api.get('/api/machines/runtime?ts='+Date.now()).then(items=>{const next={};(Array.isArray(items)?items:[]).forEach(i=>{next[i.machine_id]=i});setRuntime(next)}).catch(()=>{}),[])
+ const refreshLiveData=useCallback(async()=>{try{const [machineRows]=await Promise.all([api.get('/api/machines?ts='+Date.now()),refreshRuntime()]);setMachines(Array.isArray(machineRows)?machineRows:[])}catch{}},[refreshRuntime])
+ const load=useCallback(()=>{setError(null);return api.get('/api/machines?ts='+Date.now()).then(r=>{setMachines(Array.isArray(r)?r:[]);return refreshRuntime()}).catch(e=>{setMachines([]);setError(e.message||'Unable to load machines.')})},[refreshRuntime])
+ const liveRefreshTimer=useRef(null)
+ useEffect(()=>{load()},[load])
+ useEffect(()=>{if(!machines)return;const t=window.setInterval(refreshRuntime,3000);return()=>window.clearInterval(t)},[machines,refreshRuntime])
+ useEffect(()=>{const handleTelemetry=event=>{const message=event?.detail;if(!message||message.type!=='telemetry')return;if(liveRefreshTimer.current)return;liveRefreshTimer.current=window.setTimeout(()=>{liveRefreshTimer.current=null;refreshLiveData()},350)};window.addEventListener('maintain-ai-telemetry',handleTelemetry);return()=>{window.removeEventListener('maintain-ai-telemetry',handleTelemetry);if(liveRefreshTimer.current)window.clearTimeout(liveRefreshTimer.current)}},[refreshLiveData])
  const submit=async e=>{e.preventDefault();try{let category=form.category;if(form.category==='other'){if(!specializedType){alert('Select a machine type.');return}if(specializedType==='robot'&&!robotType){alert('Select a robot architecture.');return}category=specializedType==='robot'?`robot_${robotType}`:specializedType==='other_equipment'?'other':specializedType}const payload={...form,category,operating_hours:Number(form.operating_hours),maintenance_interval_hours:Number(form.maintenance_interval_hours)};await api.post('/api/machines',payload);setForm(EMPTY_FORM);setSpecializedType('');setRobotType('');setShowForm(false);await load()}catch(err){alert(err.message)}}
  const selectCategory=e=>{const category=e.target.value;setForm({...form,category});if(category!=='other'){setSpecializedType('');setRobotType('')}else{setSpecializedType('');setRobotType('')}}
  if(!machines&&!error)return <Loading/>
