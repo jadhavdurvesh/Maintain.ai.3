@@ -28,6 +28,7 @@ def _initialize_database():
         ensure_maintenance_work_order_schema()
         ensure_lab_ml_schema()
         ensure_tenant_schema()
+        ensure_component_sensor_schema()
         ensure_legacy_application_access_schema()
         ensure_safety_policy_schema()
         ensure_bootstrap_organization()
@@ -121,6 +122,24 @@ def ensure_lab_ml_schema():
         Base.metadata.create_all(bind=engine)
     except Exception:
         pass
+
+
+def ensure_component_sensor_schema():
+    """Add component event ids to existing installations without rebuilding tables."""
+    try:
+        inspector = inspect(engine)
+        if not inspector.has_table("component_sensor_readings"):
+            return
+        columns = {column["name"] for column in inspector.get_columns("component_sensor_readings")}
+        with engine.begin() as connection:
+            if "external_id" not in columns:
+                connection.execute(text("ALTER TABLE component_sensor_readings ADD COLUMN external_id VARCHAR"))
+            connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_component_sensor_reading_event ON component_sensor_readings(sensor_id, external_id)"))
+    except Exception:
+        # Preserve startup compatibility if an older local/demo database has
+        # no component tables yet; Base.metadata.create_all will create them.
+        pass
+    Base.metadata.create_all(bind=engine)
 
 
 def ensure_tenant_schema():
