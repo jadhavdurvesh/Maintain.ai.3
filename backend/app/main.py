@@ -6,13 +6,13 @@ from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text
 from . import models
-from . import sensor_models  # register component sensor tables
+from . import sensor_models
 from .bootstrap import ensure_bootstrap_organization
 from .database import Base, engine
 from .routers import auth
 from .deps import get_current_user, CurrentUser
-from .ml.forecast_runs import MLForecastRun  # noqa: F401
-from .ml import forecast_events  # noqa: F401
+from .ml.forecast_runs import MLForecastRun
+from .ml import forecast_events
 
 def _initialize_database():
     try:
@@ -94,14 +94,13 @@ if os.getenv('SEED_DEMO_DATA','').lower()=='true':
     try:
         from .seed_data import seed; seed()
     except Exception: pass
-
 app=FastAPI(title='MAINTAIN AI',description='AI-powered predictive maintenance & intelligent maintenance management system',version='0.1.0')
 _configured_origins=[o.strip() for o in os.getenv('CORS_ORIGINS','http://localhost:5173,http://localhost:3000').split(',') if o.strip()]
 _simulator_origin='https://maintain-ai-sensor-simulator.jadhavdurvesh65.workers.dev'
 _cors_origins=list(dict.fromkeys([*_configured_origins,_simulator_origin]))
 app.add_middleware(CORSMiddleware,allow_origins=_cors_origins,allow_methods=['GET','POST','PUT','PATCH','DELETE','OPTIONS'],allow_headers=['Authorization','Content-Type','X-Device-Key','X-Maintain-Application'])
 app.include_router(auth.router)
-_ROUTER_NAMES=('device_commands','runtime','machines','maintenance','work_orders','alerts','faults','notifications','spare_parts','ai_assistant','reports','users','settings','audit_log','analytics','devices','component_sensors')
+_ROUTER_NAMES=('device_commands','runtime','machines','maintenance','work_orders','alerts','faults','notifications','spare_parts','ai_assistant','reports','users','settings','audit_log','analytics','devices','component_sensors','component_telemetry')
 _ROUTER_LOAD_ERRORS={}
 for _router_name in _ROUTER_NAMES:
     try:
