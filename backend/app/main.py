@@ -187,8 +187,13 @@ if os.getenv("SEED_DEMO_DATA", "").lower() == "true":
 app = FastAPI(title="MAINTAIN AI", description="AI-powered predictive maintenance & intelligent maintenance management system", version="0.1.0")
 
 _configured_origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",") if o.strip()]
-_simulator_origin = "https://maintain-ai-sensor-simulator.jadhavdurvesh65.workers.dev"
-_cors_origins = list(dict.fromkeys([*_configured_origins, _simulator_origin]))
+# Device telemetry is also sent by the standalone simulator. Keep both the
+# legacy Cloudflare simulator and the current Netlify deployment allowed.
+_simulator_origins = [
+    "https://maintain-ai-sensor-simulator.jadhavdurvesh65.workers.dev",
+    "https://specialized-machine-simulator-hub.netlify.app",
+]
+_cors_origins = list(dict.fromkeys([*_configured_origins, *_simulator_origins]))
 app.add_middleware(CORSMiddleware, allow_origins=_cors_origins, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], allow_headers=["Authorization", "Content-Type", "X-Device-Key", "X-Maintain-Application"])
 
 app.include_router(auth.router)
