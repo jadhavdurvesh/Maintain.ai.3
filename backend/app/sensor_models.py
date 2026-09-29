@@ -14,3 +14,15 @@ class ComponentSensor(Base):
     max_value = Column(Float, nullable=True)
     enabled = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+class ComponentSensorReading(Base):
+    __tablename__ = "component_sensor_readings"
+    __table_args__ = (Index("ix_component_sensor_readings_sensor_time", "sensor_id", "recorded_at", "id"),)
+    id = Column(Integer, primary_key=True, index=True)
+    sensor_id = Column(Integer, ForeignKey("component_sensors.id"), nullable=False, index=True)
+    component_id = Column(Integer, ForeignKey("components.id"), nullable=False, index=True)
+    reading_type = Column(String, nullable=False)
+    value = Column(Float, nullable=False)
+    unit = Column(String, nullable=True)
+    source = Column(String, default="manual")
+    recorded_at = Column(DateTime, default=datetime.utcnow, nullable=False)
