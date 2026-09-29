@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text
 
 from . import models
+from . import sensor_models  # register component sensor tables
 from .bootstrap import ensure_bootstrap_organization
 from .database import Base, engine
 from .routers import auth
@@ -27,6 +28,7 @@ def _initialize_database():
         ensure_maintenance_work_order_schema()
         ensure_lab_ml_schema()
         ensure_tenant_schema()
+        ensure_component_sensor_schema()
         ensure_legacy_application_access_schema()
         ensure_safety_policy_schema()
         ensure_bootstrap_organization()
@@ -122,6 +124,24 @@ def ensure_lab_ml_schema():
         pass
 
 
+def ensure_component_sensor_schema():
+    """Add component event ids to existing installations without rebuilding tables."""
+    try:
+        inspector = inspect(engine)
+        if not inspector.has_table("component_sensor_readings"):
+            return
+        columns = {column["name"] for column in inspector.get_columns("component_sensor_readings")}
+        with engine.begin() as connection:
+            if "external_id" not in columns:
+                connection.execute(text("ALTER TABLE component_sensor_readings ADD COLUMN external_id VARCHAR"))
+            connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_component_sensor_reading_event ON component_sensor_readings(sensor_id, external_id)"))
+    except Exception:
+        # Preserve startup compatibility if an older local/demo database has
+        # no component tables yet; Base.metadata.create_all will create them.
+        pass
+    Base.metadata.create_all(bind=engine)
+
+
 def ensure_tenant_schema():
     inspector = inspect(engine)
     additions = []
@@ -176,7 +196,7 @@ app.add_middleware(CORSMiddleware, allow_origins=_cors_origins, allow_methods=["
 
 app.include_router(auth.router)
 
-_ROUTER_NAMES = ("device_commands", "runtime", "machines", "maintenance", "work_orders", "alerts", "faults", "notifications", "spare_parts", "ai_assistant", "reports", "users", "settings", "audit_log", "analytics", "devices")
+_ROUTER_NAMES = ("device_commands", "runtime", "machines", "maintenance", "work_orders", "alerts", "faults", "notifications", "spare_parts", "ai_assistant", "reports", "users", "settings", "audit_log", "analytics", "devices", "component_sensors", "component_telemetry")
 _ROUTER_LOAD_ERRORS = {}
 
 for _router_name in _ROUTER_NAMES:

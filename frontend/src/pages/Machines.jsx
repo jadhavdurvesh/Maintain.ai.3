@@ -5,139 +5,19 @@ import StatusBadge from '../components/StatusBadge.jsx'
 import { Loading, ErrorState } from './Dashboard.jsx'
 import { usePageHeader } from '../PageHeaderContext.jsx'
 import { useAuth } from '../AuthContext.jsx'
+import { SPECIALIZED_MACHINE_PROFILES, ROBOT_TYPES } from '../config/specializedMachineProfiles.js'
 
-const EMPTY_FORM = {
-  machine_code: '', name: '', category: 'induction_motor', manufacturer: '',
-  model_number: '', location: '', department: '', operating_hours: 0,
-  criticality: 'medium', maintenance_interval_hours: 500,
-}
-
-function RuntimeBadge({ state }) {
-  const labels = { running: 'Running', idle: 'Idle', stopped: 'Stopped', maintenance: 'Maintenance', fault: 'Fault' }
-  return <span className={`runtime-badge runtime-${state || 'stopped'}`}><span className="runtime-dot" />{labels[state] || 'Stopped'}</span>
-}
-
-export default function Machines() {
-  const [machines, setMachines] = useState(null)
-  const [runtime, setRuntime] = useState({})
-  const [error, setError] = useState(null)
-  const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState(EMPTY_FORM)
-  const navigate = useNavigate()
-  const { authRequired, user } = useAuth()
-  const canManageMachines = !authRequired || user?.role === 'admin'
-
-  usePageHeader('Machines & Assets', canManageMachines ? (
-    <button className="btn" onClick={() => setShowForm((s) => !s)}>{showForm ? 'Cancel' : '+ Add Machine'}</button>
-  ) : null)
-
-  const refreshRuntime = useCallback(() => {
-    return api.get('/api/machines/runtime').then((items) => {
-      const next = {}
-      ;(Array.isArray(items) ? items : []).forEach((item) => { next[item.machine_id] = item })
-      setRuntime(next)
-    }).catch(() => {})
-  }, [])
-
-  const load = useCallback(() => {
-    setError(null)
-    return api.get('/api/machines')
-      .then((result) => {
-        setMachines(Array.isArray(result) ? result : [])
-        return refreshRuntime()
-      })
-      .catch((e) => { setMachines([]); setError(e.message || 'Unable to load machines.') })
-  }, [refreshRuntime])
-
-  useEffect(() => { load() }, [load])
-
-  // Runtime is automatic and telemetry-derived. Polling also reconciles a
-  // machine to Stopped when its current/load telemetry becomes stale.
-  useEffect(() => {
-    if (!machines) return undefined
-    const timer = window.setInterval(refreshRuntime, 3000)
-    return () => window.clearInterval(timer)
-  }, [machines, refreshRuntime])
-
-  const submit = async (e) => {
-    e.preventDefault()
-    try {
-      await api.post('/api/machines', {
-        ...form,
-        operating_hours: Number(form.operating_hours),
-        maintenance_interval_hours: Number(form.maintenance_interval_hours),
-      })
-      setForm(EMPTY_FORM)
-      setShowForm(false)
-      await load()
-    } catch (err) {
-      alert(err.message)
-    }
-  }
-
-  if (!machines && !error) return <Loading />
-
-  return (
-    <>
-      <style>{`
-        .runtime-badge{display:inline-flex;align-items:center;gap:7px;padding:4px 9px;border:1px solid rgba(148,163,184,.24);border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap}
-        .runtime-dot{width:7px;height:7px;border-radius:50%;background:#64748b}
-        .runtime-running .runtime-dot{background:#34d399;box-shadow:0 0 8px rgba(52,211,153,.7)}
-        .runtime-idle .runtime-dot{background:#fbbf24}
-        .runtime-maintenance .runtime-dot{background:#60a5fa}
-        .runtime-fault .runtime-dot{background:#f87171}
-        .runtime-hours{font-variant-numeric:tabular-nums;font-weight:700}
-        .runtime-note{font-size:11px;color:var(--text-faint);margin-top:3px}
-      `}</style>
-
-      {error && (
-        <div className="panel section-gap">
-          <div className="panel-body"><ErrorState message={error} /><button className="btn secondary" onClick={load} style={{ marginTop: 12 }}>Retry</button></div>
-        </div>
-      )}
-
-      {showForm && canManageMachines && (
-        <div className="panel section-gap">
-          <div className="panel-header"><span className="panel-title">New Machine</span></div>
-          <form className="panel-body" onSubmit={submit}>
-            <div className="grid-3">
-              <div className="field"><label>Machine code</label><input required value={form.machine_code} onChange={(e) => setForm({ ...form, machine_code: e.target.value })} placeholder="M-005" /></div>
-              <div className="field"><label>Name</label><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Induction Motor M-005" /></div>
-              <div className="field"><label>Category</label><select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}><option value="induction_motor">Induction motor</option><option value="pump">Pump</option><option value="conveyor">Conveyor</option><option value="compressor">Compressor</option><option value="other">Other</option></select></div>
-              <div className="field"><label>Manufacturer</label><input value={form.manufacturer} onChange={(e) => setForm({ ...form, manufacturer: e.target.value })} /></div>
-              <div className="field"><label>Location</label><input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} /></div>
-              <div className="field"><label>Department</label><input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} /></div>
-              <div className="field"><label>Initial operating hours</label><input type="number" min="0" step="0.01" value={form.operating_hours} onChange={(e) => setForm({ ...form, operating_hours: e.target.value })} /></div>
-              <div className="field"><label>Maintenance interval (hours)</label><input type="number" min="0" step="0.01" value={form.maintenance_interval_hours} onChange={(e) => setForm({ ...form, maintenance_interval_hours: e.target.value })} /></div>
-              <div className="field"><label>Criticality</label><select value={form.criticality} onChange={(e) => setForm({ ...form, criticality: e.target.value })}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></div>
-            </div>
-            <button className="btn" type="submit">Save Machine</button>
-          </form>
-        </div>
-      )}
-
-      <div className="panel">
-        <table>
-          <thead><tr><th>Code</th><th>Name</th><th>Location</th><th>Operating hours</th><th>Runtime</th><th>Health</th><th>Condition</th></tr></thead>
-          <tbody>
-            {machines?.map((m) => {
-              const live = runtime[m.id]
-              return (
-                <tr key={m.id} className="clickable" onClick={() => navigate(`/machines/${m.id}`)}>
-                  <td className="mono">{m.machine_code}</td>
-                  <td title={m.name}>{m.name}</td>
-                  <td>{m.location || '—'}</td>
-                  <td className="mono runtime-hours">{live ? Number(live.operating_hours).toFixed(2) : Number(m.operating_hours || 0).toFixed(2)} h</td>
-                  <td><RuntimeBadge state={live?.state || 'stopped'} /><div className="runtime-note">Automatic from telemetry</div></td>
-                  <td className="mono">{m.health_score}/100</td>
-                  <td><StatusBadge status={m.status} /></td>
-                </tr>
-              )
-            })}
-            {machines?.length === 0 && !error && <tr><td colSpan={7} className="empty-state">No machines are visible for this organization or technician assignment.</td></tr>}
-          </tbody>
-        </table>
-      </div>
-    </>
-  )
-}
+const EMPTY_FORM={machine_code:'',name:'',category:'induction_motor',manufacturer:'',model_number:'',location:'',department:'',operating_hours:0,criticality:'medium',maintenance_interval_hours:500}
+const LEGACY_CATEGORIES=[['induction_motor','Induction motor'],['pump','Pump'],['conveyor','Conveyor'],['compressor','Compressor'],['other','Other']]
+const SPECIALIZED_CATEGORIES=Object.entries(SPECIALIZED_MACHINE_PROFILES).filter(([key])=>key!=='robot'&&key!=='other').map(([value,p])=>[value,p.name])
+function RuntimeBadge({state}){const labels={running:'Running',idle:'Idle',stopped:'Stopped',maintenance:'Maintenance',fault:'Fault'};return <span className={`runtime-badge runtime-${state||'stopped'}`}><span className="runtime-dot"/>{labels[state]||'Stopped'}</span>}
+export default function Machines(){const [machines,setMachines]=useState(null);const [runtime,setRuntime]=useState({});const [error,setError]=useState(null);const [showForm,setShowForm]=useState(false);const [form,setForm]=useState(EMPTY_FORM);const [robotType,setRobotType]=useState('articulated');const navigate=useNavigate();const {authRequired,user}=useAuth();const canManageMachines=!authRequired||user?.role==='admin';usePageHeader('Machines & Assets',canManageMachines?<button className="btn" onClick={()=>setShowForm(s=>!s)}>{showForm?'Cancel':'+ Add Machine'}</button>:null)
+ const refreshRuntime=useCallback(()=>api.get('/api/machines/runtime').then(items=>{const next={};(Array.isArray(items)?items:[]).forEach(i=>{next[i.machine_id]=i});setRuntime(next)}).catch(()=>{}),[])
+ const load=useCallback(()=>{setError(null);return api.get('/api/machines').then(r=>{setMachines(Array.isArray(r)?r:[]);return refreshRuntime()}).catch(e=>{setMachines([]);setError(e.message||'Unable to load machines.')})},[refreshRuntime])
+ useEffect(()=>{load()},[load]);useEffect(()=>{if(!machines)return;const t=window.setInterval(refreshRuntime,3000);return()=>window.clearInterval(t)},[machines,refreshRuntime])
+ const submit=async e=>{e.preventDefault();try{const payload={...form,category:form.category==='robot'?`robot_${robotType}`:form.category,operating_hours:Number(form.operating_hours),maintenance_interval_hours:Number(form.maintenance_interval_hours)};await api.post('/api/machines',payload);setForm(EMPTY_FORM);setRobotType('articulated');setShowForm(false);await load()}catch(err){alert(err.message)}}
+ if(!machines&&!error)return <Loading/>
+ return <><style>{`.runtime-badge{display:inline-flex;align-items:center;gap:7px;padding:4px 9px;border:1px solid rgba(148,163,184,.24);border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap}.runtime-dot{width:7px;height:7px;border-radius:50%;background:#64748b}.runtime-running .runtime-dot{background:#34d399;box-shadow:0 0 8px rgba(52,211,153,.7)}.runtime-idle .runtime-dot{background:#fbbf24}.runtime-maintenance .runtime-dot{background:#60a5fa}.runtime-fault .runtime-dot{background:#f87171}.runtime-hours{font-variant-numeric:tabular-nums;font-weight:700}.runtime-note{font-size:11px;color:var(--text-faint);margin-top:3px}.specialized-box{grid-column:1/-1;border:1px solid var(--border);border-radius:10px;padding:12px;background:rgba(59,130,246,.05)}.specialized-box p{margin:0 0 10px;color:var(--text-faint);font-size:11px}`}</style>
+ {error&&<div className="panel section-gap"><div className="panel-body"><ErrorState message={error}/><button className="btn secondary" onClick={load} style={{marginTop:12}}>Retry</button></div></div>}
+ {showForm&&canManageMachines&&<div className="panel section-gap"><div className="panel-header"><span className="panel-title">New Machine</span><small>Existing categories remain unchanged; specialized machines use their own engineering profile.</small></div><form className="panel-body" onSubmit={submit}><div className="grid-3"><div className="field"><label>Machine code</label><input required value={form.machine_code} onChange={e=>setForm({...form,machine_code:e.target.value})} placeholder="M-005"/></div><div className="field"><label>Name</label><input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Robot Cell 05"/></div><div className="field"><label>Category</label><select value={form.category} onChange={e=>setForm({...form,category:e.target.value})}><optgroup label="Existing categories">{LEGACY_CATEGORIES.map(([v,l])=><option key={v} value={v}>{l}</option>)}</optgroup><optgroup label="Specialized categories"><option value="robot">Robot</option>{SPECIALIZED_CATEGORIES.map(([v,l])=><option key={v} value={v}>{l}</option>)}<option value="specialized_other">Other specialized machine</option></optgroup></select></div>{form.category==='robot'&&<div className="specialized-box"><p>Select the actual robot architecture before the machine is created. This becomes part of the machine identity and loads the matching component/sensor/safety model.</p><div className="field"><label>Robot architecture</label><select required value={robotType} onChange={e=>setRobotType(e.target.value)}>{ROBOT_TYPES.map(x=><option key={x.value} value={x.value}>{x.label}</option>)}</select></div></div>}{form.category==='specialized_other'&&<div className="specialized-box"><p>Use this for equipment not covered by the built-in specialized profiles. Its engineering components and sensors can be defined manually after creation.</p></div>}<div className="field"><label>Manufacturer</label><input value={form.manufacturer} onChange={e=>setForm({...form,manufacturer:e.target.value})}/></div><div className="field"><label>Model number</label><input value={form.model_number} onChange={e=>setForm({...form,model_number:e.target.value})}/></div><div className="field"><label>Location</label><input value={form.location} onChange={e=>setForm({...form,location:e.target.value})}/></div><div className="field"><label>Department</label><input value={form.department} onChange={e=>setForm({...form,department:e.target.value})}/></div><div className="field"><label>Initial operating hours</label><input type="number" min="0" step="0.01" value={form.operating_hours} onChange={e=>setForm({...form,operating_hours:e.target.value})}/></div><div className="field"><label>Maintenance interval (hours)</label><input type="number" min="0" step="0.01" value={form.maintenance_interval_hours} onChange={e=>setForm({...form,maintenance_interval_hours:e.target.value})}/></div><div className="field"><label>Criticality</label><select value={form.criticality} onChange={e=>setForm({...form,criticality:e.target.value})}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></div></div><button className="btn" type="submit">Create Machine</button></form></div>}
+ <div className="panel"><table><thead><tr><th>Code</th><th>Name</th><th>Location</th><th>Operating hours</th><th>Runtime</th><th>Health</th><th>Condition</th></tr></thead><tbody>{machines?.map(m=>{const live=runtime[m.id];return <tr key={m.id} className="clickable" onClick={()=>navigate(`/machines/${m.id}`)}><td className="mono">{m.machine_code}</td><td title={m.name}>{m.name}</td><td>{m.location||'—'}</td><td className="mono runtime-hours">{live?Number(live.operating_hours).toFixed(2):Number(m.operating_hours||0).toFixed(2)} h</td><td><RuntimeBadge state={live?.state||'stopped'}/><div className="runtime-note">Automatic from telemetry</div></td><td className="mono">{m.health_score}/100</td><td><StatusBadge status={m.status}/></td></tr>})}{machines?.length===0&&!error&&<tr><td colSpan={7} className="empty-state">No machines are visible for this organization or technician assignment.</td></tr>}</tbody></table></div></>}

@@ -7,7 +7,7 @@ import { LayoutDashboard, Factory, Wrench, ClipboardList, Bot, AlertTriangle, Pa
 import { PageHeaderProvider, useCurrentHeader } from './PageHeaderContext.jsx'
 import ThemeToggle, { useTheme, useReducedEffects } from './ThemeToggle.jsx'
 import { useAuth } from './AuthContext.jsx'
-import MachineDetailEnhancementsRoute from './components/MachineDetailEnhancementsRoute.jsx'
+import MachineDetailRouter from './components/MachineDetailRouter.jsx'
 import AlertToastLayer from './components/AlertToastLayer.jsx'
 import './components/alert-toast.css'
 import './layout-fix.css'
@@ -15,7 +15,6 @@ import './layout-fix.css'
 import Login from './pages/Login.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import Machines from './pages/Machines.jsx'
-import MachineDetail from './pages/MachineDetail.jsx'
 import Maintenance from './pages/Maintenance.jsx'
 import WorkOrders from './pages/WorkOrders.jsx'
 import Faults from './pages/Faults.jsx'
@@ -81,6 +80,7 @@ function TelemetryFallback() {
           if (seen.get(key) === row.reading_id) continue
           seen.set(key, row.reading_id)
           window.dispatchEvent(new CustomEvent('maintain:telemetry', { detail: row }))
+          window.dispatchEvent(new CustomEvent('maintain-ai-telemetry', { detail: { ...row, type: 'telemetry' } }))
         }
         window.dispatchEvent(new CustomEvent('maintain:telemetry-status', { detail: { active: fresh } }))
       } catch {}
@@ -100,7 +100,7 @@ function App() {
   useReducedEffects()
   if (loading) return <div className="app-loading">Loading…</div>
   if (!user) return <Login />
-  return <PageHeaderProvider><TelemetryFallback /><div className="app-shell"><Sidebar /><main className="main-content"><Topbar theme={theme} setTheme={setTheme} /><div className="page-content"><Routes><Route path="/" element={<Dashboard />} /><Route path="/machines" element={<Machines />} /><Route path="/machines/:id" element={<MachineDetail />} /><Route path="/maintenance" element={<Maintenance />} /><Route path="/work-orders" element={<WorkOrders />} /><Route path="/faults" element={<Faults />} /><Route path="/ai-assistant" element={<AIAssistant />} /><Route path="/alerts" element={<Alerts />} /><Route path="/spare-parts" element={<SpareParts />} /><Route path="/reports" element={<Reports />} /><Route path="/model-lab" element={<ModelLabConsole />} /><Route path="/model-lab/compare" element={<ModelComparison />} /><Route path="/history" element={<History />} /><Route path="/settings" element={<SettingsPage />} /><Route path="/about" element={<About />} /></Routes></div></main></div></PageHeaderProvider>
+  return <PageHeaderProvider><TelemetryFallback /><div className="app-shell"><Sidebar /><main className="main-content"><Topbar theme={theme} setTheme={setTheme} /><div className="page-content"><Routes><Route path="/" element={<Dashboard />} /><Route path="/machines" element={<Machines />} /><Route path="/machines/:id" element={<MachineDetailRouter />} /><Route path="/maintenance" element={<Maintenance />} /><Route path="/work-orders" element={<WorkOrders />} /><Route path="/faults" element={<Faults />} /><Route path="/ai-assistant" element={<AIAssistant />} /><Route path="/alerts" element={<Alerts />} /><Route path="/spare-parts" element={<SpareParts />} /><Route path="/reports" element={<Reports />} /><Route path="/model-lab" element={<ModelLabConsole />} /><Route path="/model-lab/compare" element={<ModelComparison />} /><Route path="/history" element={<History />} /><Route path="/settings" element={<SettingsPage />} /><Route path="/about" element={<About />} /></Routes></div></main></div></PageHeaderProvider>
 }
 
 export default App
