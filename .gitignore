@@ -1,0 +1,11 @@
+# Local environments and generated artifacts
+backend/.venv/
+backend/build/
+frontend/node_modules/
+frontend/dist/
+*.pyc
+__pycache__/
+.pytest_cache/
+.env
+.env.*
+!.env.example
