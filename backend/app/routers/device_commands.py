@@ -47,6 +47,8 @@ def _threshold_trip_for_latest_reading(db: Session, machine: models.Machine):
     different instances, so the database must be the source of truth for the
     safety interlock.
     """
+    # Look at the newest reading of each signal.  A short window prevents an
+    # offline device from being shut down later because of an old reading.
     cutoff = datetime.utcnow() - timedelta(seconds=30)
     readings = (
         db.query(models.SensorReading)
@@ -96,6 +98,9 @@ def _threshold_trip_for_latest_reading(db: Session, machine: models.Machine):
             f"({value:g}{reading.unit or policy.unit or ''}; limit {threshold:g}{reading.unit or policy.unit or ''})."
         )
 
+        # Do not create a second command while the same signal's shutdown is
+        # already pending.  Also debounce an already-acknowledged trip for five
+        # minutes so a persistent high reading does not continuously retrip.
         pending = (
             db.query(models.MachineSafetyEvent)
             .filter(
@@ -194,6 +199,11 @@ def latest_telemetry(current: CurrentUser = Depends(get_current_user), db: Sessi
 @router.get("/commands")
 def pending_device_command(x_device_key: str = Header(..., alias="X-Device-Key"), db: Session = Depends(get_db)):
     machine = _machine_for_key(db, x_device_key)
+
+    # This is the critical serverless-safe safety path.  Even when the telemetry
+    # ingest ran on another instance and could not see the process-local device
+    # WebSocket, the next HTTPS poll evaluates the persisted latest reading and
+    # creates/returns the shutdown command from Neon.
     event = _threshold_trip_for_latest_reading(db, machine)
 
     if not event:

@@ -12,39 +12,6 @@ const EMPTY_FORM = {
   criticality: 'medium', maintenance_interval_hours: 500,
 }
 
-const MAIN_CATEGORIES = [
-  { value: 'induction_motor', label: 'Induction motor' },
-  { value: 'pump', label: 'Pump' },
-  { value: 'conveyor', label: 'Conveyor' },
-  { value: 'compressor', label: 'Compressor' },
-]
-
-const MORE_CATEGORIES = [
-  { value: 'cnc', label: 'CNC machine' },
-  { value: 'robot', label: 'Robot' },
-  { value: 'lathe', label: 'Lathe' },
-  { value: 'milling_machine', label: 'Milling machine' },
-  { value: 'drill_press', label: 'Drill press' },
-  { value: 'grinding_machine', label: 'Grinding machine' },
-  { value: 'hydraulic_press', label: 'Hydraulic press' },
-  { value: 'injection_molding', label: 'Injection molding machine' },
-  { value: 'packaging_machine', label: 'Packaging machine' },
-  { value: 'generator', label: 'Generator' },
-  { value: 'transformer', label: 'Transformer' },
-  { value: 'boiler', label: 'Boiler' },
-  { value: 'furnace', label: 'Furnace / oven' },
-  { value: 'hvac', label: 'HVAC unit' },
-  { value: 'fan_blower', label: 'Fan / blower' },
-  { value: 'gearbox', label: 'Gearbox' },
-  { value: 'turbine', label: 'Turbine' },
-  { value: 'crane_hoist', label: 'Crane / hoist' },
-  { value: 'agv_amr', label: 'AGV / AMR' },
-  { value: 'water_treatment', label: 'Water treatment system' },
-  { value: 'other', label: 'Other' },
-]
-
-const isMoreCategory = (value) => MORE_CATEGORIES.some((category) => category.value === value)
-
 function RuntimeBadge({ state }) {
   const labels = { running: 'Running', idle: 'Idle', stopped: 'Stopped', maintenance: 'Maintenance', fault: 'Fault' }
   return <span className={`runtime-badge runtime-${state || 'stopped'}`}><span className="runtime-dot" />{labels[state] || 'Stopped'}</span>
@@ -56,7 +23,6 @@ export default function Machines() {
   const [error, setError] = useState(null)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
-  const [showMoreCategories, setShowMoreCategories] = useState(false)
   const navigate = useNavigate()
   const { authRequired, user } = useAuth()
   const canManageMachines = !authRequired || user?.role === 'admin'
@@ -102,7 +68,6 @@ export default function Machines() {
         maintenance_interval_hours: Number(form.maintenance_interval_hours),
       })
       setForm(EMPTY_FORM)
-      setShowMoreCategories(false)
       setShowForm(false)
       await load()
     } catch (err) {
@@ -110,24 +75,7 @@ export default function Machines() {
     }
   }
 
-  const handleMainCategoryChange = (e) => {
-    const value = e.target.value
-    if (value === '__more__') {
-      setShowMoreCategories(true)
-      setForm({ ...form, category: '' })
-      return
-    }
-    setShowMoreCategories(false)
-    setForm({ ...form, category: value })
-  }
-
-  const handleMoreCategoryChange = (e) => {
-    setForm({ ...form, category: e.target.value })
-  }
-
   if (!machines && !error) return <Loading />
-
-  const mainCategoryValue = showMoreCategories ? '__more__' : form.category
 
   return (
     <>
@@ -140,7 +88,6 @@ export default function Machines() {
         .runtime-fault .runtime-dot{background:#f87171}
         .runtime-hours{font-variant-numeric:tabular-nums;font-weight:700}
         .runtime-note{font-size:11px;color:var(--text-faint);margin-top:3px}
-        .category-more{margin-top:10px}
       `}</style>
 
       {error && (
@@ -156,21 +103,7 @@ export default function Machines() {
             <div className="grid-3">
               <div className="field"><label>Machine code</label><input required value={form.machine_code} onChange={(e) => setForm({ ...form, machine_code: e.target.value })} placeholder="M-005" /></div>
               <div className="field"><label>Name</label><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Induction Motor M-005" /></div>
-              <div className="field">
-                <label>Category</label>
-                <select required value={mainCategoryValue} onChange={handleMainCategoryChange}>
-                  {MAIN_CATEGORIES.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}
-                  <option value="__more__">More categories...</option>
-                </select>
-                {showMoreCategories && (
-                  <div className="category-more">
-                    <select required value={isMoreCategory(form.category) ? form.category : ''} onChange={handleMoreCategoryChange}>
-                      <option value="" disabled>Select more machine category</option>
-                      {MORE_CATEGORIES.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}
-                    </select>
-                  </div>
-                )}
-              </div>
+              <div className="field"><label>Category</label><select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}><option value="induction_motor">Induction motor</option><option value="pump">Pump</option><option value="conveyor">Conveyor</option><option value="compressor">Compressor</option><option value="other">Other</option></select></div>
               <div className="field"><label>Manufacturer</label><input value={form.manufacturer} onChange={(e) => setForm({ ...form, manufacturer: e.target.value })} /></div>
               <div className="field"><label>Location</label><input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} /></div>
               <div className="field"><label>Department</label><input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} /></div>
