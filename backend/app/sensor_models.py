@@ -1,5 +1,6 @@
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Index
+from sqlalchemy.orm import relationship
 from .database import Base
 
 class ComponentSensor(Base):
@@ -14,6 +15,8 @@ class ComponentSensor(Base):
     max_value = Column(Float, nullable=True)
     enabled = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    component = relationship("Component", back_populates="sensors")
+    readings = relationship("ComponentSensorReading", back_populates="sensor", cascade="all, delete-orphan")
 
 class ComponentSensorReading(Base):
     __tablename__ = "component_sensor_readings"
@@ -26,3 +29,4 @@ class ComponentSensorReading(Base):
     unit = Column(String, nullable=True)
     source = Column(String, default="manual")
     recorded_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    sensor = relationship("ComponentSensor", back_populates="readings")
