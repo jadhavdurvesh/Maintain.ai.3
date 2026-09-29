@@ -65,6 +65,7 @@ function TelemetryFallback() {
   useEffect(() => {
     let stopped = false
     const seen = new Map()
+    let timer = null
     const poll = async () => {
       if (stopped) return
       try {
@@ -75,7 +76,7 @@ function TelemetryFallback() {
         for (const row of rows) {
           if (row?.machine_id == null || !row?.reading_type) continue
           const recorded = row.recorded_at ? Date.parse(row.recorded_at) : NaN
-          if (Number.isFinite(recorded) && now - recorded < 45000) fresh = true
+          if (Number.isFinite(recorded) && now - recorded < 5000) fresh = true
           const key = `${row.machine_id}:${row.reading_type}`
           if (seen.get(key) === row.reading_id) continue
           seen.set(key, row.reading_id)
@@ -84,10 +85,10 @@ function TelemetryFallback() {
         }
         window.dispatchEvent(new CustomEvent('maintain:telemetry-status', { detail: { active: fresh } }))
       } catch {}
-      if (!stopped) window.setTimeout(poll, 15000)
+      if (!stopped) timer = window.setTimeout(poll, 1000)
     }
     poll()
-    return () => { stopped = true }
+    return () => { stopped = true; if (timer) window.clearTimeout(timer) }
   }, [])
   return null
 }
