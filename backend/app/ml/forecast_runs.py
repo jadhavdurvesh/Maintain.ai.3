@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 
 from sqlalchemy import Column, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, inspect, text
@@ -49,6 +50,43 @@ class MLForecastRun(Base):
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+def serialize_run(run: MLForecastRun | None) -> dict | None:
+    """Return a JSON-safe representation shared by prediction status/history APIs."""
+    if run is None:
+        return None
+    forecast = None
+    if run.forecast_json:
+        try:
+            forecast = json.loads(run.forecast_json)
+        except (TypeError, ValueError):
+            forecast = None
+    return {
+        "id": run.id,
+        "organization_id": run.organization_id,
+        "machine_id": run.machine_id,
+        "reading_type": run.reading_type,
+        "model": run.model,
+        "horizon": run.horizon,
+        "forecast_window": run.forecast_window,
+        "step_seconds": run.step_seconds,
+        "input_first_reading_id": run.input_first_reading_id,
+        "input_last_reading_id": run.input_last_reading_id,
+        "input_started_at": run.input_started_at.isoformat() if run.input_started_at else None,
+        "input_ended_at": run.input_ended_at.isoformat() if run.input_ended_at else None,
+        "input_reading_count": run.input_reading_count,
+        "forecast": forecast,
+        "forecast_json": run.forecast_json,
+        "next_prediction": run.next_prediction,
+        "end_prediction": run.end_prediction,
+        "trend": run.trend,
+        "status": run.status,
+        "trigger": run.trigger,
+        "error_message": run.error_message,
+        "created_at": run.created_at.isoformat() if run.created_at else None,
+        "updated_at": run.updated_at.isoformat() if run.updated_at else None,
+    }
 
 
 def ensure_forecast_schema() -> None:
