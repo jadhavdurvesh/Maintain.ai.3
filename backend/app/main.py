@@ -9,13 +9,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text
 
 from . import models
-from . import sensor_models  # register component sensor tables
+from . import sensor_models
 from .bootstrap import ensure_bootstrap_organization
 from .database import Base, engine
 from .routers import auth
 from .deps import get_current_user, CurrentUser
-from .ml.forecast_runs import MLForecastRun  # noqa: F401 - register model with SQLAlchemy metadata
-from .ml import forecast_events  # noqa: F401 - register telemetry commit listeners
+from .ml.forecast_runs import MLForecastRun
+from .ml import forecast_events
 
 
 def _initialize_database():
@@ -125,7 +125,6 @@ def ensure_lab_ml_schema():
 
 
 def ensure_component_sensor_schema():
-    """Add component event ids to existing installations without rebuilding tables."""
     try:
         inspector = inspect(engine)
         if not inspector.has_table("component_sensor_readings"):
@@ -136,8 +135,6 @@ def ensure_component_sensor_schema():
                 connection.execute(text("ALTER TABLE component_sensor_readings ADD COLUMN external_id VARCHAR"))
             connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_component_sensor_reading_event ON component_sensor_readings(sensor_id, external_id)"))
     except Exception:
-        # Preserve startup compatibility if an older local/demo database has
-        # no component tables yet; Base.metadata.create_all will create them.
         pass
     Base.metadata.create_all(bind=engine)
 
@@ -190,8 +187,8 @@ if os.getenv("SEED_DEMO_DATA", "").lower() == "true":
 app = FastAPI(title="MAINTAIN AI", description="AI-powered predictive maintenance & intelligent maintenance management system", version="0.1.0")
 
 _configured_origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",") if o.strip()]
-_simulator_origins = [o.strip() for o in os.getenv("SIMULATOR_CORS_ORIGINS", "https://maintain-ai-sensor-simulator.jadhavdurvesh65.workers.dev,https://specialized-machine-simulator-hub.netlify.app").split(",") if o.strip()]
-_cors_origins = list(dict.fromkeys([*_configured_origins, *_simulator_origins]))
+_simulator_origin = "https://maintain-ai-sensor-simulator.jadhavdurvesh65.workers.dev"
+_cors_origins = list(dict.fromkeys([*_configured_origins, _simulator_origin]))
 app.add_middleware(CORSMiddleware, allow_origins=_cors_origins, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], allow_headers=["Authorization", "Content-Type", "X-Device-Key", "X-Maintain-Application"])
 
 app.include_router(auth.router)
