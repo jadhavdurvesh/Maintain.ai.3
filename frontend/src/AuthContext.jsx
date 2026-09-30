@@ -18,6 +18,14 @@ export function AuthProvider({ children }) {
   })
   const bootRequestRef = useRef(0)
 
+  const applyUser = (nextUser) => {
+    if (!nextUser) return null
+    setUser(nextUser)
+    setAuthError(null)
+    setRealtimeOrganizationId(nextUser?.organization_id ?? null)
+    return nextUser
+  }
+
   const syncSupabase = async (metadata = {}) => {
     if (!supabaseAuth.enabled) return null
     const synced = await api.post('/api/auth/supabase/sync', {
@@ -29,15 +37,15 @@ export function AuthProvider({ children }) {
       setOauthProfile(synced)
       return synced
     }
+    // /supabase/sync already returns the complete Maintain.ai identity. Do not
+    // immediately call /auth/me again: on a hard reload that used to create a
+    // serial status -> session -> sync -> me chain and made route restoration
+    // look frozen. Applying this response removes one full network round trip.
+    applyUser(synced)
     return synced
   }
 
-  const loadMe = () => api.get('/api/auth/me').then((nextUser) => {
-    setUser(nextUser)
-    setAuthError(null)
-    setRealtimeOrganizationId(nextUser?.organization_id ?? null)
-    return nextUser
-  }).catch((error) => {
+  const loadMe = () => api.get('/api/auth/me').then((nextUser) => applyUser(nextUser)).catch((error) => {
     setUser(null)
     setRealtimeOrganizationId(null)
     throw error
@@ -48,25 +56,37 @@ export function AuthProvider({ children }) {
     const bootId = ++bootRequestRef.current
     const boot = async () => {
       try {
-        const status = await api.get('/api/auth/status')
-        if (!mounted || bootRequestRef.current !== bootId) return
-        setAuthRequired(status.auth_required || supabaseAuth.enabled)
+        let status = null
+        let current = null
 
         if (supabaseAuth.enabled) {
-          const current = await supabaseAuth.getSession()
+          // Supabase is already known to be the active auth provider from the
+          // build configuration. There is no reason to block route restoration
+          // on a separate /auth/status request.
+          setAuthRequired(true)
+          current = await supabaseAuth.getSession()
+        } else {
+          status = await api.get('/api/auth/status')
           if (!mounted || bootRequestRef.current !== bootId) return
+          setAuthRequired(Boolean(status.auth_required))
+        }
+
+        if (!mounted || bootRequestRef.current !== bootId) return
+
+        if (supabaseAuth.enabled) {
           if (current?.access_token) {
             setToken(current.access_token)
             const synced = await syncSupabase(current.user?.user_metadata || {})
             if (!mounted || bootRequestRef.current !== bootId) return
             if (!synced?.needs_onboarding) {
-              await loadMe()
-              if (!mounted || bootRequestRef.current !== bootId) return
               localStorage.removeItem('maintain-ai-email-confirmation-pending')
               setEmailConfirmationPending(null)
             }
+          } else {
+            setUser(null)
+            setRealtimeOrganizationId(null)
           }
-        } else if (status.auth_required && getToken()) {
+        } else if (status?.auth_required && getToken()) {
           await loadMe()
         }
       } catch (error) {
@@ -88,7 +108,7 @@ export function AuthProvider({ children }) {
           setToken(next.access_token)
           window.dispatchEvent(new CustomEvent('maintain-ai-auth-context'))
           const synced = await syncSupabase(next.user?.user_metadata || {})
-          if (!synced?.needs_onboarding) await loadMe()
+          if (!synced?.needs_onboarding) setNeedsOnboarding(false)
         } else {
           clearApiCache()
           setToken(null)
@@ -114,7 +134,7 @@ export function AuthProvider({ children }) {
       const s = await supabaseAuth.signIn(email, password)
       setToken(s.access_token)
       const synced = await syncSupabase(s.user?.user_metadata || {})
-      if (!synced?.needs_onboarding) await loadMe()
+      if (!synced?.needs_onboarding) setNeedsOnboarding(false)
       return
     }
     const r = await api.post('/api/auth/login', { email, password })
@@ -134,7 +154,7 @@ export function AuthProvider({ children }) {
       }
       setToken(s.access_token)
       const synced = await syncSupabase({ organization_name, username, full_name })
-      if (!synced?.needs_onboarding) await loadMe()
+      if (!synced?.needs_onboarding) setNeedsOnboarding(false)
       return
     }
     const r = await api.post('/api/auth/register', { organization_name, username, email, password, full_name })
@@ -157,7 +177,7 @@ export function AuthProvider({ children }) {
       setOauthProfile(synced)
       return false
     }
-    await loadMe()
+    setNeedsOnboarding(false)
     localStorage.removeItem('maintain-ai-email-confirmation-pending')
     setEmailConfirmationPending(null)
     return true
@@ -175,7 +195,6 @@ export function AuthProvider({ children }) {
     setNeedsOnboarding(false)
     setOauthProfile(null)
     supabaseAuth.clearOAuthOnboardingPending()
-    await loadMe()
     return synced
   }
 
