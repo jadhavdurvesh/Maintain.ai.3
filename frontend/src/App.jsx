@@ -1,4 +1,4 @@
-import { Component, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Routes, Route, NavLink } from 'react-router-dom'
 import { useTelemetryStream } from './realtime.js'
 import api from './api/client.js'
@@ -11,6 +11,7 @@ import MachineDetailRouter from './components/MachineDetailRouter.jsx'
 import AlertToastLayer from './components/AlertToastLayer.jsx'
 import './components/alert-toast.css'
 import './layout-fix.css'
+import './auth-polish.css'
 
 import Login from './pages/Login.jsx'
 import Dashboard from './pages/Dashboard.jsx'
@@ -96,11 +97,10 @@ function TelemetryFallback() {
 function ErrorBoundary({ children }) { return children }
 
 function App() {
-  const { user, checking } = useAuth()
+  const { user } = useAuth()
   const [theme, setTheme] = useTheme()
   useReducedEffects()
 
-  if (checking) return <div className="app-loading" aria-busy="true" aria-label="Loading Maintain AI"><div className="app-loading-brand"><span>M</span></div></div>
   if (!user) return <Login />
 
   return <PageHeaderProvider><TelemetryFallback /><div className="app-shell"><Sidebar /><main className="main-content"><Topbar theme={theme} setTheme={setTheme} /><div className="page-content"><Routes><Route path="/" element={<Dashboard />} /><Route path="/machines" element={<Machines />} /><Route path="/machines/:id" element={<MachineDetailRouter />} /><Route path="/maintenance" element={<Maintenance />} /><Route path="/work-orders" element={<WorkOrders />} /><Route path="/faults" element={<Faults />} /><Route path="/ai-assistant" element={<AIAssistant />} /><Route path="/alerts" element={<Alerts />} /><Route path="/spare-parts" element={<SpareParts />} /><Route path="/reports" element={<Reports />} /><Route path="/model-lab" element={<ModelLabConsole />} /><Route path="/model-lab/compare" element={<ModelComparison />} /><Route path="/history" element={<History />} /><Route path="/settings" element={<SettingsPage />} /><Route path="/about" element={<About />} /></Routes></div></main></div></PageHeaderProvider>
