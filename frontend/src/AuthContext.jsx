@@ -18,6 +18,7 @@ export function AuthProvider({ children }) {
   })
   const bootRequestRef = useRef(0)
   const restoreInFlightRef = useRef(null)
+  const syncInFlightRef = useRef(null)
 
   const applyUser = (nextUser) => {
     if (!nextUser) return null
@@ -29,12 +30,12 @@ export function AuthProvider({ children }) {
 
   const syncSupabase = async (metadata = {}) => {
     if (!supabaseAuth.enabled) return null
-    if (restoreInFlightRef.current) return restoreInFlightRef.current
+    if (syncInFlightRef.current) return syncInFlightRef.current
     const request = api.post('/api/auth/supabase/sync', {
       ...metadata,
       registration_mode: supabaseAuth.isOAuthRegistrationPending(),
     })
-    restoreInFlightRef.current = request
+    syncInFlightRef.current = request
     try {
       const synced = await request
       if (synced?.needs_onboarding) {
@@ -45,7 +46,7 @@ export function AuthProvider({ children }) {
       applyUser(synced)
       return synced
     } finally {
-      restoreInFlightRef.current = null
+      syncInFlightRef.current = null
     }
   }
 
@@ -55,10 +56,8 @@ export function AuthProvider({ children }) {
     throw error
   })
 
-  // A normal signed-in user is already linked to Maintain.ai. Restore that
-  // identity directly from /auth/me. Only an unlinked/new identity needs the
-  // synchronization endpoint. This makes hard reloads read-only and avoids
-  // the 503 account-synchronization failure shown on the login screen.
+  // Existing identities are restored directly from /auth/me. Only an
+  // unlinked/new identity uses the synchronization endpoint.
   const restoreSupabaseUser = async (current) => {
     if (!current?.access_token) return null
     setToken(current.access_token)
@@ -71,9 +70,7 @@ export function AuthProvider({ children }) {
         setNeedsOnboarding(false)
         return restored
       } catch (error) {
-        // 401/403 means the identity is not linked/enabled yet. Fall back to
-        // the sync endpoint so first-time registration/onboarding still works.
-        if (error?.status === 401 || error?.status === 403 || error?.message?.startsWith('401 ') || error?.message?.startsWith('403 ')) {
+        if (error?.status === 401 || error?.status === 403) {
           return await syncSupabase(current.user?.user_metadata || {})
         }
         throw error
@@ -131,9 +128,6 @@ export function AuthProvider({ children }) {
     boot()
 
     const unsubscribe = supabaseAuth.enabled ? supabaseAuth.onAuthStateChange((next) => {
-      // getSession() can be followed by SIGNED_IN during the same page boot.
-      // Queue the handler so the initial restore can finish and reuse its
-      // in-flight request instead of issuing another sync/database write.
       Promise.resolve().then(async () => {
         try {
           if (next?.access_token) {
