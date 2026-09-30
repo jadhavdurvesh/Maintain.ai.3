@@ -8,7 +8,7 @@ const OAUTH_REGISTRATION_KEY = 'maintain-ai-oauth-registration'
 const enabled = Boolean(SUPABASE_URL && SUPABASE_KEY)
 let session = null
 let refreshTimer = null
-const listeners = new Set()
+let listeners = new Set()
 
 try { session = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null') } catch {}
 
@@ -26,9 +26,13 @@ const request = async (path, options = {}) => {
     const raw = body.error_description || body.msg || body.message || body.error || 'Supabase Auth request failed'
     const normalized = String(raw).toLowerCase()
     if (res.status === 429 || normalized.includes('rate limit') || normalized.includes('rate_limit')) {
-      throw new Error('Supabase email sending is temporarily rate-limited. The built-in email service allows only a small number of emails per hour. Wait before trying another registration, or configure custom SMTP for the project.')
+      const error = new Error('Supabase email sending is temporarily rate-limited. The built-in email service allows only a small number of emails per hour. Wait before trying another registration, or configure custom SMTP for the project.')
+      error.status = res.status
+      throw error
     }
-    throw new Error(String(raw))
+    const error = new Error(String(raw))
+    error.status = res.status
+    throw error
   }
   return body
 }
@@ -79,7 +83,15 @@ const scheduleRefresh = () => {
   const expiresAtMs = Number(session.expires_at) * 1000
   const delay = Math.max(10000, expiresAtMs - Date.now() - 60000)
   refreshTimer = setTimeout(async () => {
-    try { await supabaseAuth.refreshSession() } catch { save(null) }
+    try {
+      await supabaseAuth.refreshSession()
+    } catch (error) {
+      // Do not turn a temporary Supabase/network failure into a visible logout.
+      // A genuinely invalid refresh token will be cleared by refreshSession.
+      if (error?.status !== 400 && error?.status !== 401) {
+        scheduleRefresh()
+      }
+    }
   }, delay)
 }
 
@@ -255,10 +267,15 @@ export const supabaseAuth = {
 
   refreshSession: async () => {
     if (!session?.refresh_token) return null
-    return save(await hydrateUser(await request('/auth/v1/token?grant_type=refresh_token', {
-      method: 'POST',
-      body: JSON.stringify({ refresh_token: session.refresh_token }),
-    })))
+    try {
+      return save(await hydrateUser(await request('/auth/v1/token?grant_type=refresh_token', {
+        method: 'POST',
+        body: JSON.stringify({ refresh_token: session.refresh_token }),
+      })))
+    } catch (error) {
+      if (error?.status === 400 || error?.status === 401) save(null)
+      throw error
+    }
   },
 
   signOut: async () => {
