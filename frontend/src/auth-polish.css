@@ -1,4 +1,5 @@
 /* Production auth presentation: no implementation/status badge or temporary loader chrome. */
 .auth-brand-mark { display: none !important; }
 .auth-brand { gap: 0 !important; }
+.auth-status { display: none !important; }
 .app-loading { display: none !important; }
