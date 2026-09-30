@@ -5,6 +5,18 @@ import { supabaseAuth } from './supabaseAuth.js'
 import { setRealtimeOrganizationId } from './realtime.js'
 
 const AuthContext = createContext(null)
+const CACHED_USER_KEY = 'maintain-ai-cached-user'
+
+const readCachedUser = () => {
+  try {
+    const cached = JSON.parse(localStorage.getItem(CACHED_USER_KEY) || 'null')
+    return cached?.user_id && cached?.organization_id ? cached : null
+  } catch {
+    return null
+  }
+}
+
+const clearCachedUser = () => localStorage.removeItem(CACHED_USER_KEY)
 
 export function AuthProvider({ children }) {
   const [authRequired, setAuthRequired] = useState(null)
@@ -25,6 +37,7 @@ export function AuthProvider({ children }) {
     setUser(nextUser)
     setAuthError(null)
     setRealtimeOrganizationId(nextUser?.organization_id ?? null)
+    try { localStorage.setItem(CACHED_USER_KEY, JSON.stringify(nextUser)) } catch {}
     return nextUser
   }
 
@@ -57,7 +70,8 @@ export function AuthProvider({ children }) {
   })
 
   // Existing identities are restored directly from /auth/me. Only an
-  // unlinked/new identity uses the synchronization endpoint.
+  // unlinked/new identity uses the synchronization endpoint. A backend
+  // outage must not turn an otherwise valid browser session into a logout.
   const restoreSupabaseUser = async (current) => {
     if (!current?.access_token) return null
     setToken(current.access_token)
@@ -86,6 +100,7 @@ export function AuthProvider({ children }) {
     let mounted = true
     const bootId = ++bootRequestRef.current
     const boot = async () => {
+      const cachedUser = readCachedUser()
       try {
         let status = null
         let current = null
@@ -103,13 +118,37 @@ export function AuthProvider({ children }) {
 
         if (supabaseAuth.enabled) {
           if (current?.access_token) {
-            const restored = await restoreSupabaseUser(current)
-            if (!mounted || bootRequestRef.current !== bootId) return
-            if (!restored?.needs_onboarding) {
-              localStorage.removeItem('maintain-ai-email-confirmation-pending')
-              setEmailConfirmationPending(null)
+            // Render the last known authenticated workspace immediately. The
+            // server validation continues in the background, so a hard reload
+            // no longer flashes a login/loading screen on every protected route.
+            if (cachedUser) {
+              applyUser(cachedUser)
+              setNeedsOnboarding(false)
+              setChecking(false)
+            }
+
+            try {
+              const restored = await restoreSupabaseUser(current)
+              if (!mounted || bootRequestRef.current !== bootId) return
+              if (!restored?.needs_onboarding) {
+                localStorage.removeItem('maintain-ai-email-confirmation-pending')
+                setEmailConfirmationPending(null)
+              }
+            } catch (error) {
+              if (!mounted || bootRequestRef.current !== bootId) return
+              // Keep a cached session alive through temporary 5xx/network
+              // failures. A real auth rejection still forces a clean login.
+              if (error?.status === 401 || error?.status === 403) {
+                clearCachedUser()
+                setUser(null)
+                setRealtimeOrganizationId(null)
+                setAuthError(error?.message || 'Your session has expired. Please sign in again.')
+              } else if (!cachedUser) {
+                setAuthError(error?.message || 'Authentication could not be completed.')
+              }
             }
           } else {
+            clearCachedUser()
             setUser(null)
             setRealtimeOrganizationId(null)
           }
@@ -118,8 +157,15 @@ export function AuthProvider({ children }) {
         }
       } catch (error) {
         if (mounted && bootRequestRef.current === bootId) {
-          setAuthRequired(supabaseAuth.enabled)
-          setAuthError(error?.message || 'Authentication could not be completed.')
+          // If a previously authenticated workspace is available, keep the
+          // application usable while the backend recovers instead of showing
+          // an implementation detail or unexpectedly sending the user to login.
+          if (!cachedUser) {
+            setAuthRequired(supabaseAuth.enabled)
+            setAuthError(error?.message || 'Authentication could not be completed.')
+          } else {
+            applyUser(cachedUser)
+          }
         }
       } finally {
         if (mounted && bootRequestRef.current === bootId) setChecking(false)
@@ -138,18 +184,26 @@ export function AuthProvider({ children }) {
             window.dispatchEvent(new CustomEvent('maintain-ai-auth-context'))
           } else {
             clearApiCache()
+            clearCachedUser()
             setToken(null)
             setUser(null)
             setRealtimeOrganizationId(null)
             window.dispatchEvent(new CustomEvent('maintain-ai-auth-context'))
           }
         } catch (error) {
-          setAuthError(error?.message || 'Authentication could not be completed.')
+          if (error?.status === 401 || error?.status === 403) {
+            clearCachedUser()
+            setUser(null)
+            setRealtimeOrganizationId(null)
+          } else {
+            setAuthError(error?.message || 'Authentication could not be completed.')
+          }
         }
       })
     }) : null
 
     onUnauthorized(() => {
+      clearCachedUser()
       setUser(null)
       setAuthError('Your Maintain.ai session was rejected by the backend.')
     })
@@ -226,6 +280,7 @@ export function AuthProvider({ children }) {
   const logout = async () => {
     if (supabaseAuth.enabled) await supabaseAuth.signOut()
     clearApiCache()
+    clearCachedUser()
     setToken(null)
     setUser(null)
     setRealtimeOrganizationId(null)
