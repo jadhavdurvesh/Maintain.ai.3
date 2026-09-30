@@ -16,6 +16,7 @@ export function AuthProvider({ children }) {
   const [emailConfirmationPending, setEmailConfirmationPending] = useState(() => {
     try { return JSON.parse(localStorage.getItem('maintain-ai-email-confirmation-pending') || 'null') } catch { return null }
   })
+  const bootRequestRef = useRef(0)
 
   const syncSupabase = async (metadata = {}) => {
     if (!supabaseAuth.enabled) return null
@@ -28,8 +29,6 @@ export function AuthProvider({ children }) {
       setOauthProfile(synced)
       return synced
     }
-    // Do not refresh here. refreshSession() emits auth-state-change, which
-    // would call syncSupabase() again and create a callback/sync loop.
     return synced
   }
 
@@ -46,18 +45,23 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     let mounted = true
+    const bootId = ++bootRequestRef.current
     const boot = async () => {
       try {
         const status = await api.get('/api/auth/status')
-        if (!mounted) return
+        if (!mounted || bootRequestRef.current !== bootId) return
         setAuthRequired(status.auth_required || supabaseAuth.enabled)
+
         if (supabaseAuth.enabled) {
           const current = await supabaseAuth.getSession()
+          if (!mounted || bootRequestRef.current !== bootId) return
           if (current?.access_token) {
             setToken(current.access_token)
             const synced = await syncSupabase(current.user?.user_metadata || {})
+            if (!mounted || bootRequestRef.current !== bootId) return
             if (!synced?.needs_onboarding) {
               await loadMe()
+              if (!mounted || bootRequestRef.current !== bootId) return
               localStorage.removeItem('maintain-ai-email-confirmation-pending')
               setEmailConfirmationPending(null)
             }
@@ -66,12 +70,12 @@ export function AuthProvider({ children }) {
           await loadMe()
         }
       } catch (error) {
-        if (mounted) {
+        if (mounted && bootRequestRef.current === bootId) {
           setAuthRequired(supabaseAuth.enabled)
           setAuthError(error?.message || 'Authentication could not be completed.')
         }
       } finally {
-        if (mounted) setChecking(false)
+        if (mounted && bootRequestRef.current === bootId) setChecking(false)
       }
     }
     boot()
