@@ -37,10 +37,6 @@ export function AuthProvider({ children }) {
       setOauthProfile(synced)
       return synced
     }
-    // /supabase/sync already returns the complete Maintain.ai identity. Do not
-    // immediately call /auth/me again: on a hard reload that used to create a
-    // serial status -> session -> sync -> me chain and made route restoration
-    // look frozen. Applying this response removes one full network round trip.
     applyUser(synced)
     return synced
   }
@@ -51,6 +47,27 @@ export function AuthProvider({ children }) {
     throw error
   })
 
+  // Existing identities only need the authenticated /me check. New identities
+  // fall back to the Supabase sync/onboarding path. This removes one backend
+  // round trip from every normal hard reload.
+  const restoreSupabaseUser = async (current) => {
+    if (!current?.access_token) return null
+    setToken(current.access_token)
+    try {
+      const restored = await loadMe()
+      setNeedsOnboarding(false)
+      return restored
+    } catch {
+      const synced = await syncSupabase(current.user?.user_metadata || {})
+      if (!synced?.needs_onboarding) {
+        setNeedsOnboarding(false)
+        localStorage.removeItem('maintain-ai-email-confirmation-pending')
+        setEmailConfirmationPending(null)
+      }
+      return synced
+    }
+  }
+
   useEffect(() => {
     let mounted = true
     const bootId = ++bootRequestRef.current
@@ -60,9 +77,6 @@ export function AuthProvider({ children }) {
         let current = null
 
         if (supabaseAuth.enabled) {
-          // Supabase is already known to be the active auth provider from the
-          // build configuration. There is no reason to block route restoration
-          // on a separate /auth/status request.
           setAuthRequired(true)
           current = await supabaseAuth.getSession()
         } else {
@@ -75,13 +89,10 @@ export function AuthProvider({ children }) {
 
         if (supabaseAuth.enabled) {
           if (current?.access_token) {
-            setToken(current.access_token)
-            const synced = await syncSupabase(current.user?.user_metadata || {})
+            await restoreSupabaseUser(current)
             if (!mounted || bootRequestRef.current !== bootId) return
-            if (!synced?.needs_onboarding) {
-              localStorage.removeItem('maintain-ai-email-confirmation-pending')
-              setEmailConfirmationPending(null)
-            }
+            localStorage.removeItem('maintain-ai-email-confirmation-pending')
+            setEmailConfirmationPending(null)
           } else {
             setUser(null)
             setRealtimeOrganizationId(null)
@@ -105,10 +116,8 @@ export function AuthProvider({ children }) {
         if (next?.access_token) {
           setAuthError(null)
           clearApiCache()
-          setToken(next.access_token)
+          await restoreSupabaseUser(next)
           window.dispatchEvent(new CustomEvent('maintain-ai-auth-context'))
-          const synced = await syncSupabase(next.user?.user_metadata || {})
-          if (!synced?.needs_onboarding) setNeedsOnboarding(false)
         } else {
           clearApiCache()
           setToken(null)
@@ -132,9 +141,7 @@ export function AuthProvider({ children }) {
     setAuthError(null)
     if (supabaseAuth.enabled) {
       const s = await supabaseAuth.signIn(email, password)
-      setToken(s.access_token)
-      const synced = await syncSupabase(s.user?.user_metadata || {})
-      if (!synced?.needs_onboarding) setNeedsOnboarding(false)
+      await restoreSupabaseUser(s)
       return
     }
     const r = await api.post('/api/auth/login', { email, password })
