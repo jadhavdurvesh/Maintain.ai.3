@@ -17,6 +17,7 @@ export function AuthProvider({ children }) {
     try { return JSON.parse(localStorage.getItem('maintain-ai-email-confirmation-pending') || 'null') } catch { return null }
   })
   const bootRequestRef = useRef(0)
+  const restoreInFlightRef = useRef(null)
 
   const applyUser = (nextUser) => {
     if (!nextUser) return null
@@ -28,17 +29,24 @@ export function AuthProvider({ children }) {
 
   const syncSupabase = async (metadata = {}) => {
     if (!supabaseAuth.enabled) return null
-    const synced = await api.post('/api/auth/supabase/sync', {
+    if (restoreInFlightRef.current) return restoreInFlightRef.current
+    const request = api.post('/api/auth/supabase/sync', {
       ...metadata,
       registration_mode: supabaseAuth.isOAuthRegistrationPending(),
     })
-    if (synced?.needs_onboarding) {
-      setNeedsOnboarding(true)
-      setOauthProfile(synced)
+    restoreInFlightRef.current = request
+    try {
+      const synced = await request
+      if (synced?.needs_onboarding) {
+        setNeedsOnboarding(true)
+        setOauthProfile(synced)
+        return synced
+      }
+      applyUser(synced)
       return synced
+    } finally {
+      restoreInFlightRef.current = null
     }
-    applyUser(synced)
-    return synced
   }
 
   const loadMe = () => api.get('/api/auth/me').then((nextUser) => applyUser(nextUser)).catch((error) => {
@@ -47,24 +55,33 @@ export function AuthProvider({ children }) {
     throw error
   })
 
-  // Existing identities only need the authenticated /me check. New identities
-  // fall back to the Supabase sync/onboarding path. This removes one backend
-  // round trip from every normal hard reload.
+  // A normal signed-in user is already linked to Maintain.ai. Restore that
+  // identity directly from /auth/me. Only an unlinked/new identity needs the
+  // synchronization endpoint. This makes hard reloads read-only and avoids
+  // the 503 account-synchronization failure shown on the login screen.
   const restoreSupabaseUser = async (current) => {
     if (!current?.access_token) return null
     setToken(current.access_token)
-    try {
-      const restored = await loadMe()
-      setNeedsOnboarding(false)
-      return restored
-    } catch {
-      const synced = await syncSupabase(current.user?.user_metadata || {})
-      if (!synced?.needs_onboarding) {
+    if (restoreInFlightRef.current) return restoreInFlightRef.current
+
+    const request = (async () => {
+      try {
+        const restored = await api.get('/api/auth/me', { skipUnauthorized: true })
+        applyUser(restored)
         setNeedsOnboarding(false)
-        localStorage.removeItem('maintain-ai-email-confirmation-pending')
-        setEmailConfirmationPending(null)
+        return restored
+      } catch (error) {
+        // 401/403 means the identity is not linked/enabled yet. Fall back to
+        // the sync endpoint so first-time registration/onboarding still works.
+        if (error?.status === 401 || error?.status === 403 || error?.message?.startsWith('401 ') || error?.message?.startsWith('403 ')) {
+          return await syncSupabase(current.user?.user_metadata || {})
+        }
+        throw error
       }
-      return synced
+    })()
+    restoreInFlightRef.current = request
+    try { return await request } finally {
+      if (restoreInFlightRef.current === request) restoreInFlightRef.current = null
     }
   }
 
@@ -89,10 +106,12 @@ export function AuthProvider({ children }) {
 
         if (supabaseAuth.enabled) {
           if (current?.access_token) {
-            await restoreSupabaseUser(current)
+            const restored = await restoreSupabaseUser(current)
             if (!mounted || bootRequestRef.current !== bootId) return
-            localStorage.removeItem('maintain-ai-email-confirmation-pending')
-            setEmailConfirmationPending(null)
+            if (!restored?.needs_onboarding) {
+              localStorage.removeItem('maintain-ai-email-confirmation-pending')
+              setEmailConfirmationPending(null)
+            }
           } else {
             setUser(null)
             setRealtimeOrganizationId(null)
@@ -111,23 +130,29 @@ export function AuthProvider({ children }) {
     }
     boot()
 
-    const unsubscribe = supabaseAuth.enabled ? supabaseAuth.onAuthStateChange(async (next) => {
-      try {
-        if (next?.access_token) {
-          setAuthError(null)
-          clearApiCache()
-          await restoreSupabaseUser(next)
-          window.dispatchEvent(new CustomEvent('maintain-ai-auth-context'))
-        } else {
-          clearApiCache()
-          setToken(null)
-          setUser(null)
-          setRealtimeOrganizationId(null)
-          window.dispatchEvent(new CustomEvent('maintain-ai-auth-context'))
+    const unsubscribe = supabaseAuth.enabled ? supabaseAuth.onAuthStateChange((next) => {
+      // getSession() can be followed by SIGNED_IN during the same page boot.
+      // Queue the handler so the initial restore can finish and reuse its
+      // in-flight request instead of issuing another sync/database write.
+      Promise.resolve().then(async () => {
+        try {
+          if (next?.access_token) {
+            setAuthError(null)
+            clearApiCache()
+            const restored = await restoreSupabaseUser(next)
+            if (restored?.needs_onboarding) setNeedsOnboarding(true)
+            window.dispatchEvent(new CustomEvent('maintain-ai-auth-context'))
+          } else {
+            clearApiCache()
+            setToken(null)
+            setUser(null)
+            setRealtimeOrganizationId(null)
+            window.dispatchEvent(new CustomEvent('maintain-ai-auth-context'))
+          }
+        } catch (error) {
+          setAuthError(error?.message || 'Authentication could not be completed.')
         }
-      } catch (error) {
-        setAuthError(error?.message || 'Authentication could not be completed.')
-      }
+      })
     }) : null
 
     onUnauthorized(() => {
@@ -177,7 +202,6 @@ export function AuthProvider({ children }) {
   const checkEmailConfirmation = async () => {
     const current = await supabaseAuth.getSession()
     if (!current?.access_token) return false
-    setToken(current.access_token)
     const synced = await syncSupabase(current.user?.user_metadata || {})
     if (synced?.needs_onboarding) {
       setNeedsOnboarding(true)
