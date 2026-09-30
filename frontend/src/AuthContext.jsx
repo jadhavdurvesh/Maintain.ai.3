@@ -20,7 +20,7 @@ const clearCachedUser = () => localStorage.removeItem(CACHED_USER_KEY)
 
 export function AuthProvider({ children }) {
   const [authRequired, setAuthRequired] = useState(null)
-  const [user, setUser] = useState(null)
+  const [user, setUser] = useState(readCachedUser)
   const [checking, setChecking] = useState(true)
   const [needsOnboarding, setNeedsOnboarding] = useState(false)
   const [oauthProfile, setOauthProfile] = useState(null)
@@ -40,6 +40,11 @@ export function AuthProvider({ children }) {
     try { localStorage.setItem(CACHED_USER_KEY, JSON.stringify(nextUser)) } catch {}
     return nextUser
   }
+
+  useEffect(() => {
+    const cached = readCachedUser()
+    if (cached) setRealtimeOrganizationId(cached.organization_id)
+  }, [])
 
   const syncSupabase = async (metadata = {}) => {
     if (!supabaseAuth.enabled) return null
@@ -69,9 +74,6 @@ export function AuthProvider({ children }) {
     throw error
   })
 
-  // Existing identities are restored directly from /auth/me. Only an
-  // unlinked/new identity uses the synchronization endpoint. A backend
-  // outage must not turn an otherwise valid browser session into a logout.
   const restoreSupabaseUser = async (current) => {
     if (!current?.access_token) return null
     setToken(current.access_token)
@@ -118,13 +120,9 @@ export function AuthProvider({ children }) {
 
         if (supabaseAuth.enabled) {
           if (current?.access_token) {
-            // Render the last known authenticated workspace immediately. The
-            // server validation continues in the background, so a hard reload
-            // no longer flashes a login/loading screen on every protected route.
             if (cachedUser) {
               applyUser(cachedUser)
               setNeedsOnboarding(false)
-              setChecking(false)
             }
 
             try {
@@ -136,8 +134,6 @@ export function AuthProvider({ children }) {
               }
             } catch (error) {
               if (!mounted || bootRequestRef.current !== bootId) return
-              // Keep a cached session alive through temporary 5xx/network
-              // failures. A real auth rejection still forces a clean login.
               if (error?.status === 401 || error?.status === 403) {
                 clearCachedUser()
                 setUser(null)
@@ -157,9 +153,6 @@ export function AuthProvider({ children }) {
         }
       } catch (error) {
         if (mounted && bootRequestRef.current === bootId) {
-          // If a previously authenticated workspace is available, keep the
-          // application usable while the backend recovers instead of showing
-          // an implementation detail or unexpectedly sending the user to login.
           if (!cachedUser) {
             setAuthRequired(supabaseAuth.enabled)
             setAuthError(error?.message || 'Authentication could not be completed.')
