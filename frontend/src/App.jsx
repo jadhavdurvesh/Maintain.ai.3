@@ -96,17 +96,11 @@ function TelemetryFallback() {
 function ErrorBoundary({ children }) { return children }
 
 function App() {
-  // AuthContext calls this state `checking`. The previous code read a
-  // non-existent `loading` property, so the app rendered <Login /> before
-  // Supabase had a chance to restore the existing session on a hard reload.
-  // That made protected deep links such as #/machines/13 appear to "log out"
-  // and could cause the user to manually remove the route before the session
-  // recovered. Keep the current hash route intact while auth is bootstrapping.
   const { user, checking } = useAuth()
   const [theme, setTheme] = useTheme()
   useReducedEffects()
 
-  if (checking) return <div className="app-loading">Restoring secure session…</div>
+  if (checking) return <div className="app-loading" aria-busy="true" aria-label="Loading Maintain AI"><div className="app-loading-brand"><span>M</span></div></div>
   if (!user) return <Login />
 
   return <PageHeaderProvider><TelemetryFallback /><div className="app-shell"><Sidebar /><main className="main-content"><Topbar theme={theme} setTheme={setTheme} /><div className="page-content"><Routes><Route path="/" element={<Dashboard />} /><Route path="/machines" element={<Machines />} /><Route path="/machines/:id" element={<MachineDetailRouter />} /><Route path="/maintenance" element={<Maintenance />} /><Route path="/work-orders" element={<WorkOrders />} /><Route path="/faults" element={<Faults />} /><Route path="/ai-assistant" element={<AIAssistant />} /><Route path="/alerts" element={<Alerts />} /><Route path="/spare-parts" element={<SpareParts />} /><Route path="/reports" element={<Reports />} /><Route path="/model-lab" element={<ModelLabConsole />} /><Route path="/model-lab/compare" element={<ModelComparison />} /><Route path="/history" element={<History />} /><Route path="/settings" element={<SettingsPage />} /><Route path="/about" element={<About />} /></Routes></div></main></div></PageHeaderProvider>
