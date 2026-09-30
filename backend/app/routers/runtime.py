@@ -110,11 +110,11 @@ def _apply_state(db: Session, machine, row, target_state: str, now=None):
 
 
 def _infer_target_state(db: Session, machine_id: int):
-    """Infer runtime from the latest telemetry, including all supported robot profiles."""
+    """Infer runtime from the latest telemetry, including robot and 3D-printer profiles."""
     active_types = {
         "current", "load", "spindle_load", "motor_load", "pump_load", "burner_load",
-        "fan_speed", "speed", "line_speed", "conveyor_speed", "spindle_rpm", "wheel_rpm",
-        "rpm", "screw_rpm", "joint_1", "joint_1_position", "hydraulic_pressure",
+        "fan_speed", "speed", "line_speed", "conveyor_speed", "print_speed", "extrusion_rate",
+        "spindle_rpm", "wheel_rpm", "rpm", "screw_rpm", "joint_1", "joint_1_position", "hydraulic_pressure",
         "injection_pressure", "steam_pressure", "vibration", "spindle_vibration", "chuck_vibration",
         # Robot profile signals
         "base_angle", "radial_position", "vertical_position", "base_current", "radial_current",
@@ -125,6 +125,8 @@ def _infer_target_state(db: Session, machine_id: int):
         "arm_c_current", "end_effector_position", "shoulder_angle", "wrist_angle", "shoulder_current",
         "radial_current", "joint_2_position", "joint_3_position", "joint_4_position", "joint_5_position",
         "joint_6_position", "joint_torque", "external_force", "tcp_speed", "motor_current",
+        # 3D printer thermal/drive signals
+        "nozzle_temperature", "bed_temperature", "chamber_temperature", "hotend_current", "fan_speed",
     }
     try:
         readings = db.query(models.SensorReading).filter(models.SensorReading.machine_id == machine_id).order_by(models.SensorReading.recorded_at.desc(), models.SensorReading.id.desc()).limit(96).all()
@@ -146,9 +148,9 @@ def _infer_target_state(db: Session, machine_id: int):
     for reading in signals:
         value = float(reading.value)
         kind = reading.reading_type
-        if kind in {"current", "motor_current", "base_current", "radial_current", "vertical_current", "x_current", "y_current", "z_current", "servo_current", "j1_torque", "j2_torque", "j3_torque", "joint_torque", "arm_a_current", "arm_b_current", "arm_c_current", "external_force"} and abs(value) > _ACTIVE_CURRENT_A:
+        if kind in {"current", "motor_current", "hotend_current", "base_current", "radial_current", "vertical_current", "x_current", "y_current", "z_current", "servo_current", "j1_torque", "j2_torque", "j3_torque", "joint_torque", "arm_a_current", "arm_b_current", "arm_c_current", "external_force"} and abs(value) > _ACTIVE_CURRENT_A:
             return "running", latest_signal_time
-        if kind in {"load", "spindle_load", "motor_load", "pump_load", "burner_load", "fan_speed", "speed", "line_speed", "conveyor_speed", "utilization"} and abs(value) > _ACTIVE_LOAD_PERCENT:
+        if kind in {"load", "spindle_load", "motor_load", "pump_load", "burner_load", "fan_speed", "speed", "line_speed", "conveyor_speed", "print_speed", "extrusion_rate", "utilization"} and abs(value) > _ACTIVE_LOAD_PERCENT:
             return "running", latest_signal_time
         if kind in {"spindle_rpm", "wheel_rpm", "rpm", "screw_rpm", "joint_1", "joint_1_position", "j1_position", "j2_position", "j3_position", "j4_position", "j5_position", "j6_position", "j1_angle", "j2_angle", "x_velocity", "y_velocity", "z_velocity", "arm_a_position", "arm_b_position", "arm_c_position", "end_effector_position", "radial_position", "vertical_position", "base_angle", "shoulder_angle", "wrist_angle", "theta", "x_position", "y_position", "z_position"} and abs(value) > 1:
             return "running", latest_signal_time
