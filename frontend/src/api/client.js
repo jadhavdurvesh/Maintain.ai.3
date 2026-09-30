@@ -29,12 +29,8 @@ async function predictionCompatibility(path, base, headers, signal) {
   const latest = rows[rows.length - 1] || null
   const telemetryActive = !!latest && (Date.now() - new Date(latest.recorded_at).getTime()) <= 15 * 60 * 1000
 
-  if (action === 'status') {
-    return { machine_id:Number(machineId), reading_type:readingType, model, horizon, telemetry_active:telemetryActive, latest_telemetry_at:latest?.recorded_at || null, latest_telemetry_id:latest?.id || null, latest_value:latest?.value == null ? null : Number(latest.value), sample_count:rows.length, interval_seconds:300, minimum_samples:32, latest_run:null, compatibility:true }
-  }
-
+  if (action === 'status') return { machine_id:Number(machineId), reading_type:readingType, model, horizon, telemetry_active:telemetryActive, latest_telemetry_at:latest?.recorded_at || null, latest_telemetry_id:latest?.id || null, latest_value:latest?.value == null ? null : Number(latest.value), sample_count:rows.length, interval_seconds:300, minimum_samples:32, latest_run:null, compatibility:true }
   if (action === 'history') return { machine_id:Number(machineId), reading_type:readingType, model, horizon:params.get('horizon') ? horizon : null, forecast_window:params.get('forecast_window') || null, runs:[], count:0, generated_at:new Date().toISOString(), compatibility:true }
-
   if (action === 'windows') {
     const names = ['24h','48h','7d','30d']
     if (!path.includes('/run?')) return { machine_id:Number(machineId), reading_type:readingType, model, windows:Object.fromEntries(names.map(name => [name,{available:false,window:name,reason:'Waiting for the prediction API deployment.'}])), compatibility:true }
@@ -43,9 +39,7 @@ async function predictionCompatibility(path, base, headers, signal) {
   return null
 }
 
-function isExecutionRequest(path) {
-  return path.startsWith('/api/predictions/') && (path.includes('/forecast?') || path.includes('/windows/run?') || path.includes('/windows/compare?'))
-}
+function isExecutionRequest(path) { return path.startsWith('/api/predictions/') && (path.includes('/forecast?') || path.includes('/windows/run?') || path.includes('/windows/compare?')) }
 
 async function runRemoteChronosForecast(path, base, headers, signal) {
   const match = path.match(/^\/api\/analytics\/machines\/([^/]+)\/forecast\?(.*)$/)
@@ -76,8 +70,9 @@ async function request(path, options = {}) {
     const c = getCache.get(path); if (c && now - c.time < GET_CACHE_TTL_MS) return c.data
     const p = getInFlight.get(path); if (p) return p
   }
+  const { skipUnauthorized = false, ...fetchOptions } = options
   const token = getToken()
-  const headers = { 'Content-Type':'application/json', 'X-Maintain-Application':'engineering', ...(options.headers || {}) }
+  const headers = { 'Content-Type':'application/json', 'X-Maintain-Application':'engineering', ...(fetchOptions.headers || {}) }
   if (token) headers.Authorization = 'Bearer ' + token
   const controller = new AbortController()
   const timeoutMs = isRemoteForecast ? 75000 : 20000
@@ -87,8 +82,8 @@ async function request(path, options = {}) {
   if (isRemoteForecast) {
     fp = runRemoteChronosForecast(path, base, headers, controller.signal).catch(err => { if (err?.name === 'AbortError' || controller.signal.aborted) throw new Error(`Chronos inference timed out after ${timeoutMs / 1000}s`); throw err }).finally(() => window.clearTimeout(timeout))
   } else {
-    fp = fetch(base + path, { ...options, headers, signal:controller.signal }).catch(err => { if (err?.name === 'AbortError' || controller.signal.aborted) throw new Error(`Request timed out after 20s: ${method} ${path}`); throw err }).finally(() => window.clearTimeout(timeout)).then(async res => {
-      if (res.status === 401) { setToken(null); if (unauthorizedHandler) unauthorizedHandler() }
+    fp = fetch(base + path, { ...fetchOptions, headers, signal:controller.signal }).catch(err => { if (err?.name === 'AbortError' || controller.signal.aborted) throw new Error(`Request timed out after 20s: ${method} ${path}`); throw err }).finally(() => window.clearTimeout(timeout)).then(async res => {
+      if (res.status === 401 && !skipUnauthorized) { setToken(null); if (unauthorizedHandler) unauthorizedHandler() }
       if (isNotFoundResponse(res) && isGet && isPredictionPath(path)) {
         const compatibility = await predictionCompatibility(path, base, headers, controller.signal)
         if (compatibility) return compatibility
@@ -109,4 +104,12 @@ async function request(path, options = {}) {
   try { const data = await fp; if (cacheableGet) getCache.set(path, { time:Date.now(), data }); return data }
   finally { if (cacheableGet && getInFlight.get(path) === fp) getInFlight.delete(path) }
 }
-export const api = { get:p=>request(p), post:(p,b)=>request(p,{method:'POST',body:JSON.stringify(b)}), patch:(p,b)=>request(p,{method:'PATCH',body:JSON.stringify(b)}), put:(p,b)=>request(p,{method:'PUT',body:JSON.stringify(b)}), del:p=>request(p,{method:'DELETE'}) }; export default api
+
+export const api = {
+  get:(p, o = {}) => request(p, o),
+  post:(p,b,o = {}) => request(p,{...o, method:'POST',body:JSON.stringify(b)}),
+  patch:(p,b,o = {}) => request(p,{...o, method:'PATCH',body:JSON.stringify(b)}),
+  put:(p,b,o = {}) => request(p,{...o, method:'PUT',body:JSON.stringify(b)}),
+  del:(p,o = {}) => request(p,{...o, method:'DELETE'})
+}
+export default api
