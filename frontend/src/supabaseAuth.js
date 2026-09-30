@@ -8,33 +8,48 @@ const OAUTH_REGISTRATION_KEY = 'maintain-ai-oauth-registration'
 const enabled = Boolean(SUPABASE_URL && SUPABASE_KEY)
 let session = null
 let refreshTimer = null
-let listeners = new Set()
+const listeners = new Set()
 
 try { session = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null') } catch {}
 
 const request = async (path, options = {}) => {
-  const res = await fetch(SUPABASE_URL + path, {
-    ...options,
-    headers: {
-      apikey: SUPABASE_KEY,
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-  })
-  const body = await res.json().catch(() => ({}))
-  if (!res.ok) {
-    const raw = body.error_description || body.msg || body.message || body.error || 'Supabase Auth request failed'
-    const normalized = String(raw).toLowerCase()
-    if (res.status === 429 || normalized.includes('rate limit') || normalized.includes('rate_limit')) {
-      const error = new Error('Supabase email sending is temporarily rate-limited. The built-in email service allows only a small number of emails per hour. Wait before trying another registration, or configure custom SMTP for the project.')
-      error.status = res.status
-      throw error
+  const maxAttempts = options.retryTransient === false ? 1 : 3
+  let lastError = null
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const res = await fetch(SUPABASE_URL + path, {
+        ...options,
+        retryTransient: undefined,
+        headers: {
+          apikey: SUPABASE_KEY,
+          'Content-Type': 'application/json',
+          ...(options.headers || {}),
+        },
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        const raw = body.error_description || body.msg || body.message || body.error || 'Supabase Auth request failed'
+        const normalized = String(raw).toLowerCase()
+        if (res.status === 429 || normalized.includes('rate limit') || normalized.includes('rate_limit')) {
+          const error = new Error('Supabase email sending is temporarily rate-limited. Please wait before trying another registration.')
+          error.status = res.status
+          throw error
+        }
+        const error = new Error(res.status >= 500 ? 'Authentication service is temporarily unavailable. Please try again.' : String(raw))
+        error.status = res.status
+        throw error
+      }
+      return body
+    } catch (error) {
+      lastError = error
+      const retryable = !error?.status || [500, 502, 503, 504].includes(error.status)
+      if (!retryable || attempt >= maxAttempts) throw error
+      await new Promise(resolve => setTimeout(resolve, 350 * attempt))
     }
-    const error = new Error(String(raw))
-    error.status = res.status
-    throw error
   }
-  return body
+
+  throw lastError || new Error('Supabase Auth request failed')
 }
 
 const base64Url = (bytes) => {
@@ -60,6 +75,7 @@ const hydrateUser = async (next) => {
   try {
     const user = await request('/auth/v1/user', {
       headers: { Authorization: 'Bearer ' + next.access_token },
+      retryTransient: false,
     })
     return { ...next, user }
   } catch {
@@ -86,11 +102,7 @@ const scheduleRefresh = () => {
     try {
       await supabaseAuth.refreshSession()
     } catch (error) {
-      // Do not turn a temporary Supabase/network failure into a visible logout.
-      // A genuinely invalid refresh token will be cleared by refreshSession.
-      if (error?.status !== 400 && error?.status !== 401) {
-        scheduleRefresh()
-      }
+      if (error?.status !== 400 && error?.status !== 401) scheduleRefresh()
     }
   }, delay)
 }
@@ -229,12 +241,8 @@ export const supabaseAuth = {
     window.location.assign(url.toString())
   },
 
-  isOAuthOnboardingPending: () =>
-    localStorage.getItem('maintain-ai-oauth-pending') === '1',
-
-  isOAuthRegistrationPending: () =>
-    localStorage.getItem(OAUTH_REGISTRATION_KEY) === '1',
-
+  isOAuthOnboardingPending: () => localStorage.getItem('maintain-ai-oauth-pending') === '1',
+  isOAuthRegistrationPending: () => localStorage.getItem(OAUTH_REGISTRATION_KEY) === '1',
   clearOAuthOnboardingPending: () => {
     localStorage.removeItem('maintain-ai-oauth-pending')
     localStorage.removeItem(OAUTH_REGISTRATION_KEY)
@@ -243,27 +251,16 @@ export const supabaseAuth = {
   signUp: async (email, password, metadata) => {
     const response = await request('/auth/v1/signup', {
       method: 'POST',
-      body: JSON.stringify({
-        email,
-        password,
-        data: metadata,
-        redirect_to: typeof window !== 'undefined' ? window.location.origin : undefined,
-      }),
+      body: JSON.stringify({ email, password, data: metadata, redirect_to: typeof window !== 'undefined' ? window.location.origin : undefined }),
     })
     if (response?.access_token) return save(await hydrateUser(response))
     return response
   },
 
-  resendSignupConfirmation: async (email) => {
-    return request('/auth/v1/resend', {
-      method: 'POST',
-      body: JSON.stringify({
-        type: 'signup',
-        email,
-        redirect_to: typeof window !== 'undefined' ? window.location.origin : undefined,
-      }),
-    })
-  },
+  resendSignupConfirmation: async (email) => request('/auth/v1/resend', {
+    method: 'POST',
+    body: JSON.stringify({ type: 'signup', email, redirect_to: typeof window !== 'undefined' ? window.location.origin : undefined }),
+  }),
 
   refreshSession: async () => {
     if (!session?.refresh_token) return null
