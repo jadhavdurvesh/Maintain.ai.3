@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/badge/Electron-Desktop-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron">
   <img src="https://img.shields.io/badge/ESP32-IoT-E7352C?style=flat-square&logo=espressif&logoColor=white" alt="ESP32">
   <img src="https://img.shields.io/badge/SQLite-Database-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite">
-  [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/jadhavdurvesh/Maintain.ai.3)
+
 </p>
 
 <p><strong>AI-powered predictive maintenance and intelligent maintenance management platform.</strong></p>
