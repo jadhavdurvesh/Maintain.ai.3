@@ -4,6 +4,7 @@
 
 <p>
   <a href="https://deepwiki.com/jadhavdurvesh/Maintain.ai.3"><img src="https://devin.ai/assets/askdeepwiki.png" alt="Ask DeepWiki" height="34"></a>
+  <a href="https://deepwiki.com/jadhavdurvesh/Maintain.ai.3"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki" height="34"></a>
 </p>
 
 <p>
@@ -16,7 +17,6 @@
   <img src="https://img.shields.io/badge/Electron-Desktop-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron">
   <img src="https://img.shields.io/badge/ESP32-IoT-E7352C?style=flat-square&logo=espressif&logoColor=white" alt="ESP32">
   <img src="https://img.shields.io/badge/SQLite-Database-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite">
-
 </p>
 
 <p><strong>AI-powered predictive maintenance and intelligent maintenance management platform.</strong></p>
@@ -50,7 +50,8 @@ The platform combines a traditional rule-based diagnostic engine, live telemetry
              ▼                ▼                ▼
           Database         AI / ML          REST API
              │                │                │
-           SQLite        Predictions       Platform Data
+     PostgreSQL / Neon   Predictions       Platform Data
+       + local SQLite
 ```
 
 ## ✨ Core Capabilities
@@ -65,6 +66,13 @@ The platform combines a traditional rule-based diagnostic engine, live telemetry
 - Maintenance history
 - Machine health information
 - Archive-based machine removal that preserves historical records
+- Specialized machine workspaces for machine types with domain-specific engineering data
+
+### 🏭 Specialized Machine Engineering
+
+Machine categories can use isolated detail workspaces instead of forcing every machine through one generic screen. The current implementation includes a specialized **3D printer** profile with dedicated machine-detail routing and machine-specific runtime signals.
+
+Automatic runtime inference for specialized machines can use live telemetry signals to determine operating state. The 3D-printer implementation is wired into this inference path so its specialized workspace can reflect live machine activity.
 
 ### 🧠 Predictive Maintenance
 
@@ -78,6 +86,8 @@ The local predictive model uses information such as:
 - Historical machine data
 
 The model is based on a lightweight **scikit-learn Random Forest** and can be retrained from within the application. Predictions are surfaced through the dashboard and analytics views.
+
+The temporal forecasting layer also records forecast runs and status/history information. Automatic forecast work triggered by telemetry is throttled to avoid repeatedly launching expensive forecast jobs for the same stream.
 
 ### 🤖 AI Maintenance Assistant
 
@@ -93,7 +103,7 @@ It can:
 - Use Gemini as an optional enhancement
 - Log diagnostic sessions for later comparison between predictions and actual outcomes
 
-### 🚨 Smart Alerts
+### 🚨 Smart Alerts & Safety Pipeline
 
 The alert system combines maintenance and machine-health signals to surface issues such as:
 
@@ -102,6 +112,9 @@ The alert system combines maintenance and machine-health signals to surface issu
 - Maintenance approaching its due date
 - Repeated unresolved faults
 - Sensor anomalies from connected devices
+- Component-level telemetry conditions
+
+Component telemetry is routed through the established safety-processing pipeline so readings can participate in safety policy evaluation, anomaly/degradation processing, alerts, realtime publication, and the existing device-command/automatic-shutdown path where configured.
 
 ### 🔧 Work Order Management
 
@@ -116,33 +129,45 @@ Pending ──────► In Progress ──────► Completed
 
 Work orders can contain machine associations, descriptions, priority, assignment, status, recommended actions, and completion information.
 
-### 📡 IoT & ESP32 Integration
+### 📡 IoT, Component Telemetry & ESP32 Integration
 
-Optional device integration allows an ESP32-based device to send readings to MAINTAIN AI through the device-ingestion API.
+Optional device integration allows ESP32-based devices and other gateways to send readings to MAINTAIN AI through authenticated device-ingestion APIs.
 
 ```text
-ESP32 + Sensor
-      │
-      │ Device Key
-      ▼
-/api/devices/ingest
-      │
-      ▼
-Machine Baseline
-      │
-      ▼
-Anomaly Detection
-      │
-      ▼
-Maintenance Alert
-      │
-      ▼
-MAINTAIN AI Dashboard
+ESP32 / Gateway + Sensor
+          │
+          │ Device Key
+          ▼
+ /api/devices/ingest
+          │
+          ├──────────────► Component telemetry
+          │                    │
+          ▼                    ▼
+    Machine reading      Safety / anomaly pipeline
+          │                    │
+          └────────────┬───────┘
+                       ▼
+                 Realtime / Alerts
+                       │
+                       ▼
+                MAINTAIN AI UI
 ```
+
+Component sensors now have dedicated configuration and reading paths, including sensor metadata, units, configured limits, enabled state, and readings. Device-originated component telemetry supports an event identifier so retries can be handled idempotently rather than creating duplicate readings.
 
 A working example is included in `firmware/esp32_example.ino`, using an **ESP32 + DHT22** and documenting how the example can be adapted for other sensor types such as vibration or current sensors.
 
 The anomaly system compares incoming readings against the machine's recent baseline instead of relying only on a universal fixed threshold.
+
+### 📡 Live Telemetry Controls & Resilience
+
+Live telemetry can be explicitly enabled or disabled for supported machine flows. The application includes resilient realtime handling with fallback polling paths so specialized machine pages can continue reflecting current telemetry when the primary realtime stream is unavailable.
+
+Telemetry-driven runtime state is also used by specialized machine views, including recognition of active robot/3D-printer telemetry where supported.
+
+### 🧪 Machine Simulator Compatibility
+
+The telemetry ingestion path supports external simulator clients. Cross-origin configuration has been hardened for the deployed machine simulator so browser-based simulator telemetry can reach the backend without bypassing the normal ingestion path.
 
 ### 📈 Analytics & Reports
 
@@ -154,6 +179,7 @@ The platform provides maintenance and reliability analysis through dashboards an
 - Failure-cause breakdowns
 - Predictive health information
 - Model status
+- Forecast history/status
 - Charts and data summaries
 - CSV export
 - PDF export
@@ -199,6 +225,26 @@ MAINTAIN AI combines three distinct approaches to maintenance intelligence:
 
 This separation allows deterministic maintenance logic, data-driven prediction, and optional generative assistance to operate as distinct layers rather than treating every maintenance question as a generic AI prompt.
 
+## 🛡️ Telemetry Integrity & Safety
+
+The telemetry architecture now treats component readings as first-class data while preserving the existing machine telemetry pipeline.
+
+```text
+Component Sensor
+      │
+      ▼
+Validated Reading
+      │
+      ├── event identity / idempotency
+      ├── configured min/max validation
+      ├── safety policy evaluation
+      ├── anomaly / degradation processing
+      ├── realtime publication
+      └── device command / shutdown path
+```
+
+This keeps component-level sensor data aligned with the same safety and operational behavior used by the established device telemetry path.
+
 ## 🖥️ Web & Desktop Applications
 
 The same application can be used as a browser-based web application or packaged as a desktop application.
@@ -215,9 +261,11 @@ The same application can be used as a browser-based web application or packaged 
                            ▼
                     FastAPI Backend
                            │
-                      SQLAlchemy
+                    SQLAlchemy ORM
                            │
-                        SQLite
+                  PostgreSQL / Neon
+                           │
+                 Local desktop SQLite
 ```
 
 The desktop package combines the frontend with the backend into an installable application. Desktop build and packaging details are documented separately in [`DESKTOP.md`](DESKTOP.md).
@@ -239,32 +287,38 @@ The original certificate identifies the tested target, test date, Grade A result
 ## 🏗️ System Architecture
 
 ```text
-┌──────────────────────────────────────────────────────────────┐
-│                       CLIENT LAYER                           │
-│                                                              │
-│   React + Vite Web        Electron Desktop       ESP32 IoT   │
-└───────────────┬──────────────────┬──────────────────┬───────┘
-                │                  │                  │
-                └──────────────────┼──────────────────┘
-                                   ▼
-┌──────────────────────────────────────────────────────────────┐
-│                      FASTAPI BACKEND                         │
-│                                                              │
-│  REST API · Authentication · Business Logic · Analytics     │
-│  Maintenance · Alerts · Devices · Reports · AI Services     │
-└──────────────────────────────┬───────────────────────────────┘
-                               │
-              ┌────────────────┼────────────────┐
-              ▼                ▼                ▼
-        ┌────────────┐   ┌────────────┐   ┌──────────────┐
-        │   SQLite   │   │ ML Model   │   │ Diagnostics  │
-        │  Database  │   │  Random    │   │ Rule Engine  │
-        │            │   │  Forest    │   │              │
-        └────────────┘   └────────────┘   └──────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                         CLIENT LAYER                             │
+│                                                                  │
+│ React + Vite Web     Electron Desktop      Android / Workforce  │
+│                                                                  │
+│                         ESP32 / Gateway                         │
+└──────────────────────────────┬───────────────────────────────────┘
                                │
                                ▼
-                        AI Maintenance
-                           Assistant
+┌──────────────────────────────────────────────────────────────────┐
+│                         FASTAPI BACKEND                          │
+│                                                                  │
+│ REST API · Auth · Business Logic · Analytics · Maintenance      │
+│ Alerts · Devices · Component Sensors · Reports · AI Services   │
+│                                                                  │
+│          Live telemetry · Safety · Idempotency pipeline          │
+└──────────────────────────────┬───────────────────────────────────┘
+                               │
+             ┌─────────────────┼─────────────────┐
+             ▼                 ▼                 ▼
+      ┌──────────────┐  ┌──────────────┐  ┌───────────────┐
+      │ PostgreSQL   │  │ ML / Temporal│  │ Safety /      │
+      │ / Neon       │  │ Models       │  │ Diagnostics   │
+      │              │  │              │  │               │
+      └──────────────┘  └──────────────┘  └───────────────┘
+             │                 │                 │
+             └─────────────────┼─────────────────┘
+                               ▼
+                       AI Maintenance
+                          Assistant
+
+              Desktop / local operation may use SQLite
 ```
 
 ## 📚 Project Documentation
@@ -304,8 +358,11 @@ These documents deliberately distinguish implemented code, externally configured
 | Hosted Database | PostgreSQL / Neon |
 | Local Database | SQLite |
 | Authentication | Supabase Auth + backend authorization |
-| Realtime | Supabase Realtime + WebSocket |
+| Realtime | Supabase Realtime + WebSocket + resilient fallback polling |
 | Machine Learning | scikit-learn / temporal model integrations |
+| Forecast Processing | Persisted forecast runs with telemetry-trigger throttling |
+| Safety | Safety policy pipeline + device command path |
+| Component Telemetry | Sensor configuration + validated/idempotent device readings |
 | Desktop Runtime | Electron |
 | IoT | ESP32 / serial gateway |
 | Mobile | Android + Flutter Workforce |
