@@ -35,6 +35,36 @@ MAINTAIN AI is the main platform within the wider ecosystem. It brings together 
 
 ---
 
+## 🧬 Formal Technology & Architectural Constructs
+
+The Maintain AI architecture uses a formal terminology system for the major architectural constructs developed for the platform. These names describe the specific Maintain AI architectural constructs; they do not claim invention of the underlying general technologies or research fields.
+
+| Acronym | Formal name | Architectural role |
+|---|---|---|
+| **MHICPIA** | **Maintain AI Heterogeneous Industrial Cyber-Physical Intelligence Architecture** | Umbrella architecture connecting machines, gateways, telemetry, intelligence, maintenance, safety and workforce operations. |
+| **HMIRM** | **Heterogeneous Machine Intelligence Representation Model** | Common representation of different machines, capabilities, telemetry, state, health and maintenance properties. |
+| **HITSNA** | **Heterogeneous Industrial Telemetry Semantic Normalization Architecture** | Normalizes machine-specific measurements and representations into consistent platform telemetry semantics. |
+| **AIITIA** | **Authenticated Idempotent Industrial Telemetry Ingestion Architecture** | Defines authenticated, persistent and retry-safe industrial telemetry ingestion. |
+| **OIRITIA** | **Organization-Isolated Real-Time Industrial Telemetry Architecture** | Provides organization-scoped and authorization-controlled realtime telemetry distribution. |
+| **MAAOIA** | **Machine-Assignment-Aware Operational Intelligence Architecture** | Connects operational authorization to users, roles and assigned machines. |
+| **HMT-IIA** | **Hierarchical Multi-Tenant Industrial Intelligence Isolation Architecture** | Isolates organizations, users, machines, telemetry and intelligence through the platform hierarchy. |
+| **PIIEA** | **Persistent Industrial Intelligence Evidence Architecture** | Persists predictions, conditions, alerts and maintenance evidence across their lifecycle. |
+| **MAI-RA** | **Model-Agnostic Industrial Intelligence Runtime Architecture** | Provides a stable runtime boundary for interchangeable intelligence models. |
+| **DLE-IIA** | **Distributed Local-Edge Industrial Intelligence Inference Architecture** | Coordinates local/edge inference with cloud intelligence services. |
+| **BAAI-AIM** | **Bounded Assistive Artificial Intelligence Architecture for Industrial Maintenance** | Defines authority boundaries for assistive AI in industrial maintenance. |
+| **PCASIA** | **Predictive Condition-Aware Safety Intervention Architecture** | Connects condition/prediction evidence to a defined safety-intervention pathway. |
+| **CPMIFA** | **Closed-Loop Predictive Maintenance Intelligence Feedback Architecture** | Connects prediction, maintenance, technician activity, outcomes and subsequent intelligence. |
+| **OC-PMLA** | **Outcome-Conditioned Predictive Maintenance Learning Architecture** | Links predictive conditions with observed maintenance outcomes for evaluation and learning. |
+| **SITVA** | **Synthetic Industrial Telemetry Validation Architecture** | Provides reproducible synthetic telemetry and fault-scenario validation. |
+
+### Architectural relationship
+
+These constructs form a connected architecture rather than isolated features. **HMIRM** defines machine representation; **HITSNA** provides common telemetry semantics; **AIITIA** provides the ingestion boundary; **OIRITIA**, **MAAOIA** and **HMT-IIA** govern access and isolation; **MAI-RA** and **DLE-IIA** define intelligence execution boundaries; **PIIEA**, **CPMIFA** and **OC-PMLA** connect intelligence to maintenance evidence and outcomes; **PCASIA** defines a safety-intervention pathway; **BAAI-AIM** defines the authority boundary for assistive AI; and **SITVA** provides reproducible validation. At the system level, these constructs are unified by **MHICPIA**, the overall Maintain AI heterogeneous industrial cyber-physical intelligence architecture.
+
+The complete formal definitions are maintained in [`docs/FORMAL_TECHNOLOGY_NAMES.md`](docs/FORMAL_TECHNOLOGY_NAMES.md).
+
+---
+
 ## What is MAINTAIN AI?
 
 **MAINTAIN AI** is a predictive-maintenance and maintenance-management platform designed to help industrial teams monitor assets, identify developing problems, manage maintenance operations, and make better decisions from machine data.
@@ -300,7 +330,7 @@ Vercel → Deployments → Create Deployment
 Production deployment
 ```
 
-This deployment policy keeps GitHub as the source of truth while making production releases deliberate. Vercel documents manual deployment creation from a branch or commit SHA in the dashboard. citeturn0search7
+This deployment policy keeps GitHub as the source of truth while making production releases deliberate.
 
 The repository-level Vercel configuration uses `git.deploymentEnabled: false` to disable automatic Git deployments while keeping the GitHub connection intact.
 
@@ -367,6 +397,7 @@ The original certificate identifies the tested target, test date, Grade A result
 - [`docs/MOBILE_AND_GATEWAY_CONTRACTS.md`](docs/MOBILE_AND_GATEWAY_CONTRACTS.md) — Android, Workforce and gateway implementation contracts.
 - [`docs/CROSS_CLIENT_ARCHITECTURE_AUDIT.md`](docs/CROSS_CLIENT_ARCHITECTURE_AUDIT.md) — cross-client security audit and acceptance tests.
 - [`docs/MAINTAIN_AI_SOURCE_OF_TRUTH.md`](docs/MAINTAIN_AI_SOURCE_OF_TRUTH.md) — architectural invariants and security constitution.
+- [`docs/FORMAL_TECHNOLOGY_NAMES.md`](docs/FORMAL_TECHNOLOGY_NAMES.md) — canonical formal names, abbreviations and definitions for the Maintain AI architectural constructs.
 
 ### Product/implementation documents
 
