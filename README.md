@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/badge/scikit--learn-ML-F7931E?style=flat-square&logo=scikitlearn&logoColor=white" alt="scikit-learn">
   <img src="https://img.shields.io/badge/Electron-Desktop-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron">
   <img src="https://img.shields.io/badge/ESP32-IoT-E7352C?style=flat-square&logo=espressif&logoColor=white" alt="ESP32">
-  <img src="https://img.shields.io/badge/SQLite-Database-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite">
+  <img src="https://img.shields.io/badge/PostgreSQL-Production-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL">
 </p>
 
 <p><strong>AI-powered predictive maintenance and intelligent maintenance management platform.</strong></p>
@@ -24,6 +24,14 @@
 <p>Monitor assets · Predict machine health · Diagnose faults · Manage maintenance · Analyze reliability · Integrate IoT</p>
 
 </div>
+
+---
+
+## 🏛️ Formal Platform Designation
+
+**MAINTAIN AI — An Integrated AI, IoT, Predictive Analytics and Intelligent Industrial Maintenance Management Platform**
+
+MAINTAIN AI is the main platform within the wider ecosystem. It brings together industrial asset management, machine telemetry, predictive analytics, diagnostics, maintenance operations, safety processing, IoT connectivity, reporting, and workforce-facing integrations through a shared backend and data model.
 
 ---
 
@@ -50,8 +58,7 @@ The platform combines a traditional rule-based diagnostic engine, live telemetry
              ▼                ▼                ▼
           Database         AI / ML          REST API
              │                │                │
-     PostgreSQL / Neon   Predictions       Platform Data
-       + local SQLite
+       PostgreSQL / Neon   Predictions       Platform Data
 ```
 
 ## ✨ Core Capabilities
@@ -153,7 +160,7 @@ ESP32 / Gateway + Sensor
                 MAINTAIN AI UI
 ```
 
-Component sensors now have dedicated configuration and reading paths, including sensor metadata, units, configured limits, enabled state, and readings. Device-originated component telemetry supports an event identifier so retries can be handled idempotently rather than creating duplicate readings.
+Component sensors have dedicated configuration and reading paths, including sensor metadata, units, configured limits, enabled state, and readings. Device-originated component telemetry supports an event identifier so retries can be handled idempotently rather than creating duplicate readings.
 
 A working example is included in `firmware/esp32_example.ino`, using an **ESP32 + DHT22** and documenting how the example can be adapted for other sensor types such as vibration or current sensors.
 
@@ -227,7 +234,7 @@ This separation allows deterministic maintenance logic, data-driven prediction, 
 
 ## 🛡️ Telemetry Integrity & Safety
 
-The telemetry architecture now treats component readings as first-class data while preserving the existing machine telemetry pipeline.
+The telemetry architecture treats component readings as first-class data while preserving the existing machine telemetry pipeline.
 
 ```text
 Component Sensor
@@ -264,11 +271,38 @@ The same application can be used as a browser-based web application or packaged 
                     SQLAlchemy ORM
                            │
                   PostgreSQL / Neon
-                           │
-                 Local desktop SQLite
 ```
 
+The hosted MAINTAIN AI deployment uses PostgreSQL on Neon. Local desktop operation may retain a separate local database where the desktop packaging requires it; this is not the hosted production database.
+
 The desktop package combines the frontend with the backend into an installable application. Desktop build and packaging details are documented separately in [`DESKTOP.md`](DESKTOP.md).
+
+## 🚀 Deployment Model
+
+MAINTAIN AI uses GitHub as the source repository and Vercel for the hosted web deployment.
+
+Automatic Git-triggered deployments are intentionally **disabled** so ordinary commits do not automatically consume Vercel deployment/build resources.
+
+```text
+GitHub commit
+      │
+      ▼
+No automatic Vercel deployment
+      │
+      │  release decision
+      ▼
+Vercel → Deployments → Create Deployment
+      │
+      ├── choose a branch, or
+      └── choose a specific commit SHA
+      │
+      ▼
+Production deployment
+```
+
+This deployment policy keeps GitHub as the source of truth while making production releases deliberate. Vercel documents manual deployment creation from a branch or commit SHA in the dashboard. citeturn0search7
+
+The repository-level Vercel configuration uses `git.deploymentEnabled: false` to disable automatic Git deployments while keeping the GitHub connection intact.
 
 ## 🔐 Security Verification
 
@@ -317,8 +351,6 @@ The original certificate identifies the tested target, test date, Grade A result
                                ▼
                        AI Maintenance
                           Assistant
-
-              Desktop / local operation may use SQLite
 ```
 
 ## 📚 Project Documentation
@@ -356,7 +388,6 @@ These documents deliberately distinguish implemented code, externally configured
 | Backend Language | Python |
 | ORM | SQLAlchemy |
 | Hosted Database | PostgreSQL / Neon |
-| Local Database | SQLite |
 | Authentication | Supabase Auth + backend authorization |
 | Realtime | Supabase Realtime + WebSocket + resilient fallback polling |
 | Machine Learning | scikit-learn / temporal model integrations |
