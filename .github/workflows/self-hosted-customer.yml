@@ -130,7 +130,7 @@ jobs:
               environment:
                 POSTGRES_DB: maintain_ai
                 POSTGRES_USER: maintain_ai
-                POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
+                POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
               volumes:
                 - maintain_ai_postgres:/var/lib/postgresql/data
               healthcheck:
@@ -145,9 +145,9 @@ jobs:
                 dockerfile: docker/backend.Dockerfile
               restart: unless-stopped
               environment:
-                DATABASE_URL: postgresql+psycopg2://maintain_ai:\${POSTGRES_PASSWORD}@db:5432/maintain_ai
+                DATABASE_URL: postgresql+psycopg2://maintain_ai:${POSTGRES_PASSWORD}@db:5432/maintain_ai
                 REQUIRE_AUTH: "true"
-                JWT_SECRET: \${JWT_SECRET}
+                JWT_SECRET: ${JWT_SECRET}
                 JWT_EXPIRY_HOURS: "24"
                 CORS_ORIGINS: http://localhost,http://127.0.0.1
                 PORT: "8000"
@@ -167,7 +167,7 @@ jobs:
               depends_on:
                 - backend
               ports:
-                - "\${MAINTAIN_AI_PORT:-8080}:80"
+                - "${MAINTAIN_AI_PORT:-8080}:80"
 
           volumes:
             maintain_ai_postgres:
@@ -184,7 +184,7 @@ jobs:
           set -euo pipefail
           cd "$(dirname "$0")"
           docker compose up -d --build
-          echo "MAINTAIN AI: http://localhost:\${MAINTAIN_AI_PORT:-8080}"
+          echo "MAINTAIN AI: http://localhost:${MAINTAIN_AI_PORT:-8080}"
           EOF
           chmod +x customer-package/start.sh
 
