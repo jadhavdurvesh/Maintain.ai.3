@@ -168,6 +168,14 @@ class DeviceStatusOut(BaseModel):
     has_key: bool
     device_key: str | None = None
 
+class KeyConfirmation(BaseModel):
+    confirmation: str
+
+
+def _require_understand(payload: KeyConfirmation):
+    if payload.confirmation.strip() != "I UNDERSTAND":
+        raise HTTPException(400, 'Type "I UNDERSTAND" exactly to confirm this action.')
+
 
 class SafetyPolicyPayload(BaseModel):
     enabled: bool = False
@@ -505,8 +513,31 @@ def enable_device(machine_id: int, current: CurrentUser = Depends(get_current_us
     return DeviceStatusOut(iot_enabled=True, has_key=True, device_key=machine.device_key)
 
 
+@router.get("/{machine_id}/key", response_model=DeviceStatusOut)
+def view_device_key(machine_id: int, payload: KeyConfirmation, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    _require_understand(payload)
+    machine = _get_scoped_machine(db, machine_id, current, admin_only=True)
+    if not machine.iot_enabled or not machine.device_key:
+        raise HTTPException(409, "live sensor integration is not enabled or has no device key")
+    return DeviceStatusOut(iot_enabled=True, has_key=True, device_key=machine.device_key)
+
+
+@router.post("/{machine_id}/regenerate", response_model=DeviceStatusOut)
+def regenerate_device_key(machine_id: int, payload: KeyConfirmation, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    _require_understand(payload)
+    machine = _get_scoped_machine(db, machine_id, current, admin_only=True)
+    if not machine.iot_enabled:
+        raise HTTPException(409, "live sensor integration is disabled")
+    machine.device_key = secrets.token_hex(16)
+    db.commit()
+    db.refresh(machine)
+    audit.log_event(db, "machine", machine.id, "iot_key_regenerated", f"Live sensor device key regenerated for {machine.name}")
+    return DeviceStatusOut(iot_enabled=True, has_key=True, device_key=machine.device_key)
+
+
 @router.post("/{machine_id}/disable", response_model=DeviceStatusOut)
-def disable_device(machine_id: int, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+def disable_device(machine_id: int, payload: KeyConfirmation, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    _require_understand(payload)
     machine = _get_scoped_machine(db, machine_id, current, admin_only=True)
     machine.iot_enabled = False
     db.commit()
