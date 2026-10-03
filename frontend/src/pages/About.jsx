@@ -101,6 +101,38 @@ export default function About() {
         </div>
       </section>
 
+
+      <section className="panel section-gap formal-tech-section">
+        <div className="panel-header" style={{ justifyContent: 'center', flexDirection: 'column', gap: 5 }}>
+          <span className="panel-title">Formal Technology &amp; Architectural Constructs</span>
+          <span style={{ color: 'var(--text-faint)', fontSize: 11 }}>Maintain AI formal terminology</span>
+        </div>
+        <div className="panel-body formal-tech-grid">
+          {[
+            ['MHICPIA', 'Maintain AI Heterogeneous Industrial Cyber-Physical Intelligence Architecture'],
+            ['HMIRM', 'Heterogeneous Machine Intelligence Representation Model'],
+            ['HITSNA', 'Heterogeneous Industrial Telemetry Semantic Normalization Architecture'],
+            ['AIITIA', 'Authenticated Idempotent Industrial Telemetry Ingestion Architecture'],
+            ['OIRITIA', 'Organization-Isolated Real-Time Industrial Telemetry Architecture'],
+            ['MAAOIA', 'Machine-Assignment-Aware Operational Intelligence Architecture'],
+            ['HMT-IIA', 'Hierarchical Multi-Tenant Industrial Intelligence Isolation Architecture'],
+            ['PIIEA', 'Persistent Industrial Intelligence Evidence Architecture'],
+            ['MAI-RA', 'Model-Agnostic Industrial Intelligence Runtime Architecture'],
+            ['DLE-IIA', 'Distributed Local-Edge Industrial Intelligence Inference Architecture'],
+            ['BAAI-AIM', 'Bounded Assistive Artificial Intelligence Architecture for Industrial Maintenance'],
+            ['PCASIA', 'Predictive Condition-Aware Safety Intervention Architecture'],
+            ['CPMIFA', 'Closed-Loop Predictive Maintenance Intelligence Feedback Architecture'],
+            ['OC-PMLA', 'Outcome-Conditioned Predictive Maintenance Learning Architecture'],
+            ['SITVA', 'Synthetic Industrial Telemetry Validation Architecture'],
+          ].map(([acronym, name]) => (
+            <div key={acronym} className="formal-tech-row">
+              <span className="formal-tech-acronym">{acronym}</span>
+              <span className="formal-tech-name">{name}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <footer style={{ textAlign: 'center', color: 'var(--text-faint)', fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '.08em', paddingTop: 8 }}>
         PREDICT · PREVENT · MAINTAIN
       </footer>
