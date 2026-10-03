@@ -13,11 +13,13 @@ router = APIRouter(prefix="/api/audit-log", tags=["audit_log"])
 @router.get("")
 def list_audit_log(
     entity_type: str | None = None,
-    limit: int = 100,
+    limit: int = 50,
+    offset: int = 0,
     current: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    limit = max(1, min(int(limit), 500))
+    limit = max(1, min(int(limit), 100))
+    offset = max(0, int(offset))
     q = db.query(models.AuditLog).filter(models.AuditLog.organization_id == current.organization_id)
     if current.role == models.UserRole.technician.value:
         visible_ids = visible_machine_ids(db, current)
@@ -31,7 +33,7 @@ def list_audit_log(
         )
     if entity_type:
         q = q.filter(models.AuditLog.entity_type == entity_type)
-    entries = q.order_by(models.AuditLog.created_at.desc()).limit(limit).all()
+    entries = q.order_by(models.AuditLog.created_at.desc(), models.AuditLog.id.desc()).offset(offset).limit(limit).all()
     return [{"id":e.id,"entity_type":e.entity_type,"entity_id":e.entity_id,"action":e.action,"description":e.description,"performed_by":e.performed_by,"created_at":e.created_at} for e in entries]
 
 @router.get("/count")
