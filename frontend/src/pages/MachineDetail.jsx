@@ -23,6 +23,8 @@ export default function MachineDetail() {
   const [deviceBusy, setDeviceBusy] = useState(false)
   const [deviceError, setDeviceError] = useState(null)
   const [revealedKey, setRevealedKey] = useState(null)
+  const [keyAction, setKeyAction] = useState(null)
+  const [keyConfirmation, setKeyConfirmation] = useState('')
   const [liveReadings, setLiveReadings] = useState({})
   const [liveHistory, setLiveHistory] = useState({})
   const [liveConnected, setLiveConnected] = useState(false)
@@ -241,7 +243,6 @@ export default function MachineDetail() {
       if (!result?.device_key) throw new Error('Backend enabled live sensor integration but did not return a device key.')
       setRevealedKey(result.device_key)
       setDeviceStatus({ iot_enabled: result.iot_enabled, has_key: result.has_key })
-      setRevealedKey(result.device_key)
     } catch (e) {
       setDeviceError(e?.message || 'Could not enable live sensor integration.')
     } finally {
@@ -249,19 +250,42 @@ export default function MachineDetail() {
     }
   }
 
-  const disableDevice = async () => {
+  const openKeyAction = (action) => {
+    setKeyAction(action)
+    setKeyConfirmation('')
+    setDeviceError(null)
+  }
+
+  const closeKeyAction = () => {
+    if (deviceBusy) return
+    setKeyAction(null)
+    setKeyConfirmation('')
+  }
+
+  const confirmKeyAction = async () => {
+    if (keyConfirmation !== 'I UNDERSTAND' || !keyAction) return
     setDeviceBusy(true)
     setDeviceError(null)
     try {
-      const result = await api.post(`/api/devices/${id}/disable`, {})
-      setDeviceStatus(result)
-      setRevealedKey(null)
+      const result = await api.post(`/api/devices/${id}/${keyAction === 'view' ? 'key' : keyAction}`, { confirmation: keyConfirmation })
+      if (!result?.device_key && keyAction !== 'disable') throw new Error('The server did not return a device key.')
+      if (keyAction === 'disable') {
+        setDeviceStatus(result)
+        setRevealedKey(null)
+      } else {
+        setDeviceStatus({ iot_enabled: result.iot_enabled, has_key: result.has_key })
+        setRevealedKey(result.device_key)
+      }
+      setKeyAction(null)
+      setKeyConfirmation('')
     } catch (e) {
-      setDeviceError(e?.message || 'Could not disable live sensor integration.')
+      setDeviceError(e?.message || `Could not ${keyAction} the device key.`)
     } finally {
       setDeviceBusy(false)
     }
   }
+
+  const disableDevice = () => openKeyAction('disable')
 
   if (error) return <ErrorState message={error} />
   if (!machine) return <Loading />
@@ -317,18 +341,51 @@ export default function MachineDetail() {
           {revealedKey && (
             <div style={{ padding: 12, background: 'var(--panel-raised)', borderRadius: 8, marginBottom: 12 }}>
               <div style={{ fontSize: 12, color: 'var(--warning)', marginBottom: 6 }}>
-                Copy this now — it's shown only once. Paste it into the firmware's DEVICE_KEY.
+                Device key revealed. Keep it private; any device holding this key can authenticate telemetry for this machine.
               </div>
               <div className="mono" style={{ fontSize: 13, wordBreak: 'break-all' }}>{revealedKey}</div>
             </div>
           )}
 
+          {keyAction && (
+            <div role="dialog" aria-modal="true" style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(0,0,0,.68)', display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+              <div style={{ width:'min(480px,100%)', background:'var(--panel)', border:'1px solid var(--border)', borderRadius:12, padding:20, boxShadow:'0 20px 60px rgba(0,0,0,.45)' }}>
+                <div style={{ fontSize:16, fontWeight:700, marginBottom:8 }}>
+                  {keyAction === 'view' ? 'Reveal device key' : keyAction === 'regenerate' ? 'Regenerate device key' : 'Disable live sensor integration'}
+                </div>
+                <div style={{ color:'var(--text-dim)', fontSize:13, lineHeight:1.55, marginBottom:14 }}>
+                  {keyAction === 'view'
+                    ? 'The device key is a credential. Confirm explicitly before revealing it again.'
+                    : keyAction === 'regenerate'
+                      ? 'The current key will stop working immediately. Any firmware or gateway using it must be updated with the new key.'
+                      : 'Telemetry using the current device key will stop being accepted for this machine.'}
+                </div>
+                <label style={{ display:'block', fontSize:12, color:'var(--text-dim)', marginBottom:7 }}>
+                  Type <strong>I UNDERSTAND</strong> to continue.
+                </label>
+                <input autoFocus value={keyConfirmation} onChange={e=>setKeyConfirmation(e.target.value)}
+                  placeholder="I UNDERSTAND" autoComplete="off"
+                  style={{ width:'100%', boxSizing:'border-box', marginBottom:14 }} />
+                <div style={{ display:'flex', justifyContent:'flex-end', gap:8 }}>
+                  <button className="btn secondary" type="button" onClick={closeKeyAction} disabled={deviceBusy}>Cancel</button>
+                  <button className={keyAction === 'disable' ? 'btn danger' : 'btn'} type="button"
+                    onClick={confirmKeyAction} disabled={deviceBusy || keyConfirmation !== 'I UNDERSTAND'}>
+                    {deviceBusy ? 'Working…' : keyAction === 'view' ? 'Reveal Key' : keyAction === 'regenerate' ? 'Regenerate Key' : 'Disable'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {canEdit && deviceStatus?.iot_enabled ? (
             <div className="chip-row">
-              <button className="btn secondary" onClick={enableDevice} disabled={deviceBusy}>
+              <button className="btn secondary" onClick={() => openKeyAction('regenerate')} disabled={deviceBusy}>
                 {deviceBusy ? 'Working…' : 'Regenerate Key'}
               </button>
-              <button className="btn danger" onClick={disableDevice} disabled={deviceBusy}>
+              <button className="btn secondary" onClick={() => openKeyAction('view')} disabled={deviceBusy}>
+                View Key
+              </button>
+              <button className="btn danger" onClick={() => openKeyAction('disable')} disabled={deviceBusy}>
                 {deviceBusy ? 'Working…' : 'Disable'}
               </button>
             </div>
