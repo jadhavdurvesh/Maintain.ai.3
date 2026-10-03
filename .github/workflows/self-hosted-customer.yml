@@ -22,7 +22,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: self-hosted-customer-\${{ inputs.package_version }}
+  group: self-hosted-customer-${{ inputs.package_version }}
   cancel-in-progress: false
 
 jobs:
@@ -30,8 +30,8 @@ jobs:
     name: Build self-hosted package
     runs-on: ubuntu-latest
     env:
-      PACKAGE_NAME: maintain-ai-self-hosted-\${{ inputs.package_version }}
-      CUSTOMER_NAME: \${{ inputs.customer_name }}
+      PACKAGE_NAME: maintain-ai-self-hosted-${{ inputs.package_version }}
+      CUSTOMER_NAME: ${{ inputs.customer_name }}
 
     steps:
       - name: Checkout MAINTAIN AI
@@ -40,10 +40,10 @@ jobs:
       - name: Validate package version
         shell: bash
         run: |
-          if [[ "\${{ inputs.package_version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+          if [[ "${{ inputs.package_version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
             echo "Version accepted."
           else
-            echo "Invalid package version: \${{ inputs.package_version }}"
+            echo "Invalid package version: ${{ inputs.package_version }}"
             exit 1
           fi
 
@@ -269,7 +269,7 @@ jobs:
           before exposing it outside the trusted LAN. Back up PostgreSQL regularly.
           EOF
 
-          sed -i "s/CUSTOMER_PLACEHOLDER/$CUSTOMER_NAME/g; s/VERSION_PLACEHOLDER/\${{ inputs.package_version }}/g; s/COMMIT_PLACEHOLDER/$GITHUB_SHA/g" customer-package/README.md
+          sed -i "s/CUSTOMER_PLACEHOLDER/$CUSTOMER_NAME/g; s/VERSION_PLACEHOLDER/${{ inputs.package_version }}/g; s/COMMIT_PLACEHOLDER/$GITHUB_SHA/g" customer-package/README.md
 
           cat > customer-package/.dockerignore <<'EOF'
           .git
@@ -320,8 +320,13 @@ jobs:
 
       - name: Stop validation stack
         if: always()
-        working-directory: customer-package
-        run: docker compose down -v
+        shell: bash
+        run: |
+          if [ -f customer-package/docker-compose.yml ]; then
+            docker compose -f customer-package/docker-compose.yml down -v
+          else
+            echo "No customer stack was created; nothing to stop."
+          fi
 
       - name: Package deployment
         shell: bash
@@ -334,7 +339,7 @@ jobs:
       - name: Upload deployment artifact
         uses: actions/upload-artifact@v4
         with:
-          name: \${{ env.PACKAGE_NAME }}
+          name: ${{ env.PACKAGE_NAME }}
           path: |
             release/*.tar.gz
             release/*.sha256
@@ -344,13 +349,13 @@ jobs:
       - name: Publish GitHub Release
         if: inputs.publish_release == true
         env:
-          GH_TOKEN: \${{ github.token }}
-          RELEASE_TAG: customer-\${{ inputs.package_version }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: customer-${{ inputs.package_version }}
         run: |
           gh release create "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
-            --title "MAINTAIN AI Self-Hosted \${{ inputs.customer_name }} v\${{ inputs.package_version }}" \
+            --title "MAINTAIN AI Self-Hosted ${{ inputs.customer_name }} v${{ inputs.package_version }}" \
             --generate-notes \
             release/*.tar.gz \
             release/*.sha256
