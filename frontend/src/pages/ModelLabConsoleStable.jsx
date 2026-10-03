@@ -113,7 +113,6 @@ export default function ModelLabConsoleStable() {
   const taskKey = machineId ? `${machineId}::${signal}::${model}::${horizon}` : null
   const predictionTask = taskKey ? getPredictionTask(taskKey) : null
   const taskBusy = predictionTask?.status === 'running'
-  const taskResult = predictionTask?.status === 'completed' ? predictionTask.result : null
 
   const load = useCallback(async ({ restore = false } = {}) => {
     const seq = ++requestSeq.current
