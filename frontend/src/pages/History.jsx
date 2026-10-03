@@ -29,7 +29,6 @@ export default function History() {
   const [entries, setEntries] = useState([])
   const [offset, setOffset] = useState(0)
   const [hasMore, setHasMore] = useState(false)
-  const [count, setCount] = useState(null)
   const [filter, setFilter] = useState('')
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -47,10 +46,6 @@ export default function History() {
       setEntries(current => append ? [...current, ...rows] : rows)
       setOffset(nextOffset + rows.length)
       setHasMore(rows.length === PAGE_SIZE)
-      if (!append) {
-        const c = await api.get('/api/audit-log/count')
-        setCount(c.total_events)
-      }
     } catch (e) {
       setError(e.message)
     } finally {
@@ -70,7 +65,7 @@ export default function History() {
           Every machine added, every job completed, every alert resolved — permanently recorded here.
           Archiving a machine hides it from active lists but never deletes its history; nothing on
           this page is ever edited or removed by the app itself.
-          {count != null && <span className="mono" style={{ color: 'var(--text-faint)' }}> · {count} event{count === 1 ? '' : 's'} on record</span>}
+          <span className="mono" style={{ color: 'var(--text-faint)' }}> · Showing latest {entries.length} loaded event{entries.length === 1 ? '' : 's'}</span>
         </p>
         <div className="chip-row">
           {ENTITY_FILTERS.map((f) => (
