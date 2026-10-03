@@ -99,7 +99,16 @@ function App() {
   const { user, checking } = useAuth()
   const [theme, setTheme] = useTheme()
   useReducedEffects()
-  if (checking) return <div className="app-loading">Loading…</div>
+  if (checking) return (
+    <div className="app-loading" role="status" aria-live="polite">
+      <div className="loading-halo" aria-hidden="true" />
+      <div className="loading-orbit" aria-hidden="true"><span /><span /><span /></div>
+      <div className="loading-brand">MAINTAIN <span>AI</span></div>
+      <div className="loading-caption">Restoring secure workspace</div>
+      <div className="loading-track" aria-hidden="true"><span /></div>
+      <div className="loading-meta"><span>AUTHENTICATION</span><span>SESSION HYDRATION</span><span>SECURE</span></div>
+    </div>
+  )
   if (!user) return <Login />
   return <PageHeaderProvider><TelemetryFallback /><div className="app-shell"><Sidebar /><main className="main-content"><Topbar theme={theme} setTheme={setTheme} /><div className="page-content"><Routes><Route path="/" element={<Dashboard />} /><Route path="/machines" element={<Machines />} /><Route path="/machines/:id" element={<MachineDetailRouter />} /><Route path="/maintenance" element={<Maintenance />} /><Route path="/work-orders" element={<WorkOrders />} /><Route path="/faults" element={<Faults />} /><Route path="/ai-assistant" element={<AIAssistant />} /><Route path="/alerts" element={<Alerts />} /><Route path="/spare-parts" element={<SpareParts />} /><Route path="/reports" element={<Reports />} /><Route path="/model-lab" element={<ModelLabConsole />} /><Route path="/model-lab/compare" element={<ModelComparison />} /><Route path="/history" element={<History />} /><Route path="/settings" element={<SettingsPage />} /><Route path="/about" element={<About />} /></Routes></div></main></div></PageHeaderProvider>
 }
