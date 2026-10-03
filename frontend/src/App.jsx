@@ -96,10 +96,10 @@ function TelemetryFallback() {
 function ErrorBoundary({ children }) { return children }
 
 function App() {
-  const { user, loading } = useAuth()
+  const { user, checking } = useAuth()
   const [theme, setTheme] = useTheme()
   useReducedEffects()
-  if (loading) return <div className="app-loading">Loading…</div>
+  if (checking) return <div className="app-loading">Loading…</div>
   if (!user) return <Login />
   return <PageHeaderProvider><TelemetryFallback /><div className="app-shell"><Sidebar /><main className="main-content"><Topbar theme={theme} setTheme={setTheme} /><div className="page-content"><Routes><Route path="/" element={<Dashboard />} /><Route path="/machines" element={<Machines />} /><Route path="/machines/:id" element={<MachineDetailRouter />} /><Route path="/maintenance" element={<Maintenance />} /><Route path="/work-orders" element={<WorkOrders />} /><Route path="/faults" element={<Faults />} /><Route path="/ai-assistant" element={<AIAssistant />} /><Route path="/alerts" element={<Alerts />} /><Route path="/spare-parts" element={<SpareParts />} /><Route path="/reports" element={<Reports />} /><Route path="/model-lab" element={<ModelLabConsole />} /><Route path="/model-lab/compare" element={<ModelComparison />} /><Route path="/history" element={<History />} /><Route path="/settings" element={<SettingsPage />} /><Route path="/about" element={<About />} /></Routes></div></main></div></PageHeaderProvider>
 }
