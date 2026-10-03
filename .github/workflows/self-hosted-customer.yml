@@ -1,0 +1,356 @@
+name: Build Self-Hosted Customer Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      customer_name:
+        description: 'Customer / industry name used in the deployment package'
+        required: true
+        type: string
+      package_version:
+        description: 'Customer package version'
+        required: true
+        default: '1.0.0'
+        type: string
+      publish_release:
+        description: 'Publish the package to a GitHub Release'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: self-hosted-customer-\${{ inputs.package_version }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build self-hosted package
+    runs-on: ubuntu-latest
+    env:
+      PACKAGE_NAME: maintain-ai-self-hosted-\${{ inputs.package_version }}
+      CUSTOMER_NAME: \${{ inputs.customer_name }}
+
+    steps:
+      - name: Checkout MAINTAIN AI
+        uses: actions/checkout@v4
+
+      - name: Validate package version
+        shell: bash
+        run: |
+          if [[ "\${{ inputs.package_version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Version accepted."
+          else
+            echo "Invalid package version: \${{ inputs.package_version }}"
+            exit 1
+          fi
+
+      - name: Generate customer-local secrets
+        shell: bash
+        run: |
+          python - <<'PY' >> "$GITHUB_ENV"
+          import secrets
+          print("POSTGRES_PASSWORD=" + secrets.token_urlsafe(24))
+          print("JWT_SECRET=" + secrets.token_urlsafe(48))
+          PY
+
+      - name: Create self-hosted deployment bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf customer-package
+          mkdir -p customer-package/docker
+
+          cp -R backend customer-package/backend
+          cp -R frontend customer-package/frontend
+
+          cat > customer-package/docker/backend.Dockerfile <<'EOF'
+          FROM python:3.12-slim
+          ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
+          WORKDIR /app
+          COPY backend/requirements.txt /app/requirements.txt
+          RUN pip install --no-cache-dir -r /app/requirements.txt
+          COPY backend /app/backend
+          WORKDIR /app/backend
+          EXPOSE 8000
+          CMD ["uvicorn","app.main:app","--host","0.0.0.0","--port","8000"]
+          EOF
+
+          cat > customer-package/docker/frontend.Dockerfile <<'EOF'
+          FROM node:22-alpine AS build
+          WORKDIR /app
+          COPY frontend/package*.json ./
+          RUN npm ci --prefer-offline --no-audit --no-fund
+          COPY frontend ./
+          ENV VITE_API_URL="" VITE_SUPABASE_URL="" VITE_SUPABASE_PUBLISHABLE_KEY="" VITE_ML_SERVICE_URL="/ml"
+          RUN npm run build
+
+          FROM nginx:1.27-alpine
+          COPY nginx.conf /etc/nginx/conf.d/default.conf
+          COPY --from=build /app/dist /usr/share/nginx/html
+          EXPOSE 80
+          CMD ["nginx","-g","daemon off;"]
+          EOF
+
+          cat > customer-package/nginx.conf <<'EOF'
+          server {
+            listen 80;
+            server_name _;
+            root /usr/share/nginx/html;
+            index index.html;
+
+            location /api/ {
+              proxy_pass http://backend:8000;
+              proxy_http_version 1.1;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+              proxy_read_timeout 120s;
+            }
+
+            location /ml/ {
+              default_type application/json;
+              return 503 '{"detail":"Optional remote ML service is disabled in this self-hosted deployment."}';
+            }
+
+            location / {
+              try_files $uri $uri/ /index.html;
+            }
+          }
+          EOF
+
+          cat > customer-package/docker-compose.yml <<'EOF'
+          services:
+            db:
+              image: postgres:16-alpine
+              restart: unless-stopped
+              environment:
+                POSTGRES_DB: maintain_ai
+                POSTGRES_USER: maintain_ai
+                POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
+              volumes:
+                - maintain_ai_postgres:/var/lib/postgresql/data
+              healthcheck:
+                test: ["CMD-SHELL","pg_isready -U maintain_ai -d maintain_ai"]
+                interval: 5s
+                timeout: 5s
+                retries: 20
+
+            backend:
+              build:
+                context: .
+                dockerfile: docker/backend.Dockerfile
+              restart: unless-stopped
+              environment:
+                DATABASE_URL: postgresql+psycopg2://maintain_ai:\${POSTGRES_PASSWORD}@db:5432/maintain_ai
+                REQUIRE_AUTH: "true"
+                JWT_SECRET: \${JWT_SECRET}
+                JWT_EXPIRY_HOURS: "24"
+                CORS_ORIGINS: http://localhost,http://127.0.0.1
+                PORT: "8000"
+                SUPABASE_URL: ""
+                SUPABASE_PUBLISHABLE_KEY: ""
+                SUPABASE_SECRET_KEY: ""
+                SUPABASE_JWT_SECRET: ""
+              depends_on:
+                db:
+                  condition: service_healthy
+
+            frontend:
+              build:
+                context: .
+                dockerfile: docker/frontend.Dockerfile
+              restart: unless-stopped
+              depends_on:
+                - backend
+              ports:
+                - "\${MAINTAIN_AI_PORT:-8080}:80"
+
+          volumes:
+            maintain_ai_postgres:
+          EOF
+
+          cat > customer-package/.env <<EOF
+          POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+          JWT_SECRET=$JWT_SECRET
+          MAINTAIN_AI_PORT=8080
+          EOF
+
+          cat > customer-package/start.sh <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          cd "$(dirname "$0")"
+          docker compose up -d --build
+          echo "MAINTAIN AI: http://localhost:\${MAINTAIN_AI_PORT:-8080}"
+          EOF
+          chmod +x customer-package/start.sh
+
+          cat > customer-package/stop.sh <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          cd "$(dirname "$0")"
+          docker compose down
+          EOF
+          chmod +x customer-package/stop.sh
+
+          cat > customer-package/start.ps1 <<'EOF'
+          Set-Location $PSScriptRoot
+          docker compose up -d --build
+          Write-Host "MAINTAIN AI: http://localhost:8080"
+          EOF
+
+          cat > customer-package/stop.ps1 <<'EOF'
+          Set-Location $PSScriptRoot
+          docker compose down
+          EOF
+
+          cat > customer-package/README.md <<'EOF'
+          # MAINTAIN AI — Self-Hosted Customer Deployment
+
+          Customer: CUSTOMER_PLACEHOLDER
+          Package version: VERSION_PLACEHOLDER
+          Source commit: COMMIT_PLACEHOLDER
+
+          ## Deployment model
+
+          This package runs inside the customer's own infrastructure.
+
+          - Frontend: local Nginx container
+          - Backend: local FastAPI container
+          - Database: local PostgreSQL container
+          - Authentication: local MAINTAIN AI JWT authentication
+          - API and IoT ingestion: local
+          - Hosted Vercel backend: not used
+          - Hosted Neon database: not used
+          - Supabase Auth/Realtime: not used
+          - Hosted MAINTAIN AI ML endpoint: deliberately disabled
+
+          ## Start
+
+          Linux/macOS:
+          ./start.sh
+
+          Windows PowerShell:
+          ./start.ps1
+
+          Open http://localhost:8080 or, from the LAN, http://SERVER-IP:8080.
+
+          ## First use
+
+          Create the customer's first administrator through the normal MAINTAIN AI registration flow.
+          The organization and user records are stored in the customer's PostgreSQL database.
+
+          ## IoT Gateway
+
+          Point a customer-local IoT Gateway at:
+
+          http://SERVER-IP:8080/api/devices/ingest
+
+          and authenticate telemetry with the machine-specific device key.
+
+          ## Data ownership
+
+          Core application data stays in the customer's PostgreSQL volume.
+          The hosted MAINTAIN AI backend is not required for normal operation.
+
+          ## Forecasting isolation
+
+          The current web client contains an optional remote ML fallback for Chronos forecasting.
+          This workflow explicitly builds the customer frontend with a local /ml endpoint and
+          the generated Nginx configuration returns 503 for that endpoint. Therefore customer
+          telemetry is not silently sent to the hosted ML service.
+
+          ## Security
+
+          Keep .env private. Put the service behind the customer's firewall and TLS/reverse proxy
+          before exposing it outside the trusted LAN. Back up PostgreSQL regularly.
+          EOF
+
+          sed -i "s/CUSTOMER_PLACEHOLDER/$CUSTOMER_NAME/g; s/VERSION_PLACEHOLDER/\${{ inputs.package_version }}/g; s/COMMIT_PLACEHOLDER/$GITHUB_SHA/g" customer-package/README.md
+
+          cat > customer-package/.dockerignore <<'EOF'
+          .git
+          .github
+          frontend/node_modules
+          frontend/dist
+          backend/__pycache__
+          backend/.pytest_cache
+          *.pyc
+          maintain_ai.db
+          EOF
+
+      - name: Build customer containers
+        working-directory: customer-package
+        run: docker compose build
+
+      - name: Start customer stack for validation
+        working-directory: customer-package
+        run: docker compose up -d
+
+      - name: Validate local deployment
+        shell: bash
+        working-directory: customer-package
+        run: |
+          set -euo pipefail
+          for i in {1..30}; do
+            if curl --fail --silent --show-error http://127.0.0.1:8080/api/auth/status > /tmp/auth-status.json; then
+              break
+            fi
+            sleep 3
+          done
+
+          test -s /tmp/auth-status.json
+          python - <<'PY'
+          import json
+          data = json.load(open('/tmp/auth-status.json', encoding='utf-8'))
+          assert data.get('auth_required') is True, data
+          print(data)
+          PY
+
+          curl --fail --silent --show-error http://127.0.0.1:8080/ > /tmp/index.html
+          grep -qi '<!doctype html' /tmp/index.html
+
+          if grep -R "maintain-ai-3.vercel.app\|maintain-ai-ml.onrender.com" customer-package/frontend/dist customer-package/nginx.conf 2>/dev/null; then
+            echo "Hosted MAINTAIN AI endpoint leaked into customer package."
+            exit 1
+          fi
+
+      - name: Stop validation stack
+        if: always()
+        working-directory: customer-package
+        run: docker compose down -v
+
+      - name: Package deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          tar -czf "release/$PACKAGE_NAME.tar.gz" -C customer-package .
+          sha256sum "release/$PACKAGE_NAME.tar.gz" > "release/$PACKAGE_NAME.sha256"
+
+      - name: Upload deployment artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: \${{ env.PACKAGE_NAME }}
+          path: |
+            release/*.tar.gz
+            release/*.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: inputs.publish_release == true
+        env:
+          GH_TOKEN: \${{ github.token }}
+          RELEASE_TAG: customer-\${{ inputs.package_version }}
+        run: |
+          gh release create "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "MAINTAIN AI Self-Hosted \${{ inputs.customer_name }} v\${{ inputs.package_version }}" \
+            --generate-notes \
+            release/*.tar.gz \
+            release/*.sha256
