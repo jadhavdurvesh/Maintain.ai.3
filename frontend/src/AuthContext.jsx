@@ -185,6 +185,6 @@ export function AuthProvider({ children }) {
   }
 
   const needsLogin = authRequired === true && !user
-  return <AuthContext.Provider value={{ authRequired, user, checking, needsLogin, needsOnboarding, oauthProfile, authError, emailConfirmationPending, login, register, resendEmailConfirmation, checkEmailConfirmation, cancelEmailConfirmation, completeOnboarding, logout }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ authRequired, user, checking, loading: checking, needsLogin, needsOnboarding, oauthProfile, authError, emailConfirmationPending, login, register, resendEmailConfirmation, checkEmailConfirmation, cancelEmailConfirmation, completeOnboarding, logout }}>{children}</AuthContext.Provider>
 }
 export function useAuth() { return useContext(AuthContext) }
