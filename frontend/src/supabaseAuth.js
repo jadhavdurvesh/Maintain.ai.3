@@ -176,7 +176,21 @@ export const supabaseAuth = {
 
   getSession: async () => {
     const callbackSession = await consumeOAuthCallback()
-    const current = callbackSession || await hydrateStoredSession()
+    let current = callbackSession || await hydrateStoredSession()
+    // A full page reload can happen after the stored access token has expired
+    // (or is about to expire). Refresh it before the application asks the
+    // backend for /api/auth/me so a transient expired token never looks like
+    // a logged-out user.
+    const expiresAt = Number(current?.expires_at || 0)
+    const refreshNeeded = Boolean(current?.refresh_token && expiresAt && expiresAt <= Math.floor(Date.now() / 1000) + 60)
+    if (refreshNeeded) {
+      try {
+        current = await supabaseAuth.refreshSession()
+      } catch {
+        current = null
+        save(null)
+      }
+    }
     scheduleRefresh()
     return current
   },
