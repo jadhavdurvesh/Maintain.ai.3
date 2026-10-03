@@ -4,22 +4,45 @@ import StatusBadge from '../components/StatusBadge.jsx'
 import { Loading, ErrorState } from './Dashboard.jsx'
 import { usePageHeader } from '../PageHeaderContext.jsx'
 
+const PAGE_SIZE = 25
+
 export default function Alerts() {
   usePageHeader('Alerts')
-  const [alerts, setAlerts] = useState(null)
+  const [alerts, setAlerts] = useState([])
+  const [offset, setOffset] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState(null)
 
-  const load = () => api.get('/api/alerts').then(setAlerts).catch((e) => setError(e.message))
-  useEffect(() => { load() }, [])
+  const load = async (nextOffset = 0) => {
+    const append = nextOffset > 0
+    append ? setLoadingMore(true) : setLoading(true)
+    setError(null)
+    try {
+      const batch = await api.get(`/api/alerts?limit=${PAGE_SIZE}&offset=${nextOffset}`)
+      const rows = Array.isArray(batch) ? batch : []
+      setAlerts(current => append ? [...current, ...rows] : rows)
+      setOffset(nextOffset + rows.length)
+      setHasMore(rows.length === PAGE_SIZE)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      append ? setLoadingMore(false) : setLoading(false)
+    }
+  }
 
-  const ack = async (id) => { await api.post(`/api/alerts/${id}/acknowledge`); load() }
-  const resolve = async (id) => { await api.post(`/api/alerts/${id}/resolve`); load() }
+  useEffect(() => { load(0) }, [])
 
-  if (error) return <ErrorState message={error} />
-  if (!alerts) return <Loading />
+  const ack = async (id) => { await api.post(`/api/alerts/${id}/acknowledge`); load(0) }
+  const resolve = async (id) => { await api.post(`/api/alerts/${id}/resolve`); load(0) }
+
+  if (error && !alerts.length) return <ErrorState message={error} />
+  if (loading) return <Loading />
 
   return (
     <div className="panel">
+      {error && <div className="panel-body" style={{ color: 'var(--danger)' }}>{error}</div>}
       <table>
         <thead><tr><th>Severity</th><th>Message</th><th>Acknowledged</th><th></th></tr></thead>
         <tbody>
@@ -37,6 +60,13 @@ export default function Alerts() {
           {alerts.length === 0 && <tr><td colSpan={4} className="empty-state">No active alerts. All clear.</td></tr>}
         </tbody>
       </table>
+      {hasMore && (
+        <div className="panel-body" style={{ textAlign: 'center', borderTop: '1px solid var(--border)' }}>
+          <button className="btn secondary" onClick={() => load(offset)} disabled={loadingMore}>
+            {loadingMore ? 'Loading more…' : 'Load more alerts'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
