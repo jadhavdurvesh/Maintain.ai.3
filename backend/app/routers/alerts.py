@@ -22,6 +22,8 @@ router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 @router.get("", response_model=List[schemas.AlertOut])
 def list_alerts(
     active_only: bool = True,
+    limit: int = 50,
+    offset: int = 0,
     current: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -34,7 +36,9 @@ def list_alerts(
         q = q.join(models.UserMachineAssignment, models.UserMachineAssignment.machine_id == models.Alert.machine_id).filter(models.UserMachineAssignment.user_id == current.id)
     if active_only:
         q = q.filter(models.Alert.resolved == False)  # noqa: E712
-    return q.order_by(models.Alert.created_at.desc()).all()
+    limit = max(1, min(int(limit), 100))
+    offset = max(0, int(offset))
+    return q.order_by(models.Alert.created_at.desc(), models.Alert.id.desc()).offset(offset).limit(limit).all()
 
 
 @router.post("/{alert_id}/acknowledge", response_model=schemas.AlertOut)
