@@ -3,8 +3,26 @@ const ML_BASE_URL = import.meta.env.VITE_ML_SERVICE_URL || 'https://maintain-ai-
 const TOKEN_KEY = 'maintain-ai-token'
 export function getToken() { return localStorage.getItem(TOKEN_KEY) }
 export function setToken(token) { if (token) localStorage.setItem(TOKEN_KEY, token); else localStorage.removeItem(TOKEN_KEY) }
-const GET_CACHE_TTL_MS = 15000, getCache = new Map(), getInFlight = new Map()
-export function clearApiCache(prefix = '') { for (const key of getCache.keys()) if (!prefix || key.startsWith(prefix)) getCache.delete(key) }
+const GET_CACHE_TTL_MS = 60000
+const getCache = new Map()
+const getInFlight = new Map()
+const getSubscribers = new Map()
+
+export function clearApiCache(prefix = '') {
+  for (const key of getCache.keys()) if (!prefix || key.startsWith(prefix)) getCache.delete(key)
+}
+
+export function subscribeApiCache(path, fn) {
+  if (!getSubscribers.has(path)) getSubscribers.set(path, new Set())
+  getSubscribers.get(path).add(fn)
+  return () => getSubscribers.get(path)?.delete(fn)
+}
+
+function publishApiCache(path, data) {
+  for (const fn of getSubscribers.get(path) || []) {
+    try { fn(data) } catch {}
+  }
+}
 let unauthorizedHandler = null; export function onUnauthorized(fn) { unauthorizedHandler = fn }
 let desktopBasePromise
 async function getApiBaseUrl() { if (typeof window !== 'undefined' && window.maintainAI) { desktopBasePromise ||= window.maintainAI.backendUrl(); return desktopBasePromise } return BASE_URL }
@@ -67,14 +85,22 @@ async function runRemoteChronosForecast(path, base, headers, signal) {
 
 async function request(path, options = {}) {
   const method = (options.method || 'GET').toUpperCase()
+  const bypassCache = options.cache === 'no-store'
   const isGet = method === 'GET'
   const executionRequest = isGet && isExecutionRequest(path)
   const isRemoteForecast = isGet && path.startsWith('/api/analytics/machines/') && path.includes('/forecast?') && new URLSearchParams(path.split('?')[1] || '').get('model') === 'chronos2'
-  const cacheableGet = isGet && !executionRequest
+  const cacheableGet = isGet && !executionRequest && !bypassCache
   const now = Date.now()
   if (cacheableGet) {
-    const c = getCache.get(path); if (c && now - c.time < GET_CACHE_TTL_MS) return c.data
-    const p = getInFlight.get(path); if (p) return p
+    const c = getCache.get(path)
+    const p = getInFlight.get(path)
+    if (c) {
+      // Show the last known value immediately, but NEVER trust it as final.
+      // A background request always revalidates it.
+      if (!p) request(path, { ...options, cache: 'no-store' }).catch(() => {})
+      return c.data
+    }
+    if (p) return p
   }
   const token = getToken()
   const headers = { 'Content-Type':'application/json', 'X-Maintain-Application':'engineering', ...(options.headers || {}) }
@@ -109,4 +135,10 @@ async function request(path, options = {}) {
   try { const data = await fp; if (cacheableGet) getCache.set(path, { time:Date.now(), data }); return data }
   finally { if (cacheableGet && getInFlight.get(path) === fp) getInFlight.delete(path) }
 }
-export const api = { get:p=>request(p), post:(p,b)=>request(p,{method:'POST',body:JSON.stringify(b)}), patch:(p,b)=>request(p,{method:'PATCH',body:JSON.stringify(b)}), put:(p,b)=>request(p,{method:'PUT',body:JSON.stringify(b)}), del:p=>request(p,{method:'DELETE'}) }; export default api
+export const api = {
+  get: (p, options = {}) => request(p, options),
+  post: async (p,b) => { const r = await request(p,{method:'POST',body:JSON.stringify(b),cache:'no-store'}); clearApiCache(); return r },
+  patch: async (p,b) => { const r = await request(p,{method:'PATCH',body:JSON.stringify(b),cache:'no-store'}); clearApiCache(); return r },
+  put: async (p,b) => { const r = await request(p,{method:'PUT',body:JSON.stringify(b),cache:'no-store'}); clearApiCache(); return r },
+  del: async p => { const r = await request(p,{method:'DELETE',cache:'no-store'}); clearApiCache(); return r },
+}; export default api
