@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Activity, BrainCircuit, CheckCircle2, Clock3, Gauge, History, Loader2, Play, RefreshCw, Target, TrendingDown, TrendingUp, Zap } from 'lucide-react'
+import { Activity, BrainCircuit, CheckCircle2, Clock3, Gauge, History, Loader2, Play, Plus, RefreshCw, Target, TrendingDown, TrendingUp, Zap } from 'lucide-react'
 import api from '../api/client.js'
 import { formatDateTime } from '../utils/dates.js'
 import { usePageHeader } from '../PageHeaderContext.jsx'
 import './ModelLabConsoleStable.css'
+import { clearPredictionTask, getPredictionTask, startPredictionTask, subscribePredictionTasks } from '../api/predictionTask.js'
 
 const WINDOWS = ['24h', '48h', '7d', '30d']
 const WINDOW_LABELS = { '24h': '24 hours', '48h': '48 hours', '7d': '7 days', '30d': '30 days' }
@@ -93,6 +94,7 @@ export default function ModelLabConsoleStable() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [feedback, setFeedback] = useState(null)
+  const [taskVersion, setTaskVersion] = useState(0)
   const requestSeq = useRef(0)
 
   const machines = lab?.fleet?.machines || []
@@ -108,6 +110,10 @@ export default function ModelLabConsoleStable() {
   const total = baseline != null && last != null ? last - baseline : null
   const trend = total == null || Math.abs(total) < 1e-6 ? 'Stable' : total > 0 ? 'Increasing' : 'Decreasing'
   const recentHistory = history.filter(r => r.available).slice(0, 12)
+  const taskKey = machineId ? `${machineId}::${signal}::${model}::${horizon}` : null
+  const predictionTask = taskKey ? getPredictionTask(taskKey) : null
+  const taskBusy = predictionTask?.status === 'running'
+  const taskResult = predictionTask?.status === 'completed' ? predictionTask.result : null
 
   const load = useCallback(async ({ restore = false } = {}) => {
     const seq = ++requestSeq.current
@@ -149,6 +155,25 @@ export default function ModelLabConsoleStable() {
     }
   }, [machineId, signal, model, horizon, activeWindow])
 
+  useEffect(() => subscribePredictionTasks(() => setTaskVersion(v => v + 1)), [])
+  useEffect(() => {
+    if (!taskKey) return
+    const task = getPredictionTask(taskKey)
+    if (!task) return
+    if (task.status === 'running') {
+      setBusy(true)
+      setFeedback({ tone: 'neutral', text: 'Prediction is still running on the ML service. You can leave this page; it will continue in the background.' })
+    } else if (task.status === 'completed' && task.result?.available) {
+      setLatest(task.result)
+      setActiveWindow('short')
+      setBusy(false)
+      setFeedback({ tone: 'healthy', text: `Prediction completed · ${horizon} steps · ${formatDateTime(task.result.created_at)}` })
+      void load({ restore: false })
+    } else if (task.status === 'failed') {
+      setBusy(false)
+      setError(task.error || 'Prediction request failed.')
+    }
+  }, [taskKey, taskVersion, horizon, load])
   useEffect(() => { load({ restore: true }) }, [load])
   useEffect(() => {
     const timer = window.setInterval(() => load({ restore: false }), 30000)
@@ -166,26 +191,30 @@ export default function ModelLabConsoleStable() {
   }
 
   const run = async () => {
-    if (busy) return
+    if (busy || taskBusy) return
     if (!canRun) {
       setFeedback({ tone: 'warning', text: `Need ${Math.max(0, minimum - samples)} more telemetry samples before this model can run.` })
       return
     }
-    setBusy(true); setError(null); setFeedback(null)
+    setBusy(true); setError(null); setFeedback({ tone: 'neutral', text: 'Prediction started. It will continue even if you leave Model Lab.' })
     try {
-      const result = await api.get(`/api/predictions/machines/${machineId}/forecast?reading_type=${encodeURIComponent(signal)}&model=${encodeURIComponent(model)}&horizon=${horizon}`)
-      if (!result?.available) {
-        setFeedback({ tone: 'warning', text: result?.reason || 'Prediction was not generated.' })
-        return
-      }
-      setActiveWindow('short')
-      setLatest(result)
-      setFeedback({ tone: 'healthy', text: `Prediction saved · ${horizon} steps · ${formatDateTime(result.created_at)}` })
-      // Refresh history/status in the background without replacing the displayed result.
-      await load({ restore: false })
+      await startPredictionTask({
+        key: taskKey,
+        run: () => api.get(`/api/predictions/machines/${machineId}/forecast?reading_type=${encodeURIComponent(signal)}&model=${encodeURIComponent(model)}&horizon=${horizon}`, { cache: 'no-store' }),
+      })
     } catch (e) {
       setError(e?.message || 'Prediction request failed.')
-    } finally { setBusy(false) }
+      setBusy(false)
+    }
+  }
+
+  const startNewPrediction = () => {
+    if (taskBusy) return
+    clearPredictionTask(taskKey)
+    setLatest(null)
+    setActiveWindow('short')
+    setFeedback({ tone: 'neutral', text: 'Ready for a new prediction. Previous predictions remain saved in history.' })
+    setError(null)
   }
 
   const openWindow = name => {
@@ -226,7 +255,7 @@ export default function ModelLabConsoleStable() {
         <div className="ml-action-row">
           <Field label="Short horizon" value={String(horizon)} onChange={v => changeSelection('horizon', v)} hint="Restored when you return to the same selection.">{[6, 12, 24, 48].map(v => <option key={v} value={v}>{v} steps</option>)}</Field>
           <div className={`ml-readiness ${canRun ? 'ready' : ''}`}><Zap size={16} /><div><strong>{samples} / {minimum} samples ready</strong><small>{canRun ? 'Model is ready to run' : `Waiting for ${Math.max(0, minimum - samples)} more samples`}</small></div></div>
-          <button className="btn primary ml-run" type="button" onClick={run} disabled={busy}>{busy ? <><Loader2 size={15} /> Running…</> : <><Play size={15} /> Run prediction</>}</button>
+          <button className="btn primary ml-run" type="button" onClick={run} disabled={busy || taskBusy}>{busy || taskBusy ? <><Loader2 size={15} /> Running…</> : <><Play size={15} /> Run prediction</>}</button>
         </div>
         {feedback && <div className={`ml-feedback ${feedback.tone}`}><CheckCircle2 size={14} />{feedback.text}</div>}
         {error && <div className="ml-error">{error}</div>}
