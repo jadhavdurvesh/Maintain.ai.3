@@ -513,7 +513,7 @@ def enable_device(machine_id: int, current: CurrentUser = Depends(get_current_us
     return DeviceStatusOut(iot_enabled=True, has_key=True, device_key=machine.device_key)
 
 
-@router.get("/{machine_id}/key", response_model=DeviceStatusOut)
+@router.post("/{machine_id}/key", response_model=DeviceStatusOut)
 def view_device_key(machine_id: int, payload: KeyConfirmation, current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     _require_understand(payload)
     machine = _get_scoped_machine(db, machine_id, current, admin_only=True)
