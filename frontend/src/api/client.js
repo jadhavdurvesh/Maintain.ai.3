@@ -89,7 +89,8 @@ async function request(path, options = {}) {
   const isGet = method === 'GET'
   const executionRequest = isGet && isExecutionRequest(path)
   const isRemoteForecast = isGet && path.startsWith('/api/analytics/machines/') && path.includes('/forecast?') && new URLSearchParams(path.split('?')[1] || '').get('model') === 'chronos2'
-  const cacheableGet = isGet && !executionRequest && !bypassCache
+  const explicitlyFresh = /(?:\?|&)ts=/.test(path)
+  const cacheableGet = isGet && !executionRequest && !bypassCache && !explicitlyFresh
   const now = Date.now()
   if (cacheableGet) {
     const c = getCache.get(path)
