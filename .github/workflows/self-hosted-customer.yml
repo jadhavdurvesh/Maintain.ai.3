@@ -188,6 +188,25 @@ jobs:
           EOF
           chmod +x customer-package/start.sh
 
+          cat > customer-package/INSTALLATION.md <<'EOF'
+          # One-click installation
+
+          On Windows, extract the package and run:
+          .\Install-MAINTAIN-AI.ps1
+
+          The installer can install Docker Desktop through winget, start Docker Desktop,
+          build the MAINTAIN AI containers, wait for the local API, and open the application.
+
+          After installation:
+          - Start: .\start.ps1
+          - Stop: .\stop.ps1
+          - Uninstall application containers while retaining database data: .\uninstall-MAINTAIN-AI.ps1
+
+          Do not use "docker compose down -v" unless you intentionally want to delete the database volume.
+          EOF
+
+          chmod +x customer-package/start.sh
+
           cat > customer-package/stop.sh <<'EOF'
           #!/usr/bin/env bash
           set -euo pipefail
@@ -197,9 +216,73 @@ jobs:
           chmod +x customer-package/stop.sh
 
           cat > customer-package/start.ps1 <<'EOF'
+          $ErrorActionPreference = "Stop"
           Set-Location $PSScriptRoot
+          docker compose up -d
+          if ($LASTEXITCODE -ne 0) { throw "MAINTAIN AI failed to start. Run docker compose logs." }
+          Start-Process "http://localhost:8080"
+          Write-Host "MAINTAIN AI: http://localhost:8080" -ForegroundColor Green
+          EOF
+
+          cat > customer-package/Install-MAINTAIN-AI.ps1 <<'EOF'
+          $ErrorActionPreference = "Stop"
+          Set-Location $PSScriptRoot
+
+          Write-Host "MAINTAIN AI Self-Hosted Installer" -ForegroundColor Cyan
+
+          if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+            if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+              throw "Docker is required. Install Docker Desktop manually, then run this installer again."
+            }
+            $answer = Read-Host "Docker Desktop is not installed. Install it with winget? (Y/N)"
+            if ($answer -notmatch "^[Yy]$") { throw "Docker Desktop is required." }
+            winget install --id Docker.DockerDesktop --exact --accept-package-agreements --accept-source-agreements
+            if ($LASTEXITCODE -ne 0) { throw "Docker Desktop installation failed." }
+            Write-Host "Docker Desktop installed. If Windows requests a restart, restart and run this installer again." -ForegroundColor Yellow
+          }
+
+          $dockerDesktop = "$env:ProgramFilesDockerDockerDocker Desktop.exe"
+          if (Test-Path $dockerDesktop) { Start-Process $dockerDesktop }
+
+          Write-Host "Waiting for Docker..." -ForegroundColor Cyan
+          $ready = $false
+          for ($i = 0; $i -lt 60; $i++) {
+            try {
+              docker info *> $null
+              if ($LASTEXITCODE -eq 0) { $ready = $true; break }
+            } catch {}
+            Start-Sleep -Seconds 2
+          }
+          if (-not $ready) { throw "Docker Desktop is not ready. Open Docker Desktop, wait for it to finish starting, then run this installer again." }
+
+          Write-Host "Building and starting MAINTAIN AI..." -ForegroundColor Cyan
           docker compose up -d --build
-          Write-Host "MAINTAIN AI: http://localhost:8080"
+          if ($LASTEXITCODE -ne 0) { throw "MAINTAIN AI failed to start. Run: docker compose logs" }
+
+          Write-Host "Waiting for MAINTAIN AI..." -ForegroundColor Cyan
+          $ready = $false
+          for ($i = 0; $i -lt 60; $i++) {
+            try {
+              $r = Invoke-WebRequest -UseBasicParsing -Uri "http://localhost:8080/api/auth/status" -TimeoutSec 3
+              if ($r.StatusCode -eq 200) { $ready = $true; break }
+            } catch {}
+            Start-Sleep -Seconds 2
+          }
+          if (-not $ready) { throw "MAINTAIN AI did not answer yet. Run: docker compose ps ; docker compose logs" }
+
+          Write-Host "MAINTAIN AI is ready at http://localhost:8080" -ForegroundColor Green
+          Start-Process "http://localhost:8080"
+          EOF
+
+          cat > customer-package/uninstall-MAINTAIN-AI.ps1 <<'EOF'
+          $ErrorActionPreference = "Stop"
+          Set-Location $PSScriptRoot
+          Write-Host "This stops MAINTAIN AI but keeps PostgreSQL data." -ForegroundColor Yellow
+          $answer = Read-Host "Type UNINSTALL to continue"
+          if ($answer -eq "UNINSTALL") {
+            docker compose down
+            Write-Host "Stopped. Database data was retained." -ForegroundColor Green
+          }
           EOF
 
           cat > customer-package/stop.ps1 <<'EOF'
