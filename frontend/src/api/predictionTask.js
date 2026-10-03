@@ -1,24 +1,25 @@
+const tasks = new Map()
 const listeners = new Set()
-let activeTask = null
 
 function notify() {
   for (const listener of listeners) {
-    try { listener(activeTask) } catch {}
+    try { listener() } catch {}
   }
 }
 
-export function subscribePredictionTask(listener) {
+export function subscribePredictionTasks(listener) {
   listeners.add(listener)
-  listener(activeTask)
+  listener()
   return () => listeners.delete(listener)
 }
 
-export function getPredictionTask() {
-  return activeTask
+export function getPredictionTask(key) {
+  return tasks.get(key) || null
 }
 
 export function startPredictionTask({ key, run }) {
-  if (activeTask?.status === 'running' && activeTask.key === key) return activeTask.promise
+  const existing = tasks.get(key)
+  if (existing?.status === 'running') return existing.promise
 
   const task = {
     key,
@@ -26,21 +27,22 @@ export function startPredictionTask({ key, run }) {
     startedAt: Date.now(),
     result: null,
     error: null,
+    promise: null,
   }
-  activeTask = task
+  tasks.set(key, task)
   notify()
 
   task.promise = Promise.resolve()
     .then(run)
     .then(result => {
-      if (activeTask !== task) return result
+      if (tasks.get(key) !== task) return result
       task.status = result?.available ? 'completed' : 'failed'
       task.result = result
       notify()
       return result
     })
     .catch(error => {
-      if (activeTask === task) {
+      if (tasks.get(key) === task) {
         task.status = 'failed'
         task.error = error?.message || 'Prediction request failed.'
         notify()
@@ -52,7 +54,5 @@ export function startPredictionTask({ key, run }) {
 }
 
 export function clearPredictionTask(key) {
-  if (!activeTask || (key && activeTask.key !== key)) return
-  activeTask = null
-  notify()
+  if (tasks.delete(key)) notify()
 }
