@@ -6,6 +6,7 @@ import StatusBadge from '../components/StatusBadge.jsx'
 import { Loading, ErrorState } from './Dashboard.jsx'
 import { usePageHeader } from '../PageHeaderContext.jsx'
 import { useAuth } from '../AuthContext.jsx'
+import MachinePerformanceCard from '../components/MachinePerformanceCard.jsx'
 
 export default function MachineDetail() {
   const { id } = useParams()
@@ -298,6 +299,8 @@ export default function MachineDetail() {
         <div className="stat-tile"><div className="stat-label">CRITICALITY</div><div className="stat-value">{machine.criticality}</div></div>
         <div className="stat-tile"><div className="stat-label">NEXT MAINTENANCE</div><div className="stat-value" style={{ fontSize: 15 }}>{machine.next_maintenance_date ? formatDate(machine.next_maintenance_date) : '—'}</div></div>
       </div>
+
+      <MachinePerformanceCard machineId={id} canEdit={canEdit} />
 
       <div className="panel section-gap">
         <div className="panel-header">
