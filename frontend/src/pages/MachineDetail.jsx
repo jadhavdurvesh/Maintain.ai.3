@@ -300,8 +300,6 @@ export default function MachineDetail() {
         <div className="stat-tile"><div className="stat-label">NEXT MAINTENANCE</div><div className="stat-value" style={{ fontSize: 15 }}>{machine.next_maintenance_date ? formatDate(machine.next_maintenance_date) : '—'}</div></div>
       </div>
 
-      <MachinePerformanceCard machineId={id} canEdit={canEdit} />
-
       <div className="panel section-gap">
         <div className="panel-header">
           <div>
@@ -553,6 +551,8 @@ export default function MachineDetail() {
           </div>
         </div>
       </div>
+
+      <MachinePerformanceCard machineId={id} canEdit={canEdit} />
 
       <div className="grid-2 section-gap">
         <div className="panel">
