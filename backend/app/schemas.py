@@ -41,6 +41,31 @@ class MachineUpdate(BaseModel):
     status: Optional[str] = None
 
 
+class MachinePerformanceProfileIn(BaseModel):
+    started_on: Optional[datetime] = None
+    rated_capacity: Optional[float] = None
+    capacity_unit: Optional[str] = None
+    oee_target: Optional[float] = None
+
+class MachinePerformanceProfileOut(MachinePerformanceProfileIn):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    machine_id: int
+
+class MachinePerformanceMonthIn(BaseModel):
+    month: str
+    planned_hours: Optional[float] = None
+    manual_runtime_hours: Optional[float] = None
+    total_units: Optional[int] = None
+    good_units: Optional[int] = None
+    rejected_units: Optional[int] = None
+    ideal_cycle_seconds: Optional[float] = None
+
+class MachinePerformanceMonthOut(MachinePerformanceMonthIn):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    machine_id: int
+
 class MachineOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
