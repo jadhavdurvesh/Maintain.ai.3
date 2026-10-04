@@ -31,6 +31,7 @@ def _initialize_database():
         ensure_component_sensor_schema()
         ensure_legacy_application_access_schema()
         ensure_safety_policy_schema()
+        ensure_machine_performance_schema()
         ensure_bootstrap_organization()
     except Exception:
         pass
@@ -116,6 +117,30 @@ def ensure_maintenance_work_order_schema():
         connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_maintenance_source_work_order ON maintenance_records(source_work_order_id)"))
     Base.metadata.create_all(bind=engine)
 
+
+def ensure_machine_performance_schema():
+    try:
+        inspector = inspect(engine)
+        if not inspector.has_table("machine_performance_months"):
+            Base.metadata.create_all(bind=engine)
+            return
+        columns = {column["name"] for column in inspector.get_columns("machine_performance_months")}
+        additions = {
+            "manual_current_working_hours": "FLOAT",
+            "manual_mtbf_hours": "FLOAT",
+            "manual_mttr_minutes": "FLOAT",
+            "manual_availability_percent": "FLOAT",
+            "manual_performance_percent": "FLOAT",
+            "manual_quality_percent": "FLOAT",
+            "manual_oee_percent": "FLOAT",
+        }
+        with engine.begin() as connection:
+            for column, sql_type in additions.items():
+                if column not in columns:
+                    connection.execute(text(f"ALTER TABLE machine_performance_months ADD COLUMN {column} {sql_type}"))
+    except Exception:
+        pass
+    Base.metadata.create_all(bind=engine)
 
 def ensure_lab_ml_schema():
     try:
