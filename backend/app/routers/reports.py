@@ -14,6 +14,7 @@ from ..database import get_db
 from ..deps import get_current_user, CurrentUser
 from ..exports.pdf_report import build_pdf_report
 from ..exports.excel_report import build_excel_report
+from ..ml.forecast_runs import MLForecastRun
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -326,6 +327,118 @@ def export_ai_pdf(db: Session = Depends(get_db), current: CurrentUser = Depends(
     pdf = build_gemini_pdf_report(db, facts, ai)
     filename = f"maintain_ai_ai_report_{datetime.utcnow().date()}.pdf"
     return StreamingResponse(iter([pdf]), media_type="application/pdf", headers={"Content-Disposition":f"attachment; filename={filename}"})
+@router.get("/export/prediction-pdf")
+def export_prediction_pdf(
+    machine_id: int,
+    reading_type: str = "temperature",
+    model: str = "chronos-bolt-tiny",
+    horizon: int = 12,
+    run_id: int | None = None,
+    db: Session = Depends(get_db),
+    current: CurrentUser = Depends(get_current_user),
+):
+    """Export one saved Model Lab prediction with its observed-vs-forecast chart."""
+    machines = _machine_map(db, current)
+    machine = machines.get(machine_id)
+    if not machine:
+        raise HTTPException(404, "machine not found")
+
+    query = db.query(MLForecastRun).filter(
+        MLForecastRun.machine_id == machine_id,
+        MLForecastRun.reading_type == reading_type,
+        MLForecastRun.model == model,
+        MLForecastRun.status == "completed",
+    )
+    if run_id is not None:
+        query = query.filter(MLForecastRun.id == run_id)
+    else:
+        query = query.filter(MLForecastRun.horizon == horizon).order_by(MLForecastRun.created_at.desc())
+    run = query.first()
+    if not run:
+        raise HTTPException(404, "no saved prediction found for this selection")
+
+    try:
+        forecast = [float(v) for v in json.loads(run.forecast_json or "[]") if v is not None]
+    except (TypeError, ValueError):
+        forecast = []
+    if not forecast:
+        raise HTTPException(404, "saved prediction has no forecast values")
+
+    observed_rows = (
+        db.query(models.SensorReading)
+        .filter_by(machine_id=machine_id, reading_type=reading_type)
+        .order_by(models.SensorReading.recorded_at.desc(), models.SensorReading.id.desc())
+        .limit(32)
+        .all()
+    )
+    observed = [float(r.value) for r in reversed(observed_rows)]
+
+    from reportlab.graphics.shapes import Drawing, Line, PolyLine, String
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+    values = observed + forecast
+    vmin, vmax = min(values), max(values)
+    vrange = vmax - vmin or 1.0
+    width, height = 520, 240
+    pad_x, pad_y = 35, 28
+    chart = Drawing(width, height)
+    chart.add(Line(pad_x, pad_y, width - 10, pad_y, strokeColor=colors.HexColor("#b8c0cc")))
+    chart.add(Line(pad_x, pad_y, pad_x, height - 18, strokeColor=colors.HexColor("#b8c0cc")))
+
+    def point(index, value):
+        x = pad_x + (index / max(len(values) - 1, 1)) * (width - pad_x - 10)
+        y = pad_y + ((value - vmin) / vrange) * (height - pad_y - 28)
+        return x, y
+
+    if len(observed) > 1:
+        points = [coord for i, value in enumerate(observed) for coord in point(i, value)]
+        chart.add(PolyLine(points, strokeColor=colors.HexColor("#4c8dff"), strokeWidth=2.2))
+    forecast_points = []
+    if observed:
+        forecast_points.extend(point(len(observed) - 1, observed[-1]))
+    for i, value in enumerate(forecast):
+        forecast_points.extend(point(len(observed) + i, value))
+    chart.add(PolyLine(forecast_points, strokeColor=colors.HexColor("#f0a23a"), strokeWidth=2.2, strokeDashArray=[6, 4]))
+    chart.add(String(pad_x, height - 12, "Observed telemetry", fontSize=8, fillColor=colors.HexColor("#4c8dff")))
+    chart.add(String(width - 105, height - 12, "Forecast", fontSize=8, fillColor=colors.HexColor("#f0a23a")))
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=16 * mm, bottomMargin=16 * mm, leftMargin=16 * mm, rightMargin=16 * mm)
+    styles = getSampleStyleSheet()
+    title = ParagraphStyle("PredictionTitle", parent=styles["Title"], textColor=colors.HexColor("#4c8dff"))
+    h2 = ParagraphStyle("PredictionH2", parent=styles["Heading2"], spaceBefore=12, spaceAfter=6)
+    story = [
+        Paragraph("MAINTAIN AI", title),
+        Paragraph("Saved Prediction Report", styles["Heading2"]),
+        Paragraph(f"Generated {datetime.utcnow().strftime('%d %b %Y, %H:%M UTC')}", styles["Normal"]),
+        Spacer(1, 8),
+    ]
+    meta = [
+        ["Machine", machine.name], ["Machine Code", machine.machine_code],
+        ["Signal", reading_type], ["Model", run.model], ["Horizon", str(run.horizon)],
+        ["Prediction Time", run.created_at.strftime("%d %b %Y, %H:%M UTC") if run.created_at else "—"],
+        ["Input Samples", str(run.input_reading_count)], ["Trend", run.trend or "—"],
+        ["Next Prediction", str(run.next_prediction if run.next_prediction is not None else "—")],
+        ["End Prediction", str(run.end_prediction if run.end_prediction is not None else "—")],
+    ]
+    story.append(_table([["Field", "Value"]] + meta, [45 * mm, 115 * mm]))
+    story.append(Paragraph("Observed vs Forecast", h2))
+    story.append(chart)
+    story.append(Paragraph("Forecast Values", h2))
+    value_rows = [["Step", "Predicted Value"]]
+    value_rows.extend([[f"t+{i + 1}", f"{value:.4f}"] for i, value in enumerate(forecast)])
+    story.append(_table(value_rows, [45 * mm, 115 * mm]))
+    story.append(Spacer(1, 8))
+    story.append(Paragraph("Evidence note: observed values are recent telemetry stored by MAINTAIN AI; forecast values are the saved output of the selected model run. This report does not replace technician verification or safety procedures.", styles["Normal"]))
+    doc.build(story)
+    buffer.seek(0)
+    filename = f"maintain_ai_prediction_{machine.machine_code}_{reading_type}_{run.id}.pdf"
+    return StreamingResponse(iter([buffer.getvalue()]), media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename={filename}"})
+
 @router.get("/export/{dataset}.csv")
 def export_dataset_csv(dataset: str, db: Session = Depends(get_db), current: CurrentUser = Depends(get_current_user)):
     allowed = {"machines","workorders","maintenance","faults","alerts","sensor_readings","components","safety","safety_events","spare_parts","notifications"}
