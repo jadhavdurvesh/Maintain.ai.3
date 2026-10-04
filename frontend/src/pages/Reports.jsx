@@ -14,6 +14,7 @@ export default function Reports() {
   const [training, setTraining] = useState(false)
   const [trainResult, setTrainResult] = useState(null)
   const [error, setError] = useState(null)
+  const [performanceExport, setPerformanceExport] = useState({ start: '', end: '', open: false })
 
   const downloadExport = async (format) => {
     try {
@@ -68,11 +69,27 @@ export default function Reports() {
     ['safety_events', 'Safety Events'], ['machine_performance', 'Machine Performance'], ['spare_parts', 'Spare Parts'], ['notifications', 'Notifications'],
   ]
 
+  const downloadMachinePerformancePdf = async () => {
+    const params = new URLSearchParams({ machine_id: performanceExport.machineId, month: performanceExport.month })
+    try { await downloadBinary(`/api/reports/export/machine-performance-pdf?${params.toString()}`, `machine_performance_${performanceExport.machineId}_${performanceExport.month}.pdf`) } catch (e) { alert(`Export failed: ${e.message}`) }
+  }
+
+  const downloadBinary = async (path, fallback) => {
+    const token = getToken()
+    const response = await fetch(`${API_BASE}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+    if (!response.ok) throw new Error(await response.text())
+    const blob = await response.blob()
+    const disposition = response.headers.get('content-disposition') || ''
+    const match = disposition.match(/filename="?([^\"]+)"?/i)
+    const url = window.URL.createObjectURL(blob); const link = document.createElement('a'); link.href=url; link.download=match?.[1] || fallback; document.body.appendChild(link); link.click(); link.remove(); window.URL.revokeObjectURL(url)
+  }
+
   const downloadDataset = async (dataset) => {
     if (dataset === 'all') return downloadExport('all')
     try {
       const token = getToken()
-      const response = await fetch(`${API_BASE}/api/reports/export/${dataset}.csv`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      const range = dataset === 'machine_performance' && performanceExport.start && performanceExport.end ? `?start_month=${performanceExport.start}&end_month=${performanceExport.end}` : ''
+      const response = await fetch(`${API_BASE}/api/reports/export/${dataset}.csv${range}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
       if (!response.ok) throw new Error(await response.text())
       const blob = await response.blob()
       const disposition = response.headers.get('content-disposition') || ''
@@ -148,8 +165,14 @@ export default function Reports() {
             Export individual operational datasets or download a complete archive. Historical records are exported; nothing is deleted or changed.
           </p>
           <div className="chip-row">
-            {exportDatasets.map(([key, label]) => <button key={key} className={key === 'all' ? 'btn' : 'btn secondary'} onClick={() => downloadDataset(key)}>{label}</button>)}
+            {exportDatasets.map(([key, label]) => <button key={key} className={key === 'all' ? 'btn' : 'btn secondary'} onClick={() => key === 'machine_performance' ? setPerformanceExport(p => ({...p, open:true})) : downloadDataset(key)}>{label}</button>)}
           </div>
+          {performanceExport.open && <div style={{marginTop:14,padding:14,border:'1px solid var(--border)',borderRadius:10}}>
+            <div style={{fontWeight:700,marginBottom:8}}>Machine Performance CSV Range</div>
+            <div style={{fontSize:12,color:'var(--text-dim)',marginBottom:10}}>Choose the month range to include. All saved monthly performance records inside the range will be exported.</div>
+            <div className="grid-2"><div className="field"><label>From</label><input type="month" value={performanceExport.start} onChange={e=>setPerformanceExport(p=>({...p,start:e.target.value}))}/></div><div className="field"><label>To</label><input type="month" value={performanceExport.end} onChange={e=>setPerformanceExport(p=>({...p,end:e.target.value}))}/></div></div>
+            <div className="chip-row"><button className="btn" disabled={!performanceExport.start||!performanceExport.end} onClick={()=>{downloadDataset('machine_performance');setPerformanceExport(p=>({...p,open:false}))}}>Export CSV Range</button><button className="btn secondary" onClick={()=>setPerformanceExport(p=>({...p,open:false}))}>Cancel</button></div>
+          </div>}
         </div>
       </div>
 
