@@ -127,16 +127,20 @@ export default function ModelLabConsoleStable() {
       if (!id) return
       if (!machineId) { setMachineId(id); return }
 
-      const [s, h, readings, w] = await Promise.all([
+      const [s, h, exactHistory, readings, w] = await Promise.all([
         api.get(`/api/predictions/machines/${id}/status?reading_type=${encodeURIComponent(signal)}&model=${encodeURIComponent(model)}&horizon=${horizon}`),
         api.get(`/api/predictions/machines/${id}/history?reading_type=${encodeURIComponent(signal)}&model=${encodeURIComponent(model)}&limit=100`),
+        api.get(`/api/predictions/machines/${id}/history?reading_type=${encodeURIComponent(signal)}&model=${encodeURIComponent(model)}&horizon=${horizon}&limit=100`),
         api.get(`/api/machines/${id}/readings?limit=64`),
         api.get(`/api/predictions/machines/${id}/windows?reading_type=${encodeURIComponent(signal)}&model=${encodeURIComponent(model)}`),
       ])
       if (seq !== requestSeq.current) return
 
       const runs = Array.isArray(h?.runs) ? h.runs.map(normalizeRun).filter(r => r?.available) : []
-      const exact = runs.find(r => !r.forecast_window && Number(r.horizon) === Number(horizon))
+      const exactRuns = Array.isArray(exactHistory?.runs)
+        ? exactHistory.runs.map(normalizeRun).filter(r => r?.available && r.forecast_window == null && Number(r.horizon) === Number(horizon))
+        : []
+      const exact = exactRuns[0] || runs.find(r => r.forecast_window == null && Number(r.horizon) === Number(horizon)) || null
       const selectedSaved = activeWindow !== 'short' ? w?.windows?.[activeWindow] : null
       setStatus({ ...s, latest_run: normalizeRun(s?.latest_run) })
       setHistory(runs)
