@@ -65,7 +65,7 @@ export default function Reports() {
   const exportDatasets = [
     ['all', 'Everything (ZIP)'], ['workorders', 'Work Orders'], ['maintenance', 'Maintenance'], ['faults', 'Faults'], ['alerts', 'Alerts'],
     ['sensor_readings', 'Sensor Readings'], ['components', 'Components'], ['machines', 'Machines'], ['safety', 'Safety Settings'],
-    ['safety_events', 'Safety Events'], ['spare_parts', 'Spare Parts'], ['notifications', 'Notifications'],
+    ['safety_events', 'Safety Events'], ['machine_performance', 'Machine Performance'], ['spare_parts', 'Spare Parts'], ['notifications', 'Notifications'],
   ]
 
   const downloadDataset = async (dataset) => {
