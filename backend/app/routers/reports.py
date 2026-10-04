@@ -213,6 +213,45 @@ def _export_dataset(db, dataset, current=None):
         return ["id","machine_id","machine_code","machine_name","name","description"], [
             [x.id,x.machine_id,machines.get(x.machine_id).machine_code if x.machine_id in machines else "",machines.get(x.machine_id).name if x.machine_id in machines else "",x.name,x.description] for x in rows
         ]
+    if dataset == "machine_performance":
+        from ..performance import period_bounds
+        profiles = {p.machine_id: p for p in db.query(models.MachinePerformanceProfile).all()}
+        monthly = db.query(models.MachinePerformanceMonth).filter(
+            models.MachinePerformanceMonth.machine_id.in_(machines.keys())
+        ).order_by(models.MachinePerformanceMonth.month.desc()).all()
+        rows = []
+        for item in monthly:
+            machine = machines.get(item.machine_id)
+            if not machine:
+                continue
+            profile = profiles.get(item.machine_id)
+            start, end = period_bounds(item.month)
+            try:
+                from .performance import _payload
+                data = _payload(machine, profile, item, item.month, db)
+            except Exception:
+                data = {}
+            rows.append([
+                item.id, machine.id, machine.machine_code, machine.name, item.month,
+                profile.started_on if profile else None,
+                profile.rated_capacity if profile else None,
+                profile.capacity_unit if profile else None,
+                data.get("current_working_hours"), data.get("period_working_hours"),
+                data.get("mtbf_hours"), data.get("mttr_minutes"),
+                data.get("availability_percent"), data.get("performance_percent"),
+                data.get("quality_percent"), data.get("oee_percent"),
+                profile.oee_target if profile else None,
+                item.planned_hours, item.manual_runtime_hours,
+                item.total_units, item.good_units, item.rejected_units,
+                item.ideal_cycle_seconds,
+            ])
+        return [
+            "record_id","machine_id","machine_code","machine_name","month","started_on",
+            "rated_capacity","capacity_unit","current_working_hours","period_working_hours",
+            "mtbf_hours","mttr_minutes","availability_percent","performance_percent",
+            "quality_percent","oee_percent","oee_target_percent","planned_hours",
+            "manual_runtime_hours","total_units","good_units","rejected_units","ideal_cycle_seconds"
+        ], rows
     if dataset == "safety":
         rows=db.query(models.MachineSafetyPolicy).filter(models.MachineSafetyPolicy.machine_id.in_(machines.keys())).all()
         return ["id","machine_id","machine_code","machine_name","enabled","monitored_reading_type","unit","warning_low","warning_high","shutdown_low","shutdown_high","auto_shutdown_enabled","updated_at","last_trip_at","last_trip_value","last_trip_reason"], [
