@@ -113,7 +113,8 @@ export default function ModelLabConsoleStable() {
   const taskKey = machineId ? `${machineId}::${signal}::${model}::${horizon}` : null
   const predictionTask = taskKey ? getPredictionTask(taskKey) : null
   const taskBusy = predictionTask?.status === 'running'
-  const savedExact = history.find(r => r?.available && !r.forecast_window && Number(r.horizon) === Number(horizon)) || null
+  const historyExact = history.find(r => r?.available && (r.forecast_window == null || r.forecast_window === 'short') && Number(r.horizon) === Number(horizon)) || null
+  const savedExact = historyExact || (status?.latest_run?.available && Number(status.latest_run.horizon) === Number(horizon) ? status.latest_run : null)
 
   const load = useCallback(async ({ restore = false } = {}) => {
     const seq = ++requestSeq.current
@@ -215,13 +216,13 @@ export default function ModelLabConsoleStable() {
   }
 
   const exportPrediction = async () => {
-    if (!latest?.id || !machineId) {
+    if (!latest?.run_id || !machineId) {
       setFeedback({ tone: 'warning', text: 'Run or select a saved prediction before exporting it.' })
       return
     }
     try {
       const token = localStorage.getItem('maintain-ai-token') || localStorage.getItem('access_token')
-      const params = new URLSearchParams({ machine_id: machineId, reading_type: signal, model, horizon: String(latest.horizon || horizon), run_id: String(latest.id) })
+      const params = new URLSearchParams({ machine_id: machineId, reading_type: signal, model, horizon: String(latest.horizon || horizon), run_id: String(latest.run_id) })
       const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/reports/export/prediction-pdf?${params.toString()}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
@@ -298,7 +299,7 @@ export default function ModelLabConsoleStable() {
     </section>
 
     <section className="panel ml-result">
-      <div className="panel-header"><div><span className="panel-title">Forecast result</span><div className="ml-subtitle">{activeWindow !== 'short' ? `${WINDOW_LABELS[activeWindow]} automatic forecast` : `${horizon} step saved prediction`} · {selectedLabel} · {signal}</div></div><Pill tone={latest?.available ? 'healthy' : 'neutral'}>{latest?.available ? 'Saved' : 'No forecast selected'}</Pill></div>
+      <div className="panel-header"><div><span className="panel-title">Forecast result</span><div className="ml-subtitle">{activeWindow !== 'short' ? `${WINDOW_LABELS[activeWindow]} automatic forecast` : `${horizon} step saved prediction`} · {selectedLabel} · {signal}</div></div><div style={{display:'flex',alignItems:'center',gap:8}}>{latest?.available && <button className="btn secondary" type="button" onClick={exportPrediction}>Export PDF + Chart</button>}<Pill tone={latest?.available ? 'healthy' : 'neutral'}>{latest?.available ? 'Saved' : 'No forecast selected'}</Pill></div></div>
       <div className="panel-body">
         {forecast.length ? <>
           <div className="ml-stats">
