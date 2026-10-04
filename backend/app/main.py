@@ -198,7 +198,7 @@ app.add_middleware(CORSMiddleware, allow_origins=_cors_origins, allow_methods=["
 
 app.include_router(auth.router)
 
-_ROUTER_NAMES = ("device_commands", "runtime", "machines", "maintenance", "work_orders", "alerts", "faults", "notifications", "spare_parts", "ai_assistant", "reports", "users", "settings", "audit_log", "analytics", "devices", "component_sensors", "component_telemetry")
+_ROUTER_NAMES = ("device_commands", "runtime", "machines", "performance", "maintenance", "work_orders", "alerts", "faults", "notifications", "spare_parts", "ai_assistant", "reports", "users", "settings", "audit_log", "analytics", "devices", "component_sensors", "component_telemetry")
 _ROUTER_LOAD_ERRORS = {}
 
 for _router_name in _ROUTER_NAMES:
