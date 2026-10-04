@@ -113,6 +113,7 @@ export default function ModelLabConsoleStable() {
   const taskKey = machineId ? `${machineId}::${signal}::${model}::${horizon}` : null
   const predictionTask = taskKey ? getPredictionTask(taskKey) : null
   const taskBusy = predictionTask?.status === 'running'
+  const savedExact = history.find(r => r?.available && !r.forecast_window && Number(r.horizon) === Number(horizon)) || null
 
   const load = useCallback(async ({ restore = false } = {}) => {
     const seq = ++requestSeq.current
@@ -191,6 +192,12 @@ export default function ModelLabConsoleStable() {
 
   const run = async () => {
     if (busy || taskBusy) return
+    if (savedExact) {
+      setLatest(savedExact)
+      setActiveWindow('short')
+      setFeedback({ tone: 'healthy', text: `Saved prediction loaded · ${formatDateTime(savedExact.created_at)}. No new model run was started.` })
+      return
+    }
     if (!canRun) {
       setFeedback({ tone: 'warning', text: `Need ${Math.max(0, minimum - samples)} more telemetry samples before this model can run.` })
       return
@@ -281,9 +288,9 @@ export default function ModelLabConsoleStable() {
           <Field label="Forecast model" value={model} onChange={v => changeSelection('model', v)}><option value="chronos-bolt-tiny">Chronos-Bolt-Tiny</option><option value="timer">Timer-Lite</option></Field>
         </div>
         <div className="ml-action-row">
-          <Field label="Short horizon" value={String(horizon)} onChange={v => changeSelection('horizon', v)} hint="Restored when you return to the same selection.">{[6, 12, 24, 48].map(v => <option key={v} value={v}>{v} steps</option>)}</Field>
+          <Field label="Short horizon" value={String(horizon)} onChange={v => changeSelection('horizon', v)} hint={savedExact ? 'Saved prediction found — it will be loaded instead of running again.' : 'A saved result will be restored automatically when you return to this selection.'}>{[6, 12, 24, 48].map(v => <option key={v} value={v}>{v} steps</option>)}</Field>
           <div className={`ml-readiness ${canRun ? 'ready' : ''}`}><Zap size={16} /><div><strong>{samples} / {minimum} samples ready</strong><small>{canRun ? 'Model is ready to run' : `Waiting for ${Math.max(0, minimum - samples)} more samples`}</small></div></div>
-          <button className="btn primary ml-run" type="button" onClick={run} disabled={busy || taskBusy}>{busy || taskBusy ? <><Loader2 size={15} /> Running…</> : <><Play size={15} /> Run prediction</>}</button>
+          <button className="btn primary ml-run" type="button" onClick={run} disabled={busy || taskBusy}>{busy || taskBusy ? <><Loader2 size={15} /> Running…</> : savedExact ? <><History size={15} /> Load saved prediction</> : <><Play size={15} /> Run prediction</>}</button>
         </div>
         {feedback && <div className={`ml-feedback ${feedback.tone}`}><CheckCircle2 size={14} />{feedback.text}</div>}
         {error && <div className="ml-error">{error}</div>}
