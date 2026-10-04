@@ -227,7 +227,13 @@ export function useTelemetryStream() {
     }
 
     const connectAll = () => {
-      connectBackend()
+      // Browser clients use the tenant-scoped Supabase Realtime channel as
+      // the authoritative live telemetry transport. Do not also open the
+      // process-local backend WebSocket: on serverless deployments, each
+      // browser tab can land on a different instance and those sockets are
+      // not a shared fan-out layer. Keeping one realtime transport per tab
+      // also prevents multiple open dashboards from multiplying connections
+      // and competing for telemetry delivery.
       connectSupabase()
     }
 
