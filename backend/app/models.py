@@ -104,6 +104,34 @@ class Machine(Base):
     ai_conversations = relationship("AIConversation", back_populates="machine", cascade="all, delete-orphan")
 
 
+class MachinePerformanceProfile(Base):
+    """Optional KPI configuration kept separate from the existing machine record."""
+    __tablename__ = "machine_performance_profiles"
+    id = Column(Integer, primary_key=True, index=True)
+    machine_id = Column(Integer, ForeignKey("machines.id"), nullable=False, unique=True, index=True)
+    started_on = Column(DateTime, nullable=True)
+    rated_capacity = Column(Float, nullable=True)
+    capacity_unit = Column(String, nullable=True)
+    oee_target = Column(Float, nullable=True, default=85.0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class MachinePerformanceMonth(Base):
+    """Manual monthly production/planning inputs; calculated KPIs stay derived."""
+    __tablename__ = "machine_performance_months"
+    __table_args__ = (UniqueConstraint("machine_id", "month", name="uq_machine_performance_month"),)
+    id = Column(Integer, primary_key=True, index=True)
+    machine_id = Column(Integer, ForeignKey("machines.id"), nullable=False, index=True)
+    month = Column(String(7), nullable=False, index=True)
+    planned_hours = Column(Float, nullable=True)
+    manual_runtime_hours = Column(Float, nullable=True)
+    total_units = Column(Integer, nullable=True)
+    good_units = Column(Integer, nullable=True)
+    rejected_units = Column(Integer, nullable=True)
+    ideal_cycle_seconds = Column(Float, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 class Component(Base):
     __tablename__ = "components"
     id = Column(Integer, primary_key=True, index=True)
