@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..database import get_db
 from ..deps import get_current_user, CurrentUser
-from ..exports.pdf_report import build_pdf_report
+from ..exports.pdf_report import build_pdf_report, _table
 from ..exports.excel_report import build_excel_report
 from ..ml.forecast_runs import MLForecastRun
 
@@ -483,14 +483,68 @@ def export_prediction_pdf(
     filename = f"maintain_ai_prediction_{machine.machine_code}_{reading_type}_{run.id}.pdf"
     return StreamingResponse(iter([buffer.getvalue()]), media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename={filename}"})
 
+@router.get("/export/machine-performance-pdf")
+def export_machine_performance_pdf(machine_id: int, month: str, db: Session = Depends(get_db), current: CurrentUser = Depends(get_current_user)):
+    """Export one machine performance record for one month as a standalone PDF."""
+    import re
+    if not re.fullmatch(r"\d{4}-\d{2}", month): raise HTTPException(400, "month must use YYYY-MM format")
+    machines = _machine_map(db, current)
+    machine = machines.get(machine_id)
+    if not machine: raise HTTPException(404, "machine not found")
+    profile = db.query(models.MachinePerformanceProfile).filter_by(machine_id=machine_id).first()
+    monthly = db.query(models.MachinePerformanceMonth).filter_by(machine_id=machine_id, month=month).first()
+    from .performance import _payload
+    data = _payload(machine, profile, monthly, month, db)
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+    from reportlab.lib import colors
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=16*mm, bottomMargin=16*mm, leftMargin=16*mm, rightMargin=16*mm)
+    styles = getSampleStyleSheet()
+    title = ParagraphStyle("PerformanceTitle", parent=styles["Title"], textColor=colors.HexColor("#4c8dff"))
+    story = [Paragraph("MAINTAIN AI", title), Paragraph("Machine Performance Report", styles["Heading2"]), Paragraph("Generated " + datetime.utcnow().strftime("%d %b %Y, %H:%M UTC"), styles["Normal"]), Spacer(1, 8)]
+    def val(key, suffix=""):
+        value = data.get(key)
+        return (str(value) + suffix) if value is not None else "—"
+    rows = [
+        ["Machine", machine.name], ["Machine Code", machine.machine_code], ["Manufacturer", machine.manufacturer or "—"],
+        ["Model", machine.model_number or "—"], ["Category", machine.category or "—"], ["Location", machine.location or "—"],
+        ["Department", machine.department or "—"], ["Reporting Month", month], ["Started On", str(data.get("started_on") or "—")],
+        ["Rated Capacity", (str(data.get("capacity")) + " " + str(data.get("capacity_unit") or "")).strip() if data.get("capacity") is not None else "—"],
+        ["Current Working Hours", val("current_working_hours", " h")], ["Period Working Hours", val("period_working_hours", " h")],
+        ["MTBF", val("mtbf_hours", " h")], ["MTTR", val("mttr_minutes", " min")], ["Availability", val("availability_percent", "%")],
+        ["Performance", val("performance_percent", "%")], ["Quality", val("quality_percent", "%")], ["OEE", val("oee_percent", "%")],
+        ["OEE Target", val("oee_target", "%")], ["Planned Production Hours", val("planned_hours")], ["Total Units", val("total_units")],
+        ["Good Units", val("good_units")], ["Rejected Units", val("rejected_units")], ["Ideal Cycle Time", val("ideal_cycle_seconds", " sec/unit")]
+    ]
+    story.append(_table([["Field", "Value"]] + rows, [65*mm, 95*mm]))
+    story.append(Spacer(1, 10))
+    story.append(Paragraph("Evidence note: automatically calculated values use MAINTAIN AI telemetry and maintenance evidence. Manually entered values are included when supplied; unavailable measurements are not invented.", styles["Normal"]))
+    doc.build(story)
+    buffer.seek(0)
+    filename = "maintain_ai_machine_performance_%s_%s.pdf" % (machine.machine_code, month)
+    return StreamingResponse(iter([buffer.getvalue()]), media_type="application/pdf", headers={"Content-Disposition": "attachment; filename=%s" % filename})
+
+
 @router.get("/export/{dataset}.csv")
-def export_dataset_csv(dataset: str, db: Session = Depends(get_db), current: CurrentUser = Depends(get_current_user)):
+def export_dataset_csv(dataset: str, start_month: str | None = None, end_month: str | None = None, db: Session = Depends(get_db), current: CurrentUser = Depends(get_current_user)):
     allowed = {"machines","workorders","maintenance","faults","alerts","sensor_readings","components","safety","safety_events","spare_parts","notifications","machine_performance"}
     if dataset not in allowed:
         from fastapi import HTTPException
         raise HTTPException(404, "unknown export dataset")
+    if dataset == "machine_performance" and (start_month or end_month):
+        import re
+        if not start_month or not end_month or not re.fullmatch(r"\d{4}-\d{2}", start_month) or not re.fullmatch(r"\d{4}-\d{2}", end_month):
+            raise HTTPException(400, "start_month and end_month must use YYYY-MM format")
+        if start_month > end_month:
+            raise HTTPException(400, "start_month cannot be after end_month")
     headers, rows = _export_dataset(db, dataset, current)
-    filename = f"maintain_ai_{dataset}_{datetime.utcnow().date()}.csv"
+    if dataset == "machine_performance" and start_month and end_month:
+        month_index = headers.index("month")
+        rows = [row for row in rows if start_month <= str(row[month_index])[:7] <= end_month]
+    filename = "maintain_ai_%s_%s_%s_%s.csv" % (dataset, start_month or "all", end_month or "all", datetime.utcnow().date())
     return StreamingResponse(iter([_csv_bytes(headers, rows)]), media_type="text/csv", headers={"Content-Disposition": f"attachment; filename={filename}"})
 
 
