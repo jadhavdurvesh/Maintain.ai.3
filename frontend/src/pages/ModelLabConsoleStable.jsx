@@ -207,6 +207,35 @@ export default function ModelLabConsoleStable() {
     }
   }
 
+  const exportPrediction = async () => {
+    if (!latest?.id || !machineId) {
+      setFeedback({ tone: 'warning', text: 'Run or select a saved prediction before exporting it.' })
+      return
+    }
+    try {
+      const token = localStorage.getItem('maintain-ai-token') || localStorage.getItem('access_token')
+      const params = new URLSearchParams({ machine_id: machineId, reading_type: signal, model, horizon: String(latest.horizon || horizon), run_id: String(latest.id) })
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/reports/export/prediction-pdf?${params.toString()}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (!response.ok) throw new Error(await response.text())
+      const blob = await response.blob()
+      const disposition = response.headers.get('content-disposition') || ''
+      const match = disposition.match(/filename="?([^"]+)"?/i)
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = match?.[1] || 'maintain_ai_prediction.pdf'
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      setFeedback({ tone: 'healthy', text: 'Prediction report exported with the observed-vs-forecast chart.' })
+    } catch (e) {
+      setFeedback({ tone: 'warning', text: `Prediction export failed: ${e.message}` })
+    }
+  }
+
   const startNewPrediction = () => {
     if (taskBusy) return
     clearPredictionTask(taskKey)
