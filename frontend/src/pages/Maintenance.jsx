@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import api from '../api/client.js'
 import StatusBadge from '../components/StatusBadge.jsx'
-import MachinePerformanceCard from '../components/MachinePerformanceCard.jsx'
 import { Loading, ErrorState } from './Dashboard.jsx'
 import { usePageHeader } from '../PageHeaderContext.jsx'
 import { useAuth } from '../AuthContext.jsx'
@@ -215,8 +214,7 @@ export default function Maintenance() {
             {records.length === 0 && <tr><td colSpan={4} className="empty-state">Nothing scheduled yet.</td></tr>}
           </tbody></table></div>
       </div>
-
-      {machines.slice(0,1).map(m => <MachinePerformanceCard key={m.id} machineId={m.id} canEdit={false} />)}
     </>
+
   )
 }
