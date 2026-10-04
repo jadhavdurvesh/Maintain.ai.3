@@ -294,14 +294,21 @@ def export_ai_pdf(db: Session = Depends(get_db), current: CurrentUser = Depends(
         work_orders = db.query(models.WorkOrder).filter_by(machine_id=m.id).order_by(models.WorkOrder.created_at.desc()).limit(10).all()
         maintenance = db.query(models.MaintenanceRecord).filter_by(machine_id=m.id).order_by(models.MaintenanceRecord.scheduled_date.desc()).limit(10).all()
         alerts = db.query(models.Alert).filter_by(machine_id=m.id).order_by(models.Alert.created_at.desc()).limit(10).all()
-        readings = db.query(models.SensorReading).filter_by(machine_id=m.id).order_by(models.SensorReading.recorded_at.desc()).limit(100).all()
+        # Report only the latest telemetry sample for each signal. Historical readings
+        # remain available through the dedicated sensor_readings CSV/ZIP export.
+        reading_rows = db.query(models.SensorReading).filter_by(machine_id=m.id).order_by(models.SensorReading.recorded_at.desc(), models.SensorReading.id.desc()).all()
+        latest_by_type = {}
+        for reading in reading_rows:
+            if reading.reading_type not in latest_by_type:
+                latest_by_type[reading.reading_type] = reading
+        readings = list(latest_by_type.values())
         facts.append({
             "machine": {"id":m.id,"code":m.machine_code,"name":m.name,"category":m.category,"location":m.location,"department":m.department,"health_score":m.health_score,"status":_enum_value(m.status),"criticality":_enum_value(m.criticality),"operating_hours":m.operating_hours},
             "faults":[{"id":x.id,"description":x.description,"cause":x.cause,"severity":_enum_value(x.severity),"reported_date":x.reported_date} for x in faults],
             "work_orders":[{"id":x.id,"problem":x.problem,"priority":_enum_value(x.priority),"status":_enum_value(x.status),"assigned_to":x.assigned_to,"created_at":x.created_at,"completed_at":x.completed_at,"resolution_notes":x.resolution_notes} for x in work_orders],
             "maintenance":[{"id":x.id,"type":_enum_value(x.type),"description":x.description,"status":_enum_value(x.status),"scheduled_date":x.scheduled_date,"completed_date":x.completed_date,"performed_by":x.performed_by,"notes":x.notes} for x in maintenance],
             "alerts":[{"id":x.id,"type":x.alert_type,"severity":_enum_value(x.severity),"message":x.message,"created_at":x.created_at,"acknowledged":x.acknowledged,"resolved":x.resolved} for x in alerts],
-            "recent_readings":[{"type":x.reading_type,"value":x.value,"unit":x.unit,"recorded_at":x.recorded_at} for x in reversed(readings)],
+            "recent_readings":[{"type":x.reading_type,"value":x.value,"unit":x.unit,"recorded_at":x.recorded_at} for x in sorted(readings, key=lambda r: (r.reading_type or ""))],
         })
 
     ai = None
