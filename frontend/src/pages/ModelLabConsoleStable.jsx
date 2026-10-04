@@ -11,6 +11,7 @@ const WINDOW_LABELS = { '24h': '24 hours', '48h': '48 hours', '7d': '7 days', '3
 const WINDOW_STEPS = { '24h': '24 hourly points', '48h': '48 hourly points', '7d': '28 six-hour points', '30d': '30 daily points' }
 const MIN = { 'chronos-bolt-tiny': 16, timer: 16 }
 const fmt = (v, d = 2) => v == null || !Number.isFinite(Number(v)) ? '—' : Number(v).toFixed(d)
+const normalizeRun = run => run ? { ...run, available: run.available ?? run.status === 'completed', run_id: run.run_id ?? run.id } : run
 
 function Pill({ children, tone = 'neutral' }) { return <span className={`badge ${tone}`}>{children}</span> }
 
@@ -134,19 +135,21 @@ export default function ModelLabConsoleStable() {
       ])
       if (seq !== requestSeq.current) return
 
-      const runs = Array.isArray(h?.runs) ? h.runs.filter(r => r?.available) : []
+      const runs = Array.isArray(h?.runs) ? h.runs.map(normalizeRun).filter(r => r?.available) : []
       const exact = runs.find(r => !r.forecast_window && Number(r.horizon) === Number(horizon))
       const selectedSaved = activeWindow !== 'short' ? w?.windows?.[activeWindow] : null
-      setStatus(s)
+      setStatus({ ...s, latest_run: normalizeRun(s?.latest_run) })
       setHistory(runs)
-      setWindows(w?.windows || null)
+      setWindows(Object.fromEntries(Object.entries(w?.windows || {}).map(([key, value]) => [key, normalizeRun(value)])))
       setActual((readings || []).filter(r => r.reading_type === signal).sort((a, b) => new Date(a.recorded_at) - new Date(b.recorded_at)).map(r => Number(r.value)).filter(Number.isFinite).slice(-32))
 
       // Only replace the displayed forecast when explicitly restoring a machine/selection.
       // Background refreshes never clear the chart. This prevents the chart from flashing
       // away when telemetry/history requests briefly return an empty or stale response.
       if (restore) {
-        setLatest(selectedSaved?.available ? selectedSaved : exact || (s?.latest_run?.available ? s.latest_run : null))
+        const restored = normalizeRun(selectedSaved?.available ? selectedSaved : exact || (s?.latest_run?.available ? s.latest_run : null))
+        setLatest(restored)
+        if (restored?.available) setFeedback({ tone: 'healthy', text: `Saved prediction loaded · ${formatDateTime(restored.created_at)}. No new model run was started.` })
       }
       setError(null)
     } catch (e) {
@@ -216,13 +219,14 @@ export default function ModelLabConsoleStable() {
   }
 
   const exportPrediction = async () => {
-    if (!latest?.run_id || !machineId) {
+    const exportRunId = latest?.run_id ?? latest?.id
+    if (!exportRunId || !machineId) {
       setFeedback({ tone: 'warning', text: 'Run or select a saved prediction before exporting it.' })
       return
     }
     try {
       const token = localStorage.getItem('maintain-ai-token') || localStorage.getItem('access_token')
-      const params = new URLSearchParams({ machine_id: machineId, reading_type: signal, model, horizon: String(latest.horizon || horizon), run_id: String(latest.run_id) })
+      const params = new URLSearchParams({ machine_id: machineId, reading_type: signal, model, horizon: String(latest.horizon || horizon), run_id: String(exportRunId) })
       const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/reports/export/prediction-pdf?${params.toString()}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
