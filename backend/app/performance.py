@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
-from .. import models
+from . import models
 
 ACTIVE_TYPES = {
     "current", "motor_current", "load", "motor_load", "pump_load", "spindle_load",
