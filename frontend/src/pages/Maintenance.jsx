@@ -20,6 +20,7 @@ export default function Maintenance() {
   const { user } = useAuth()
   const canAdmin = user?.role === 'admin'
   const canComplete = user?.role === 'admin' || user?.role === 'technician'
+  const selectedMachine = machines.find(m => String(m.id) === String(performanceMachine))
 
   usePageHeader('Maintenance', canAdmin ? <button className="btn" onClick={() => setShowPerformanceForm(true)}>+ Machine Performance Form</button> : null)
 
@@ -93,6 +94,7 @@ export default function Maintenance() {
       })
       setShowPerformanceForm(false)
       setPerformanceMachine('')
+      setFeedback?.(null)
       setPerformance(null)
     } catch (e) {
       setPerformanceError(e.message || 'Could not save machine performance data.')
@@ -138,6 +140,19 @@ export default function Maintenance() {
               {performanceMachine && performance && (
                 <>
                   {performanceError && <div style={{color:'var(--critical)',fontSize:12,marginBottom:10}}>{performanceError}</div>}
+                  <div style={{marginTop:14,padding:12,border:'1px solid var(--border)',borderRadius:10,background:'var(--panel-raised)'}}>
+                    <div style={{fontSize:11,color:'var(--text-faint)',marginBottom:9}}>MACHINE DETAILS — AUTO-FILLED FROM MACHINE RECORD</div>
+                    <div className="grid-3">
+                      <div><small>Machine Name</small><div className="mono">{selectedMachine?.name || '—'}</div></div>
+                      <div><small>Machine Code</small><div className="mono">{selectedMachine?.machine_code || '—'}</div></div>
+                      <div><small>Manufacturer</small><div>{selectedMachine?.manufacturer || '—'}</div></div>
+                      <div><small>Model</small><div>{selectedMachine?.model_number || '—'}</div></div>
+                      <div><small>Category</small><div>{selectedMachine?.category || '—'}</div></div>
+                      <div><small>Location</small><div>{selectedMachine?.location || '—'}</div></div>
+                      <div><small>Department</small><div>{selectedMachine?.department || '—'}</div></div>
+                    </div>
+                  </div>
+
                   <div className="stat-grid" style={{marginTop:14}}>
                     <div className="stat-tile"><div className="stat-label">MACHINE NAME</div><div className="stat-value" style={{fontSize:16}}>{performance.machine_name}</div></div>
                     <div className="stat-tile"><div className="stat-label">STARTED ON</div><div className="stat-value" style={{fontSize:15}}>{performance.started_on ? new Date(performance.started_on).toLocaleDateString() : 'Not entered'}</div></div>
@@ -150,7 +165,7 @@ export default function Maintenance() {
 
                   <div style={{marginTop:16,padding:12,border:'1px solid var(--border)',borderRadius:10,color:'var(--text-dim)',fontSize:12}}>
                     <strong>Automatic:</strong> machine name, current working hours, MTBF, MTTR and telemetry-based runtime are filled from MAINTAIN AI.
-                    <br/><strong>Manual:</strong> started date, rated capacity, planned hours and production figures are entered below.
+                    <br/><strong>Manual:</strong> only performance information that is not already stored or reliably measurable is entered below. Machine identity/details are never re-entered.
                   </div>
 
                   <div className="grid-2" style={{marginTop:16}}>
