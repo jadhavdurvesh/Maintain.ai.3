@@ -129,6 +129,13 @@ class MachinePerformanceMonth(Base):
     good_units = Column(Integer, nullable=True)
     rejected_units = Column(Integer, nullable=True)
     ideal_cycle_seconds = Column(Float, nullable=True)
+    manual_current_working_hours = Column(Float, nullable=True)
+    manual_mtbf_hours = Column(Float, nullable=True)
+    manual_mttr_minutes = Column(Float, nullable=True)
+    manual_availability_percent = Column(Float, nullable=True)
+    manual_performance_percent = Column(Float, nullable=True)
+    manual_quality_percent = Column(Float, nullable=True)
+    manual_oee_percent = Column(Float, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
