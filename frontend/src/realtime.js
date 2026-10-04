@@ -52,6 +52,8 @@ export function useTelemetryStream() {
   const heartbeatRef = useRef(null)
   const connectedSourcesRef = useRef(new Set())
   const seenReadingIdsRef = useRef(new Map())
+  const pendingTelemetryRef = useRef(new Map())
+  const telemetryFlushRef = useRef(null)
 
   useEffect(() => {
     let stopped = false
@@ -61,6 +63,23 @@ export function useTelemetryStream() {
       const next = connected ? 'connected' : (getOrganizationId() ? 'reconnecting' : 'waiting-for-org')
       setStatus(next)
       window.dispatchEvent(new CustomEvent('maintain-ai-realtime-status', { detail: next }))
+    }
+
+    const flushTelemetry = () => {
+      telemetryFlushRef.current = null
+      if (stopped || pendingTelemetryRef.current.size === 0) return
+      const pending = Array.from(pendingTelemetryRef.current.values())
+      pendingTelemetryRef.current.clear()
+      setLastMessageAt(new Date())
+      for (const payload of pending) {
+        window.dispatchEvent(new CustomEvent('maintain-ai-telemetry', { detail: payload }))
+        const alias = liveAlias(payload.reading_type)
+        if (alias && alias !== payload.reading_type) {
+          window.dispatchEvent(new CustomEvent('maintain-ai-telemetry', {
+            detail: { ...payload, reading_type: alias, source_reading_type: payload.reading_type },
+          }))
+        }
+      }
     }
 
     const dispatchTelemetry = (payload) => {
@@ -74,11 +93,17 @@ export function useTelemetryStream() {
           if (first != null) seenReadingIdsRef.current.delete(first)
         }
       }
-      setLastMessageAt(new Date())
-      window.dispatchEvent(new CustomEvent('maintain-ai-telemetry', { detail: payload }))
-      const alias = liveAlias(payload.reading_type)
-      if (alias && alias !== payload.reading_type) {
-        window.dispatchEvent(new CustomEvent('maintain-ai-telemetry', { detail: { ...payload, reading_type: alias, source_reading_type: payload.reading_type } }))
+
+      // Coalesce bursts from multiple machines/sensors. The organization
+      // channel intentionally receives fleet-wide telemetry, so dispatching
+      // every high-frequency sample as a DOM event can make a busy dashboard
+      // spend more time handling events than rendering the application.
+      // Keep only the newest sample for each machine/signal and flush at most
+      // once per animation-sized frame (~20ms).
+      const key = String(payload.machine_id) + ':' + String(payload.reading_type || '')
+      pendingTelemetryRef.current.set(key, payload)
+      if (!telemetryFlushRef.current) {
+        telemetryFlushRef.current = setTimeout(flushTelemetry, 20)
       }
     }
 
@@ -107,6 +132,9 @@ export function useTelemetryStream() {
       supabaseTimerRef.current = null
       if (heartbeatRef.current) clearInterval(heartbeatRef.current)
       heartbeatRef.current = null
+      if (telemetryFlushRef.current) clearTimeout(telemetryFlushRef.current)
+      telemetryFlushRef.current = null
+      pendingTelemetryRef.current.clear()
       if (supabaseSocketRef.current) {
         try { supabaseSocketRef.current.close(1000, 'telemetry client reconnect') } catch {}
         supabaseSocketRef.current = null
