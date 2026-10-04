@@ -4,7 +4,7 @@ from .. import models
 
 ACTIVE_TYPES = {
     "current", "motor_current", "load", "motor_load", "pump_load", "spindle_load",
-    "speed", "rpm", "spindle_rpm", "wheel_rpm", "vibration", "spindle_vibration",
+    "speed", "fan_speed", "rpm", "spindle_rpm", "wheel_rpm", "vibration", "spindle_vibration",
     "chuck_vibration", "line_speed", "conveyor_speed", "print_speed", "extrusion_rate",
     "hydraulic_pressure", "injection_pressure", "steam_pressure", "pressure", "utilization",
 }
