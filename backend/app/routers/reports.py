@@ -480,7 +480,7 @@ def export_prediction_pdf(
 
 @router.get("/export/{dataset}.csv")
 def export_dataset_csv(dataset: str, db: Session = Depends(get_db), current: CurrentUser = Depends(get_current_user)):
-    allowed = {"machines","workorders","maintenance","faults","alerts","sensor_readings","components","safety","safety_events","spare_parts","notifications"}
+    allowed = {"machines","workorders","maintenance","faults","alerts","sensor_readings","components","safety","safety_events","spare_parts","notifications","machine_performance"}
     if dataset not in allowed:
         from fastapi import HTTPException
         raise HTTPException(404, "unknown export dataset")
