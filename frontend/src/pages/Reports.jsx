@@ -172,7 +172,7 @@ export default function Reports() {
             <div style={{fontSize:12,color:'var(--text-dim)',marginBottom:10}}>Choose the month range to include. All saved monthly performance records inside the range will be exported.</div>
             <div className="grid-2"><div className="field"><label>From</label><input type="month" value={performanceExport.start} onChange={e=>setPerformanceExport(p=>({...p,start:e.target.value}))}/></div><div className="field"><label>To</label><input type="month" value={performanceExport.end} onChange={e=>setPerformanceExport(p=>({...p,end:e.target.value}))}/></div></div>
             <div className="chip-row"><button className="btn" disabled={!performanceExport.start||!performanceExport.end} onClick={()=>{downloadDataset('machine_performance');setPerformanceExport(p=>({...p,open:false}))}}>Export CSV Range</button><button className="btn secondary" onClick={()=>setPerformanceExport(p=>({...p,open:false}))}>Cancel</button></div>
-          </div>
+          </div>}
           <div style={{marginTop:14,padding:14,border:'1px solid var(--border)',borderRadius:10}}>
             <div style={{fontWeight:700,marginBottom:8}}>Machine Performance PDF</div>
             <div style={{fontSize:12,color:'var(--text-dim)',marginBottom:10}}>Export one machine's performance record for a selected month as a standalone PDF.</div>
