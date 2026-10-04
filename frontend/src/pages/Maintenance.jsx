@@ -94,7 +94,6 @@ export default function Maintenance() {
       })
       setShowPerformanceForm(false)
       setPerformanceMachine('')
-      setFeedback?.(null)
       setPerformance(null)
     } catch (e) {
       setPerformanceError(e.message || 'Could not save machine performance data.')
