@@ -182,7 +182,6 @@ export default function Reports() {
             </div>
             <button className="btn" disabled={!performanceExport.machineId||!performanceExport.month} onClick={downloadMachinePerformancePdf}>Export Machine Performance PDF</button>
           </div>
-          </div>}
         </div>
       </div>
 
