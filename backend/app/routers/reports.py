@@ -244,13 +244,18 @@ def _export_dataset(db, dataset, current=None):
                 item.planned_hours, item.manual_runtime_hours,
                 item.total_units, item.good_units, item.rejected_units,
                 item.ideal_cycle_seconds,
+                item.manual_current_working_hours, item.manual_mtbf_hours, item.manual_mttr_minutes,
+                item.manual_availability_percent, item.manual_performance_percent, item.manual_quality_percent,
+                item.manual_oee_percent,
             ])
         return [
             "record_id","machine_id","machine_code","machine_name","month","started_on",
             "rated_capacity","capacity_unit","current_working_hours","period_working_hours",
             "mtbf_hours","mttr_minutes","availability_percent","performance_percent",
             "quality_percent","oee_percent","oee_target_percent","planned_hours",
-            "manual_runtime_hours","total_units","good_units","rejected_units","ideal_cycle_seconds"
+            "manual_runtime_hours","total_units","good_units","rejected_units","ideal_cycle_seconds",
+            "manual_current_working_hours","manual_mtbf_hours","manual_mttr_minutes","manual_availability_percent",
+            "manual_performance_percent","manual_quality_percent","manual_oee_percent"
         ], rows
     if dataset == "safety":
         rows=db.query(models.MachineSafetyPolicy).filter(models.MachineSafetyPolicy.machine_id.in_(machines.keys())).all()
