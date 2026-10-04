@@ -14,7 +14,7 @@ export default function Reports() {
   const [training, setTraining] = useState(false)
   const [trainResult, setTrainResult] = useState(null)
   const [error, setError] = useState(null)
-  const [performanceExport, setPerformanceExport] = useState({ start: '', end: '', open: false })
+  const [performanceExport, setPerformanceExport] = useState({ start: '', end: '', machineId: '', month: '', open: false })
 
   const downloadExport = async (format) => {
     try {
@@ -172,6 +172,16 @@ export default function Reports() {
             <div style={{fontSize:12,color:'var(--text-dim)',marginBottom:10}}>Choose the month range to include. All saved monthly performance records inside the range will be exported.</div>
             <div className="grid-2"><div className="field"><label>From</label><input type="month" value={performanceExport.start} onChange={e=>setPerformanceExport(p=>({...p,start:e.target.value}))}/></div><div className="field"><label>To</label><input type="month" value={performanceExport.end} onChange={e=>setPerformanceExport(p=>({...p,end:e.target.value}))}/></div></div>
             <div className="chip-row"><button className="btn" disabled={!performanceExport.start||!performanceExport.end} onClick={()=>{downloadDataset('machine_performance');setPerformanceExport(p=>({...p,open:false}))}}>Export CSV Range</button><button className="btn secondary" onClick={()=>setPerformanceExport(p=>({...p,open:false}))}>Cancel</button></div>
+          </div>
+          <div style={{marginTop:14,padding:14,border:'1px solid var(--border)',borderRadius:10}}>
+            <div style={{fontWeight:700,marginBottom:8}}>Machine Performance PDF</div>
+            <div style={{fontSize:12,color:'var(--text-dim)',marginBottom:10}}>Export one machine's performance record for a selected month as a standalone PDF.</div>
+            <div className="grid-2">
+              <div className="field"><label>Machine ID</label><input type="number" min="1" value={performanceExport.machineId} onChange={e=>setPerformanceExport(p=>({...p,machineId:e.target.value}))} placeholder="e.g. 13"/></div>
+              <div className="field"><label>Month</label><input type="month" value={performanceExport.month} onChange={e=>setPerformanceExport(p=>({...p,month:e.target.value}))}/></div>
+            </div>
+            <button className="btn" disabled={!performanceExport.machineId||!performanceExport.month} onClick={downloadMachinePerformancePdf}>Export Machine Performance PDF</button>
+          </div>
           </div>}
         </div>
       </div>
