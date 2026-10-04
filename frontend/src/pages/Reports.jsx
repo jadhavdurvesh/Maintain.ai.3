@@ -177,7 +177,7 @@ export default function Reports() {
             <div style={{fontWeight:700,marginBottom:8}}>Machine Performance PDF</div>
             <div style={{fontSize:12,color:'var(--text-dim)',marginBottom:10}}>Export one machine's performance record for a selected month as a standalone PDF.</div>
             <div className="grid-2">
-              <div className="field"><label>Machine ID</label><input type="number" min="1" value={performanceExport.machineId} onChange={e=>setPerformanceExport(p=>({...p,machineId:e.target.value}))} placeholder="e.g. 13"/></div>
+              <div className="field"><label>Machine</label><select value={performanceExport.machineId} onChange={e=>setPerformanceExport(p=>({...p,machineId:e.target.value}))}><option value="">Select machine…</option>{reliability.map(m=><option key={m.machine_id} value={m.machine_id}>{m.name} ({m.machine_code})</option>)}</select></div>
               <div className="field"><label>Month</label><input type="month" value={performanceExport.month} onChange={e=>setPerformanceExport(p=>({...p,month:e.target.value}))}/></div>
             </div>
             <button className="btn" disabled={!performanceExport.machineId||!performanceExport.month} onClick={downloadMachinePerformancePdf}>Export Machine Performance PDF</button>
