@@ -60,6 +60,13 @@ class MachinePerformanceMonthIn(BaseModel):
     good_units: Optional[int] = None
     rejected_units: Optional[int] = None
     ideal_cycle_seconds: Optional[float] = None
+    manual_current_working_hours: Optional[float] = None
+    manual_mtbf_hours: Optional[float] = None
+    manual_mttr_minutes: Optional[float] = None
+    manual_availability_percent: Optional[float] = None
+    manual_performance_percent: Optional[float] = None
+    manual_quality_percent: Optional[float] = None
+    manual_oee_percent: Optional[float] = None
 
 class MachinePerformanceMonthOut(MachinePerformanceMonthIn):
     model_config = ConfigDict(from_attributes=True)
