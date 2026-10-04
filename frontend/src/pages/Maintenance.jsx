@@ -91,6 +91,13 @@ export default function Maintenance() {
         good_units: monthly.good_units == null || monthly.good_units === '' ? null : Number(monthly.good_units),
         rejected_units: monthly.rejected_units == null || monthly.rejected_units === '' ? null : Number(monthly.rejected_units),
         ideal_cycle_seconds: monthly.ideal_cycle_seconds == null || monthly.ideal_cycle_seconds === '' ? null : Number(monthly.ideal_cycle_seconds),
+        manual_current_working_hours: monthly.manual_current_working_hours == null || monthly.manual_current_working_hours === '' ? null : Number(monthly.manual_current_working_hours),
+        manual_mtbf_hours: monthly.manual_mtbf_hours == null || monthly.manual_mtbf_hours === '' ? null : Number(monthly.manual_mtbf_hours),
+        manual_mttr_minutes: monthly.manual_mttr_minutes == null || monthly.manual_mttr_minutes === '' ? null : Number(monthly.manual_mttr_minutes),
+        manual_availability_percent: monthly.manual_availability_percent == null || monthly.manual_availability_percent === '' ? null : Number(monthly.manual_availability_percent),
+        manual_performance_percent: monthly.manual_performance_percent == null || monthly.manual_performance_percent === '' ? null : Number(monthly.manual_performance_percent),
+        manual_quality_percent: monthly.manual_quality_percent == null || monthly.manual_quality_percent === '' ? null : Number(monthly.manual_quality_percent),
+        manual_oee_percent: monthly.manual_oee_percent == null || monthly.manual_oee_percent === '' ? null : Number(monthly.manual_oee_percent),
       })
       setShowPerformanceForm(false)
       setPerformanceMachine('')
@@ -165,6 +172,19 @@ export default function Maintenance() {
                   <div style={{marginTop:16,padding:12,border:'1px solid var(--border)',borderRadius:10,color:'var(--text-dim)',fontSize:12}}>
                     <strong>Automatic:</strong> machine name, current working hours, MTBF, MTTR and telemetry-based runtime are filled from MAINTAIN AI.
                     <br/><strong>Manual:</strong> only performance information that is not already stored or reliably measurable is entered below. Machine identity/details are never re-entered.
+                  </div>
+
+                  <div style={{marginTop:16,padding:12,border:'1px solid var(--border)',borderRadius:10}}>
+                    <div style={{fontSize:11,color:'var(--text-faint)',marginBottom:10}}>OPTIONAL VERIFIED MANUAL KPI VALUES</div>
+                    <div className="grid-3">
+                      <div className="field"><label>Current Working Hours</label><input type="number" min="0" step="0.1" value={performance.monthly?.manual_current_working_hours ?? ''} onChange={e=>updateMonth('manual_current_working_hours',e.target.value)} /></div>
+                      <div className="field"><label>MTBF (hours)</label><input type="number" min="0" step="0.1" value={performance.monthly?.manual_mtbf_hours ?? ''} onChange={e=>updateMonth('manual_mtbf_hours',e.target.value)} /></div>
+                      <div className="field"><label>MTTR (minutes)</label><input type="number" min="0" step="0.1" value={performance.monthly?.manual_mttr_minutes ?? ''} onChange={e=>updateMonth('manual_mttr_minutes',e.target.value)} /></div>
+                      <div className="field"><label>Availability (%)</label><input type="number" min="0" max="100" step="0.1" value={performance.monthly?.manual_availability_percent ?? ''} onChange={e=>updateMonth('manual_availability_percent',e.target.value)} /></div>
+                      <div className="field"><label>Performance (%)</label><input type="number" min="0" max="100" step="0.1" value={performance.monthly?.manual_performance_percent ?? ''} onChange={e=>updateMonth('manual_performance_percent',e.target.value)} /></div>
+                      <div className="field"><label>Quality (%)</label><input type="number" min="0" max="100" step="0.1" value={performance.monthly?.manual_quality_percent ?? ''} onChange={e=>updateMonth('manual_quality_percent',e.target.value)} /></div>
+                      <div className="field"><label>OEE (%)</label><input type="number" min="0" max="100" step="0.1" value={performance.monthly?.manual_oee_percent ?? ''} onChange={e=>updateMonth('manual_oee_percent',e.target.value)} /></div>
+                    </div>
                   </div>
 
                   <div className="grid-2" style={{marginTop:16}}>
