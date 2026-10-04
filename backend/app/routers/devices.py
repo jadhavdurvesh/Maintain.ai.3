@@ -390,8 +390,14 @@ async def _publish_reading(machine, reading, behaviour, safety=None, degradation
         "degradation": degradation,
     }
     await telemetry_stream.broadcast(machine.organization_id, {**event, "organization_id": machine.organization_id})
-    await supabase_broadcast("org:" + str(machine.organization_id) + ":telemetry", "telemetry", event)
-    await supabase_broadcast("machine:" + str(machine.id) + ":telemetry", "telemetry", event)
+    # Web/desktop clients consume the organization topic; Android/workforce
+    # clients consume their machine topics. Broadcast both concurrently so a
+    # high-rate sensor does not pay two sequential network round trips before
+    # the ingestion request can finish.
+    await asyncio.gather(
+        supabase_broadcast("org:" + str(machine.organization_id) + ":telemetry", "telemetry", event),
+        supabase_broadcast("machine:" + str(machine.id) + ":telemetry", "telemetry", event),
+    )
 
 
 @router.websocket("/stream")
