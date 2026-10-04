@@ -491,7 +491,7 @@ def export_dataset_csv(dataset: str, db: Session = Depends(get_db), current: Cur
 
 @router.get("/export/all")
 def export_all_data(db: Session = Depends(get_db), current: CurrentUser = Depends(get_current_user)):
-    allowed = ["machines","workorders","maintenance","faults","alerts","sensor_readings","components","safety","safety_events","spare_parts","notifications"]
+    allowed = ["machines","workorders","maintenance","faults","alerts","sensor_readings","components","safety","safety_events","machine_performance","spare_parts","notifications"]
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         manifest = {"generated_at_utc": datetime.utcnow().isoformat() + "Z", "datasets": allowed}
