@@ -40,11 +40,14 @@ def _failure_metrics(db, machine_id, start, end):
 def _payload(machine, profile, monthly, month, db):
     start, end = period_bounds(month)
     auto_runtime = telemetry_runtime_hours(db, machine.id, start, end)
-    runtime = auto_runtime if auto_runtime is not None else (monthly.manual_runtime_hours if monthly else None)
+    runtime = (monthly.manual_current_working_hours if monthly and monthly.manual_current_working_hours is not None else (auto_runtime if auto_runtime is not None else (monthly.manual_runtime_hours if monthly else None)))
     planned = monthly.planned_hours if monthly else None
-    failures, mttr = _failure_metrics(db, machine.id, start, end)
-    mtbf = (runtime / failures) if runtime is not None and failures else None
-    availability = (runtime / planned * 100) if runtime is not None and planned and planned > 0 else None
+    failures, calculated_mttr = _failure_metrics(db, machine.id, start, end)
+    calculated_mtbf = (runtime / failures) if runtime is not None and failures else None
+    calculated_availability = (runtime / planned * 100) if runtime is not None and planned and planned > 0 else None
+    mtbf = monthly.manual_mtbf_hours if monthly and monthly.manual_mtbf_hours is not None else calculated_mtbf
+    mttr = monthly.manual_mttr_minutes if monthly and monthly.manual_mttr_minutes is not None else calculated_mttr
+    availability = monthly.manual_availability_percent if monthly and monthly.manual_availability_percent is not None else calculated_availability
     total = monthly.total_units if monthly else None
     good = monthly.good_units if monthly else None
     rejected = monthly.rejected_units if monthly else None
@@ -56,8 +59,12 @@ def _payload(machine, profile, monthly, month, db):
         performance = min(100.0, ideal * total / (runtime * 3600) * 100)
     if total is not None and total > 0 and good is not None:
         quality = min(100.0, good / total * 100)
-    if availability is not None and performance is not None and quality is not None:
-        oee = availability * performance * quality / 10000
+    calculated_performance = performance
+    calculated_quality = quality
+    calculated_oee = availability * performance * quality / 10000 if availability is not None and performance is not None and quality is not None else None
+    performance = monthly.manual_performance_percent if monthly and monthly.manual_performance_percent is not None else calculated_performance
+    quality = monthly.manual_quality_percent if monthly and monthly.manual_quality_percent is not None else calculated_quality
+    oee = monthly.manual_oee_percent if monthly and monthly.manual_oee_percent is not None else calculated_oee
     return {
         "machine_id": machine.id, "machine_name": machine.name, "month": month,
         "started_on": profile.started_on if profile else None,
@@ -66,7 +73,7 @@ def _payload(machine, profile, monthly, month, db):
         "oee_target": profile.oee_target if profile else None,
         "current_working_hours": float(machine.operating_hours or 0),
         "period_working_hours": runtime,
-        "runtime_source": "telemetry" if auto_runtime is not None else ("manual" if runtime is not None else None),
+        "runtime_source": "manual_override" if monthly and monthly.manual_current_working_hours is not None else ("telemetry" if auto_runtime is not None else ("manual" if runtime is not None else None)),
         "planned_hours": planned, "failures": failures, "mtbf_hours": mtbf,
         "mttr_minutes": mttr, "availability_percent": min(100.0, availability) if availability is not None else None,
         "total_units": total, "good_units": good, "rejected_units": rejected,
