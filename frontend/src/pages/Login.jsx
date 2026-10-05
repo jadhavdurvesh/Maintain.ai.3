@@ -133,7 +133,7 @@ export default function Login() {
         <div className="auth-background"><div className="auth-grid" /><div className="auth-glow auth-glow-one" /><div className="auth-glow auth-glow-two" /></div>
         <section className="auth-layout auth-onboarding-layout">
           <div className="auth-brand-column">
-            <div className="auth-brand"><span className="auth-brand-mark">M</span><div><div className="auth-brand-name">MAINTAIN AI</div><div className="auth-brand-caption">ENGINEERING INTELLIGENCE PLATFORM</div></div></div>
+            <div className="auth-brand"><span className="auth-brand-mark">M</span><div><div className="auth-brand-name">YantraChikitsa</div><div className="auth-brand-caption">ENGINEERING INTELLIGENCE PLATFORM</div></div></div>
             <div className="auth-copy"><div className="auth-eyebrow">ACCOUNT CONNECTED</div><h1>One last step before your engineering workspace is ready.</h1><p>Your {oauthProfile?.email || 'social'} account is authenticated. Tell us which company this YantraChikitsa identity belongs to and the username you want to use inside the engineering platform.</p></div>
           </div>
           <div className="auth-card">
@@ -157,7 +157,7 @@ export default function Login() {
       <div className="auth-background"><div className="auth-grid" /><div className="auth-glow auth-glow-one" /><div className="auth-glow auth-glow-two" /></div>
       <section className="auth-layout">
         <div className="auth-brand-column">
-          <div className="auth-brand"><span className="auth-brand-mark">M</span><div><div className="auth-brand-name">MAINTAIN AI</div><div className="auth-brand-caption">ENGINEERING INTELLIGENCE PLATFORM</div></div></div>
+          <div className="auth-brand"><span className="auth-brand-mark">M</span><div><div className="auth-brand-name">YantraChikitsa</div><div className="auth-brand-caption">ENGINEERING INTELLIGENCE PLATFORM</div></div></div>
           <div className="auth-copy">
             <div className="auth-eyebrow">PREDICTIVE MAINTENANCE · CONTROL CENTER</div>
             <h1>{mode === 'login' ? 'See the condition of your fleet before it becomes a failure.' : 'Build your company’s maintenance intelligence workspace.'}</h1>
