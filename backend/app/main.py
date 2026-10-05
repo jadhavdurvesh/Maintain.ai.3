@@ -209,7 +209,7 @@ if os.getenv("SEED_DEMO_DATA", "").lower() == "true":
     except Exception:
         pass
 
-app = FastAPI(title="MAINTAIN AI", description="AI-powered predictive maintenance & intelligent maintenance management system", version="0.1.0")
+app = FastAPI(title="YantraChikitsa", description="AI-powered predictive maintenance & intelligent maintenance management system", version="0.1.0")
 
 _configured_origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",") if o.strip()]
 # Device telemetry is also sent by the standalone simulator. Keep both the
@@ -247,7 +247,7 @@ except Exception as _exc:
 
 @app.get("/")
 def root():
-    return {"status": "ok", "service": "MAINTAIN AI backend"}
+    return {"status": "ok", "service": "YantraChikitsa backend"}
 
 @app.get("/api/system/router-status")
 def router_status(current: CurrentUser = Depends(get_current_user)):
