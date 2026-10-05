@@ -105,7 +105,7 @@ export default function About() {
       <section className="panel section-gap formal-tech-section">
         <div className="panel-header" style={{ justifyContent: 'center', flexDirection: 'column', gap: 5 }}>
           <span className="panel-title">Formal Technology &amp; Architectural Constructs</span>
-          <span style={{ color: 'var(--text-faint)', fontSize: 11 }}>Maintain AI formal terminology</span>
+          <span style={{ color: 'var(--text-faint)', fontSize: 11 }}>YantraChikitsa formal terminology</span>
         </div>
         <div className="panel-body formal-tech-grid">
           {[
