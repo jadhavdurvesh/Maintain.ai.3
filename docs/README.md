@@ -1,6 +1,6 @@
-# MAINTAIN AI 3 Documentation
+# YantraChikitsa 3 Documentation
 
-This directory is the engineering knowledge base for the whole MAINTAIN AI ecosystem.
+This directory is the engineering knowledge base for the whole YantraChikitsa ecosystem.
 
 ## Read first
 
