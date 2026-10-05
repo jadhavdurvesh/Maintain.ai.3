@@ -45,7 +45,7 @@ def build_pdf_report(db: Session, organization_id: int | None = None) -> bytes:
     normal = styles["Normal"]
 
     story = [
-        Paragraph("MAINTAIN AI", title_style),
+        Paragraph("YantraChikitsa", title_style),
         Paragraph("Maintenance & Reliability Report", styles["Heading3"]),
         Paragraph(f"Generated {datetime.utcnow().strftime('%d %b %Y, %H:%M UTC')}", normal),
         Spacer(1, 10),
