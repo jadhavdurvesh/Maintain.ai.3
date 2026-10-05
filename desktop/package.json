@@ -2,9 +2,9 @@
   "name": "maintain-ai-desktop",
   "version": "0.2.1",
   "private": true,
-  "description": "MAINTAIN AI local intelligence desktop application",
+  "description": "YantraChikitsa local intelligence desktop application",
   "author": {
-    "name": "MAINTAIN AI",
+    "name": "YantraChikitsa",
     "email": "jadhavdurvesh@users.noreply.github.com"
   },
   "homepage": "https://github.com/jadhavdurvesh/Maintain.ai.3",
@@ -19,7 +19,7 @@
   },
   "build": {
     "appId": "com.dmjgroup.maintainai",
-    "productName": "MAINTAIN AI",
+    "productName": "YantraChikitsa",
     "files": [
       "main.js",
       "preload.js",
@@ -44,7 +44,7 @@
         "deb"
       ],
       "category": "Utility",
-      "maintainer": "MAINTAIN AI <jadhavdurvesh@users.noreply.github.com>"
+      "maintainer": "YantraChikitsa <jadhavdurvesh@users.noreply.github.com>"
     }
   }
 }
