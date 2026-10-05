@@ -8,7 +8,7 @@ const STACK = [
   { label: 'Web control center', value: 'React · Vite · Recharts', icon: Code2 },
   { label: 'Mobile workforce', value: 'Android · Flutter Workforce Client', icon: Smartphone },
   { label: 'Realtime', value: 'Supabase Auth · Realtime with tenant + machine scope', icon: Radio },
-  { label: 'IoT layer', value: 'Maintain.ai IoT Gateway · machine device-key telemetry', icon: Cpu },
+  { label: 'IoT layer', value: 'YantraChikitsa IoT Gateway · machine device-key telemetry', icon: Cpu },
   { label: 'AI & ML', value: 'Online behaviour · degradation · temporal evidence · advanced models', icon: BrainCircuit },
 ]
 
@@ -22,7 +22,7 @@ export default function About() {
           <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--healthy)', boxShadow: '0 0 10px var(--healthy-glow)' }} />
           MAINTENANCE INTELLIGENCE PLATFORM
         </div>
-        <h1 style={{ position: 'relative', margin: 0, fontSize: 'clamp(34px, 6vw, 60px)', lineHeight: 1, letterSpacing: '-0.04em', fontWeight: 700 }}>MAINTAIN <span style={{ color: 'var(--accent)' }}>AI</span></h1>
+        <h1 style={{ position: 'relative', margin: 0, fontSize: 'clamp(34px, 6vw, 60px)', lineHeight: 1, letterSpacing: '-0.04em', fontWeight: 700 }}>YantraChikitsa</h1>
         <p style={{ maxWidth: 680, margin: '20px auto 0', color: 'var(--text-dim)', fontSize: 16, lineHeight: 1.7 }}>A multi-client predictive maintenance platform connecting engineering, workforce, mobile operations, and industrial telemetry in one organization-scoped system.</p>
         <div style={{ width: 72, height: 3, margin: '26px auto 0', borderRadius: 999, background: 'var(--accent)', boxShadow: '0 0 18px var(--accent-glow)' }} />
       </section>
@@ -49,7 +49,7 @@ export default function About() {
       </section>
 
       <section className="panel section-gap">
-        <div className="panel-header" style={{ justifyContent: 'center' }}><span className="panel-title">How Maintain.ai works</span></div>
+        <div className="panel-header" style={{ justifyContent: 'center' }}><span className="panel-title">How YantraChikitsa works</span></div>
         <div className="panel-body" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
           {[
             ['01', 'Connect', 'Machines send telemetry through machine-specific device identity.'],
