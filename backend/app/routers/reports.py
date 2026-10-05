@@ -307,7 +307,7 @@ def export_machines_csv(db: Session = Depends(get_db), current: CurrentUser = De
 def export_pdf(db: Session = Depends(get_db), current: CurrentUser = Depends(get_current_user)):
     _require_admin(current)
     pdf_bytes = build_pdf_report(db, organization_id=current.organization_id)
-    filename = f"maintain_ai_report_{datetime.utcnow().date()}.pdf"
+    filename = f"yantrachikitsa_report_{datetime.utcnow().date()}.pdf"
     return StreamingResponse(
         iter([pdf_bytes]),
         media_type="application/pdf",
@@ -319,7 +319,7 @@ def export_pdf(db: Session = Depends(get_db), current: CurrentUser = Depends(get
 def export_excel(db: Session = Depends(get_db), current: CurrentUser = Depends(get_current_user)):
     _require_admin(current)
     xlsx_bytes = build_excel_report(db, organization_id=current.organization_id)
-    filename = f"maintain_ai_report_{datetime.utcnow().date()}.xlsx"
+    filename = f"yantrachikitsa_report_{datetime.utcnow().date()}.xlsx"
     return StreamingResponse(
         iter([xlsx_bytes]),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -369,7 +369,7 @@ def export_ai_pdf(db: Session = Depends(get_db), current: CurrentUser = Depends(
 
     from ..exports.gemini_pdf_report import build_gemini_pdf_report
     pdf = build_gemini_pdf_report(db, facts, ai)
-    filename = f"maintain_ai_ai_report_{datetime.utcnow().date()}.pdf"
+    filename = f"yantrachikitsa_ai_report_{datetime.utcnow().date()}.pdf"
     return StreamingResponse(iter([pdf]), media_type="application/pdf", headers={"Content-Disposition":f"attachment; filename={filename}"})
 @router.get("/export/prediction-pdf")
 def export_prediction_pdf(
@@ -456,7 +456,7 @@ def export_prediction_pdf(
     title = ParagraphStyle("PredictionTitle", parent=styles["Title"], textColor=colors.HexColor("#4c8dff"))
     h2 = ParagraphStyle("PredictionH2", parent=styles["Heading2"], spaceBefore=12, spaceAfter=6)
     story = [
-        Paragraph("MAINTAIN AI", title),
+        Paragraph("YantraChikitsa", title),
         Paragraph("Saved Prediction Report", styles["Heading2"]),
         Paragraph(f"Generated {datetime.utcnow().strftime('%d %b %Y, %H:%M UTC')}", styles["Normal"]),
         Spacer(1, 8),
@@ -477,10 +477,10 @@ def export_prediction_pdf(
     value_rows.extend([[f"t+{i + 1}", f"{value:.4f}"] for i, value in enumerate(forecast)])
     story.append(_table(value_rows, [45 * mm, 115 * mm]))
     story.append(Spacer(1, 8))
-    story.append(Paragraph("Evidence note: observed values are recent telemetry stored by MAINTAIN AI; forecast values are the saved output of the selected model run. This report does not replace technician verification or safety procedures.", styles["Normal"]))
+    story.append(Paragraph("Evidence note: observed values are recent telemetry stored by YantraChikitsa; forecast values are the saved output of the selected model run. This report does not replace technician verification or safety procedures.", styles["Normal"]))
     doc.build(story)
     buffer.seek(0)
-    filename = f"maintain_ai_prediction_{machine.machine_code}_{reading_type}_{run.id}.pdf"
+    filename = f"yantrachikitsa_prediction_{machine.machine_code}_{reading_type}_{run.id}.pdf"
     return StreamingResponse(iter([buffer.getvalue()]), media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename={filename}"})
 
 @router.get("/export/machine-performance-pdf")
@@ -521,10 +521,10 @@ def export_machine_performance_pdf(machine_id: int, month: str, db: Session = De
     ]
     story.append(_table([["Field", "Value"]] + rows, [65*mm, 95*mm]))
     story.append(Spacer(1, 10))
-    story.append(Paragraph("Evidence note: automatically calculated values use MAINTAIN AI telemetry and maintenance evidence. Manually entered values are included when supplied; unavailable measurements are not invented.", styles["Normal"]))
+    story.append(Paragraph("Evidence note: automatically calculated values use YantraChikitsa telemetry and maintenance evidence. Manually entered values are included when supplied; unavailable measurements are not invented.", styles["Normal"]))
     doc.build(story)
     buffer.seek(0)
-    filename = "maintain_ai_machine_performance_%s_%s.pdf" % (machine.machine_code, month)
+    filename = "yantrachikitsa_machine_performance_%s_%s.pdf" % (machine.machine_code, month)
     return StreamingResponse(iter([buffer.getvalue()]), media_type="application/pdf", headers={"Content-Disposition": "attachment; filename=%s" % filename})
 
 
