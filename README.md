@@ -1,6 +1,6 @@
 <div align="center">
 
-# ⚙️ MAINTAIN AI
+# ⚙️ YantraChikitsa
 
 <p>
   <a href="https://deepwiki.com/jadhavdurvesh/Maintain.ai.3"><img src="https://devin.ai/assets/askdeepwiki.png" alt="Ask DeepWiki" height="34"></a>
@@ -29,19 +29,19 @@
 
 ## 🏛️ Formal Platform Designation
 
-**MAINTAIN AI — An Integrated AI, IoT, Predictive Analytics and Intelligent Industrial Maintenance Management Platform**
+**YantraChikitsa — An Integrated AI, IoT, Predictive Analytics and Intelligent Industrial Maintenance Management Platform**
 
-MAINTAIN AI is the main platform within the wider ecosystem. It brings together industrial asset management, machine telemetry, predictive analytics, diagnostics, maintenance operations, safety processing, IoT connectivity, reporting, and workforce-facing integrations through a shared backend and data model.
+YantraChikitsa is the main platform within the wider ecosystem. It brings together industrial asset management, machine telemetry, predictive analytics, diagnostics, maintenance operations, safety processing, IoT connectivity, reporting, and workforce-facing integrations through a shared backend and data model.
 
 ---
 
 ## 🧬 Formal Technology & Architectural Constructs
 
-The Maintain AI architecture uses a formal terminology system for the major architectural constructs developed for the platform. These names describe the specific Maintain AI architectural constructs; they do not claim invention of the underlying general technologies or research fields.
+The YantraChikitsa architecture uses a formal terminology system for the major architectural constructs developed for the platform. These names describe the specific YantraChikitsa architectural constructs; they do not claim invention of the underlying general technologies or research fields.
 
 | Acronym | Formal name | Architectural role |
 |---|---|---|
-| **MHICPIA** | **Maintain AI Heterogeneous Industrial Cyber-Physical Intelligence Architecture** | Umbrella architecture connecting machines, gateways, telemetry, intelligence, maintenance, safety and workforce operations. |
+| **MHICPIA** | **YantraChikitsa Heterogeneous Industrial Cyber-Physical Intelligence Architecture** | Umbrella architecture connecting machines, gateways, telemetry, intelligence, maintenance, safety and workforce operations. |
 | **HMIRM** | **Heterogeneous Machine Intelligence Representation Model** | Common representation of different machines, capabilities, telemetry, state, health and maintenance properties. |
 | **HITSNA** | **Heterogeneous Industrial Telemetry Semantic Normalization Architecture** | Normalizes machine-specific measurements and representations into consistent platform telemetry semantics. |
 | **AIITIA** | **Authenticated Idempotent Industrial Telemetry Ingestion Architecture** | Defines authenticated, persistent and retry-safe industrial telemetry ingestion. |
@@ -59,20 +59,20 @@ The Maintain AI architecture uses a formal terminology system for the major arch
 
 ### Architectural relationship
 
-These constructs form a connected architecture rather than isolated features. **HMIRM** defines machine representation; **HITSNA** provides common telemetry semantics; **AIITIA** provides the ingestion boundary; **OIRITIA**, **MAAOIA** and **HMT-IIA** govern access and isolation; **MAI-RA** and **DLE-IIA** define intelligence execution boundaries; **PIIEA**, **CPMIFA** and **OC-PMLA** connect intelligence to maintenance evidence and outcomes; **PCASIA** defines a safety-intervention pathway; **BAAI-AIM** defines the authority boundary for assistive AI; and **SITVA** provides reproducible validation. At the system level, these constructs are unified by **MHICPIA**, the overall Maintain AI heterogeneous industrial cyber-physical intelligence architecture.
+These constructs form a connected architecture rather than isolated features. **HMIRM** defines machine representation; **HITSNA** provides common telemetry semantics; **AIITIA** provides the ingestion boundary; **OIRITIA**, **MAAOIA** and **HMT-IIA** govern access and isolation; **MAI-RA** and **DLE-IIA** define intelligence execution boundaries; **PIIEA**, **CPMIFA** and **OC-PMLA** connect intelligence to maintenance evidence and outcomes; **PCASIA** defines a safety-intervention pathway; **BAAI-AIM** defines the authority boundary for assistive AI; and **SITVA** provides reproducible validation. At the system level, these constructs are unified by **MHICPIA**, the overall YantraChikitsa heterogeneous industrial cyber-physical intelligence architecture.
 
 The complete formal definitions are maintained in [`docs/FORMAL_TECHNOLOGY_NAMES.md`](docs/FORMAL_TECHNOLOGY_NAMES.md).
 
 ---
 
-## What is MAINTAIN AI?
+## What is YantraChikitsa?
 
-**MAINTAIN AI** is a predictive-maintenance and maintenance-management platform designed to help industrial teams monitor assets, identify developing problems, manage maintenance operations, and make better decisions from machine data.
+**YantraChikitsa** is a predictive-maintenance and maintenance-management platform designed to help industrial teams monitor assets, identify developing problems, manage maintenance operations, and make better decisions from machine data.
 
-The platform combines a traditional rule-based diagnostic engine, live telemetry anomaly detection, an optional pretrained time-series foundation model, a locally trained machine-learning baseline, and an optional AI maintenance assistant. The pretrained temporal layer currently runs TimeRadar in zero-shot anomaly-detection mode; calibrated future failure risk is kept separate until MAINTAIN AI has sufficient point-in-time telemetry and technician-confirmed outcomes. It can operate through a browser or as an installable desktop application, while optional ESP32/IoT integration provides a path from manual machine records to live sensor data.
+The platform combines a traditional rule-based diagnostic engine, live telemetry anomaly detection, an optional pretrained time-series foundation model, a locally trained machine-learning baseline, and an optional AI maintenance assistant. The pretrained temporal layer currently runs TimeRadar in zero-shot anomaly-detection mode; calibrated future failure risk is kept separate until YantraChikitsa has sufficient point-in-time telemetry and technician-confirmed outcomes. It can operate through a browser or as an installable desktop application, while optional ESP32/IoT integration provides a path from manual machine records to live sensor data.
 
 ```text
-                         MAINTAIN AI
+                         YantraChikitsa
                               │
           ┌───────────────────┼───────────────────┐
           │                   │                   │
@@ -113,7 +113,7 @@ Automatic runtime inference for specialized machines can use live telemetry sign
 
 ### 🧠 Predictive Maintenance
 
-MAINTAIN AI uses accumulated machine data to identify machines whose health is declining faster than their usage pattern would suggest.
+YantraChikitsa uses accumulated machine data to identify machines whose health is declining faster than their usage pattern would suggest.
 
 The local predictive model uses information such as:
 
@@ -168,7 +168,7 @@ Work orders can contain machine associations, descriptions, priority, assignment
 
 ### 📡 IoT, Component Telemetry & ESP32 Integration
 
-Optional device integration allows ESP32-based devices and other gateways to send readings to MAINTAIN AI through authenticated device-ingestion APIs.
+Optional device integration allows ESP32-based devices and other gateways to send readings to YantraChikitsa through authenticated device-ingestion APIs.
 
 ```text
 ESP32 / Gateway + Sensor
@@ -187,7 +187,7 @@ ESP32 / Gateway + Sensor
                  Realtime / Alerts
                        │
                        ▼
-                MAINTAIN AI UI
+                YantraChikitsa UI
 ```
 
 Component sensors have dedicated configuration and reading paths, including sensor metadata, units, configured limits, enabled state, and readings. Device-originated component telemetry supports an event identifier so retries can be handled idempotently rather than creating duplicate readings.
@@ -224,7 +224,7 @@ The platform provides maintenance and reliability analysis through dashboards an
 
 ### 🧾 Audit Trail & History
 
-MAINTAIN AI maintains an append-only activity history for important maintenance events, including machine creation, completed work orders, completed maintenance jobs, and resolved alerts.
+YantraChikitsa maintains an append-only activity history for important maintenance events, including machine creation, completed work orders, completed maintenance jobs, and resolved alerts.
 
 Historical records remain associated with machines even when a machine is archived from active lists.
 
@@ -246,10 +246,10 @@ The platform also stores user roles including:
 
 ## 🧩 Three-Layer Intelligence
 
-MAINTAIN AI combines three distinct approaches to maintenance intelligence:
+YantraChikitsa combines three distinct approaches to maintenance intelligence:
 
 ```text
-                 MAINTAIN AI INTELLIGENCE
+                 YantraChikitsa INTELLIGENCE
                            │
         ┌──────────────────┼──────────────────┐
         ▼                  ▼                  ▼
@@ -287,7 +287,7 @@ This keeps component-level sensor data aligned with the same safety and operatio
 The same application can be used as a browser-based web application or packaged as a desktop application.
 
 ```text
-                 MAINTAIN AI APPLICATION
+                 YantraChikitsa APPLICATION
                            │
                 ┌──────────┴──────────┐
                 ▼                     ▼
@@ -303,13 +303,13 @@ The same application can be used as a browser-based web application or packaged 
                   PostgreSQL / Neon
 ```
 
-The hosted MAINTAIN AI deployment uses PostgreSQL on Neon. Local desktop operation may retain a separate local database where the desktop packaging requires it; this is not the hosted production database.
+The hosted YantraChikitsa deployment uses PostgreSQL on Neon. Local desktop operation may retain a separate local database where the desktop packaging requires it; this is not the hosted production database.
 
 The desktop package combines the frontend with the backend into an installable application. Desktop build and packaging details are documented separately in [`DESKTOP.md`](DESKTOP.md).
 
 ## 🚀 Deployment Model
 
-MAINTAIN AI uses GitHub as the source repository and Vercel for the hosted web deployment.
+YantraChikitsa uses GitHub as the source repository and Vercel for the hosted web deployment.
 
 Automatic Git-triggered deployments are intentionally **disabled** so ordinary commits do not automatically consume Vercel deployment/build resources.
 
@@ -336,7 +336,7 @@ The repository-level Vercel configuration uses `git.deploymentEnabled: false` to
 
 ## 🔐 Security Verification
 
-The deployed MAINTAIN AI website at **`maintain-ai-3.vercel.app`** received an **A grade** in an ImmuniWeb Website Security Test dated **September 11, 2026**.
+The deployed YantraChikitsa website at **`maintain-ai-3.vercel.app`** received an **A grade** in an ImmuniWeb Website Security Test dated **September 11, 2026**.
 
 <p align="center">
   <a href="https://www.immuniweb.com/websec/maintain-ai-3.vercel.app/3zbllKpI/">
@@ -397,7 +397,7 @@ The original certificate identifies the tested target, test date, Grade A result
 - [`docs/MOBILE_AND_GATEWAY_CONTRACTS.md`](docs/MOBILE_AND_GATEWAY_CONTRACTS.md) — Android, Workforce and gateway implementation contracts.
 - [`docs/CROSS_CLIENT_ARCHITECTURE_AUDIT.md`](docs/CROSS_CLIENT_ARCHITECTURE_AUDIT.md) — cross-client security audit and acceptance tests.
 - [`docs/MAINTAIN_AI_SOURCE_OF_TRUTH.md`](docs/MAINTAIN_AI_SOURCE_OF_TRUTH.md) — architectural invariants and security constitution.
-- [`docs/FORMAL_TECHNOLOGY_NAMES.md`](docs/FORMAL_TECHNOLOGY_NAMES.md) — canonical formal names, abbreviations and definitions for the Maintain AI architectural constructs.
+- [`docs/FORMAL_TECHNOLOGY_NAMES.md`](docs/FORMAL_TECHNOLOGY_NAMES.md) — canonical formal names, abbreviations and definitions for the YantraChikitsa architectural constructs.
 
 ### Product/implementation documents
 
@@ -481,6 +481,6 @@ For the complete setup procedure and troubleshooting, see [`SETUP.md`](SETUP.md)
 
 <div align="center">
 
-**MAINTAIN AI** · Predictive Maintenance · Intelligent Operations
+**YantraChikitsa** · Predictive Maintenance · Intelligent Operations
 
 </div>
