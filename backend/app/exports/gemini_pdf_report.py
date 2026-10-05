@@ -36,7 +36,7 @@ def build_gemini_pdf_report(db: Session, facts: list, ai: dict | None) -> bytes:
     h2=ParagraphStyle("GH",parent=styles["Heading2"],spaceBefore=12,spaceAfter=6)
     body=ParagraphStyle("GB",parent=styles["BodyText"],fontSize=9,leading=13)
     small=ParagraphStyle("GS",parent=body,fontSize=7.5,leading=10)
-    story=[Paragraph("MAINTAIN AI",title),Paragraph("AI Maintenance Intelligence Report",styles["Heading2"]),Paragraph(f"Generated {datetime.utcnow().strftime('%d %b %Y, %H:%M UTC')}",small),Spacer(1,8)]
+    story=[Paragraph("YantraChikitsa",title),Paragraph("AI Maintenance Intelligence Report",styles["Heading2"]),Paragraph(f"Generated {datetime.utcnow().strftime('%d %b %Y, %H:%M UTC')}",small),Spacer(1,8)]
     story.append(Paragraph("AI Executive Assessment",h2))
     if ai:
         story.append(_p(ai.get("safety_notice","Safety note: follow site isolation and emergency procedures."),body))
@@ -67,5 +67,5 @@ def build_gemini_pdf_report(db: Session, facts: list, ai: dict | None) -> bytes:
             story.append(Paragraph("Recent Telemetry Evidence",h2))
             story.append(_table([["Signal","Value","Unit","Recorded"]]+[[x["type"],x["value"],x["unit"],x["recorded_at"]] for x in f["recent_readings"]], [35*mm,25*mm,25*mm,70*mm]))
     story.append(PageBreak()); story.append(Paragraph("Report Scope & Evidence",h2))
-    story.append(_p("This report combines machine records, faults, work orders, maintenance history, alerts and recent telemetry available in MAINTAIN AI at generation time. AI narrative is advisory and is constrained to the supplied evidence; it does not replace site safety procedures or technician verification.",body))
+    story.append(_p("This report combines machine records, faults, work orders, maintenance history, alerts and recent telemetry available in YantraChikitsa at generation time. AI narrative is advisory and is constrained to the supplied evidence; it does not replace site safety procedures or technician verification.",body))
     doc.build(story); buf.seek(0); return buf.getvalue()
