@@ -1,6 +1,6 @@
-# MAINTAIN AI Desktop — Installable Cloud Client
+# YantraChikitsa Desktop — Installable Cloud Client
 
-The desktop application is an Electron client for the hosted MAINTAIN AI backend. The installer contains the React/Vite frontend and Electron shell. It does **not** start or bundle a local FastAPI server.
+The desktop application is an Electron client for the hosted YantraChikitsa backend. The installer contains the React/Vite frontend and Electron shell. It does **not** start or bundle a local FastAPI server.
 
 ## Architecture
 
@@ -8,7 +8,7 @@ The desktop application is an Electron client for the hosted MAINTAIN AI backend
 Windows / macOS / Linux
           │
           ▼
-   MAINTAIN AI Desktop
+   YantraChikitsa Desktop
         Electron
           │
           │ HTTPS + WSS
@@ -145,7 +145,7 @@ The workflow supports a manual backend URL input so a future backend hostname ca
 ## Release process
 
 1. Make and validate the desired code changes.
-2. Run **Build MAINTAIN AI Desktop** manually from GitHub Actions for a test artifact.
+2. Run **Build YantraChikitsa Desktop** manually from GitHub Actions for a test artifact.
 3. Download the Windows artifact and install it on Windows.
 4. Confirm the application reports a connected backend and can sign in.
 5. Push a version tag such as `v0.3.0` when the build is ready for release.
