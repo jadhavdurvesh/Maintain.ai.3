@@ -58,7 +58,7 @@ function Sidebar() {
     window.maintainAI.getConnectionStatus().then(setDesktopStatus).catch(() => setDesktopStatus(null))
     return window.maintainAI.onConnectionStatus(setDesktopStatus)
   }, [])
-  return <div className="sidebar-glass"><div className="sidebar-inner"><div className="brand"><span className={`brand-status-dot${streamStatus === "offline" || streamStatus === "reconnecting" ? " offline" : ""}`} title={`Live telemetry: ${streamStatus}`} /><div><div className="brand-mark">MAINTAIN AI</div><div className="brand-sub">predictive maintenance</div></div></div><nav className="nav-group">{NAV.map(({ to, label, icon: Icon, end }) => <NavLink key={to} to={to} end={end} className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}><Icon size={16} strokeWidth={1.75} />{label}</NavLink>)}</nav></div></div>
+  return <div className="sidebar-glass"><div className="sidebar-inner"><div className="brand"><span className={`brand-status-dot${streamStatus === "offline" || streamStatus === "reconnecting" ? " offline" : ""}`} title={`Live telemetry: ${streamStatus}`} /><div><div className="brand-mark">YantraChikitsa</div><div className="brand-sub">intelligent maintenance</div></div></div><nav className="nav-group">{NAV.map(({ to, label, icon: Icon, end }) => <NavLink key={to} to={to} end={end} className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}><Icon size={16} strokeWidth={1.75} />{label}</NavLink>)}</nav></div></div>
 }
 
 function TelemetryFallback() {
@@ -103,7 +103,7 @@ function App() {
     <div className="app-loading" role="status" aria-live="polite">
       <div className="loading-halo" aria-hidden="true" />
       <div className="loading-orbit" aria-hidden="true"><span /><span /><span /></div>
-      <div className="loading-brand">MAINTAIN <span>AI</span></div>
+      <div className="loading-brand">YantraChikitsa</div>
       <div className="loading-caption">Restoring secure workspace</div>
       <div className="loading-track" aria-hidden="true"><span /></div>
       <div className="loading-meta"><span>AUTHENTICATION</span><span>SESSION HYDRATION</span><span>SECURE</span></div>
