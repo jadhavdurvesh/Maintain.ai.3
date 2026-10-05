@@ -87,16 +87,16 @@ export default function Login() {
         <div className="auth-background"><div className="auth-grid" /><div className="auth-glow auth-glow-one" /><div className="auth-glow auth-glow-two" /></div>
         <section className="auth-layout auth-onboarding-layout">
           <div className="auth-brand-column">
-            <div className="auth-brand"><span className="auth-brand-mark">M</span><div><div className="auth-brand-name">MAINTAIN AI</div><div className="auth-brand-caption">ENGINEERING INTELLIGENCE PLATFORM</div></div></div>
+            <div className="auth-brand"><span className="auth-brand-mark">M</span><div><div className="auth-brand-name">YantraChikitsa</div><div className="auth-brand-caption">ENGINEERING INTELLIGENCE PLATFORM</div></div></div>
             <div className="auth-copy">
               <div className="auth-eyebrow">VERIFICATION IN PROGRESS</div>
               <h1>Your workspace is waiting for you.</h1>
-              <p>We created your Maintain AI account. Confirm your email and we'll finish signing you in automatically — no need to enter your password again.</p>
+              <p>We created your YantraChikitsa account. Confirm your email and we'll finish signing you in automatically — no need to enter your password again.</p>
             </div>
             <div className="auth-points">
-              <div><span>01</span><div><strong>Check your inbox</strong><small>Look for the Maintain AI verification email.</small></div></div>
+              <div><span>01</span><div><strong>Check your inbox</strong><small>Look for the YantraChikitsa verification email.</small></div></div>
               <div><span>02</span><div><strong>Verify once</strong><small>Click the secure verification button in the email.</small></div></div>
-              <div><span>03</span><div><strong>Continue automatically</strong><small>Your verified session will take you into Maintain AI.</small></div></div>
+              <div><span>03</span><div><strong>Continue automatically</strong><small>Your verified session will take you into YantraChikitsa.</small></div></div>
             </div>
           </div>
           <div className="auth-card auth-confirmation-card">
@@ -134,7 +134,7 @@ export default function Login() {
         <section className="auth-layout auth-onboarding-layout">
           <div className="auth-brand-column">
             <div className="auth-brand"><span className="auth-brand-mark">M</span><div><div className="auth-brand-name">MAINTAIN AI</div><div className="auth-brand-caption">ENGINEERING INTELLIGENCE PLATFORM</div></div></div>
-            <div className="auth-copy"><div className="auth-eyebrow">ACCOUNT CONNECTED</div><h1>One last step before your engineering workspace is ready.</h1><p>Your {oauthProfile?.email || 'social'} account is authenticated. Tell us which company this Maintain.ai identity belongs to and the username you want to use inside the engineering platform.</p></div>
+            <div className="auth-copy"><div className="auth-eyebrow">ACCOUNT CONNECTED</div><h1>One last step before your engineering workspace is ready.</h1><p>Your {oauthProfile?.email || 'social'} account is authenticated. Tell us which company this YantraChikitsa identity belongs to and the username you want to use inside the engineering platform.</p></div>
           </div>
           <div className="auth-card">
             <div className="auth-card-kicker">ORGANIZATION SETUP</div><h2>Complete your profile</h2><p className="auth-onboarding-sub">Organization name and username are required for every new Google or Apple registration.</p>
@@ -145,7 +145,7 @@ export default function Login() {
               {error && <div className="auth-error"><span>!</span><div><strong>Setup issue</strong><p>{error}</p></div></div>}
               <button className="auth-submit" type="submit" disabled={busy}><span>{busy?'Creating workspace…':'Create Engineering Workspace'}</span><span className="auth-arrow">→</span></button>
             </form>
-            <div className="auth-security"><span>●</span><span>Your Google/Apple identity is linked to this organization through the Maintain.ai API.</span></div>
+            <div className="auth-security"><span>●</span><span>Your Google/Apple identity is linked to this organization through the YantraChikitsa API.</span></div>
           </div>
         </section>
       </main>
@@ -225,7 +225,7 @@ export default function Login() {
           </form>
 
           <div className="auth-footer"><span>{mode === 'login' ? 'New company?' : 'Already have an account?'}</span><button type="button" onClick={() => switchMode(mode === 'login' ? 'register' : 'login')}>{mode === 'login' ? 'Create an organization' : 'Sign in instead'}</button></div>
-          <div className="auth-security"><span>●</span><span>Your company data stays behind the Maintain.ai API security boundary.</span></div>
+          <div className="auth-security"><span>●</span><span>Your company data stays behind the YantraChikitsa API security boundary.</span></div>
         </div>
       </section>
     </main>
