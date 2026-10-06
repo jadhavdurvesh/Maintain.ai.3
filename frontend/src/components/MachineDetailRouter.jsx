@@ -6,7 +6,8 @@ import MachineDetail from '../pages/MachineDetail.jsx'
 import SpecializedMachineDetail from './SpecializedMachineDetail.jsx'
 
 const SPECIALIZED = new Set(['cnc','robot','3d_printer','lathe','milling_machine','drill_press','grinding_machine','hydraulic_press','injection_molding','packaging_machine','generator','transformer','boiler','furnace','hvac','fan_blower','gearbox','turbine','crane_hoist','specialized_other'])
-const isSpecialized = category => SPECIALIZED.has(String(category || '')) || String(category || '').startsWith('robot_')
+const normalizeCategory = category => String(category || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+const isSpecialized = category => { const normalized = normalizeCategory(category); return SPECIALIZED.has(normalized) || normalized.startsWith('robot_') }
 
 function SpecializedTelemetryBridge({ id }) {
   const seen = useRef(new Set())
