@@ -48,6 +48,23 @@ const SPECIALIZED_CSS = `
 .sp-note{padding:10px;border:1px solid var(--border);border-radius:8px;font-size:11px;color:var(--text-dim)}
 .sp-actions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
 .sp-muted{color:var(--text-faint);font-size:11px}
+.sp-chart{border:1px solid var(--border);border-radius:10px;padding:10px;margin-top:10px;background:var(--panel)}
+.sp-chart-head{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:var(--text-faint);margin-bottom:6px}
+.sp-chart-head strong{color:var(--text);font-size:12px}
+.sp-chart svg{display:block;width:100%;height:82px}
+.sp-chart-grid{stroke:var(--border);stroke-width:1;fill:none;opacity:.8}
+.sp-chart-line{stroke:var(--accent);stroke-width:2.2;fill:none;vector-effect:non-scaling-stroke}
+.sp-chart-foot{display:flex;justify-content:space-between;font-size:9px;color:var(--text-faint);margin-top:3px}
+.sp-chart-empty{height:92px;display:flex;align-items:center;justify-content:center;color:var(--text-faint);font-size:11px;border:1px dashed var(--border);border-radius:10px;margin-top:10px}
+.sp-xyz{border:1px solid var(--border);border-radius:10px;padding:10px;margin-top:10px;background:var(--panel)}
+.sp-xyz-body{display:grid;grid-template-columns:1fr 56px;gap:12px;align-items:center}
+.sp-xyz svg{width:100%;height:150px}
+.sp-xyz-bed{fill:rgba(100,116,139,.08);stroke:var(--border);stroke-width:1}
+.sp-xyz-dot{fill:var(--accent);stroke:var(--text);stroke-width:1.5}
+.sp-xyz-label{font-size:7px;fill:var(--text-faint)}
+.sp-z{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10px;color:var(--text-faint)}
+.sp-z-track{height:116px;width:12px;border:1px solid var(--border);border-radius:8px;overflow:hidden;display:flex;align-items:flex-end;background:rgba(100,116,139,.08)}
+.sp-z-fill{width:100%;background:var(--accent);transition:height .25s ease}
 .sp-telemetry-status{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 12px;border:1px solid var(--border);border-radius:10px;margin-bottom:10px}
 .sp-telemetry-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:7px;background:#64748b}
 .sp-telemetry-dot.on{background:#34d399;box-shadow:0 0 8px rgba(52,211,153,.7)}
@@ -58,6 +75,64 @@ const SPECIALIZED_CSS = `
 
 function Card({ label, value, sub }) {
   return <div className="sp-card"><small>{label}</small><strong>{value}</strong>{sub && <small>{sub}</small>}</div>
+}
+
+function LiveLine({ readings, readingType, unit = '' }) {
+  const points = readings
+    .filter(reading => canonicalReadingKey(reading.reading_type) === canonicalReadingKey(readingType) && Number.isFinite(Number(reading.value)))
+    .slice(0, 60)
+    .reverse()
+  if (points.length < 2) return <div className="sp-chart-empty">Waiting for live samples…</div>
+  const values = points.map(point => Number(point.value))
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const range = max - min || 1
+  const coords = values.map((value, index) => [4 + (index * 192) / Math.max(values.length - 1, 1), 6 + ((max - value) / range) * 48])
+  const path = coords.map(([x, y], index) => (index ? 'L' : 'M') + ' ' + x.toFixed(1) + ' ' + y.toFixed(1)).join(' ')
+  const latest = values[values.length - 1]
+  return <div className="sp-chart">
+    <div className="sp-chart-head"><span>Live trend</span><strong>{latest.toFixed(2)} {unit}</strong></div>
+    <svg viewBox="0 0 200 62" preserveAspectRatio="none" aria-label={readingType + ' live trend'}>
+      <path d="M4 6 H196 M4 31 H196 M4 55 H196" className="sp-chart-grid" />
+      <path d={path} className="sp-chart-line" />
+    </svg>
+    <div className="sp-chart-foot"><span>oldest</span><span>{min.toFixed(1)}–{max.toFixed(1)} {unit}</span><span>latest</span></div>
+  </div>
+}
+
+function XYZPosition({ readings }) {
+  const latest = {}
+  for (const reading of readings) {
+    const key = canonicalReadingKey(reading.reading_type)
+    if (!latest[key] && ['x_position', 'y_position', 'z_position'].includes(key)) latest[key] = Number(reading.value)
+  }
+  const x = Number.isFinite(latest.x_position) ? latest.x_position : null
+  const y = Number.isFinite(latest.y_position) ? latest.y_position : null
+  const z = Number.isFinite(latest.z_position) ? latest.z_position : null
+  if (x == null && y == null && z == null) return <div className="sp-chart-empty">Waiting for X/Y/Z position samples…</div>
+  const safeX = x ?? 0
+  const safeY = y ?? 0
+  const maxXY = Math.max(Math.abs(safeX), Math.abs(safeY), 1)
+  const clamp = value => Math.max(24, Math.min(176, value))
+  const dotX = clamp(100 + (safeX / maxXY) * 68)
+  const dotY = clamp(70 - (safeY / maxXY) * 48)
+  const zPercent = z == null ? 0 : Math.max(0, Math.min(100, Math.abs(z) / 300 * 100))
+  return <div className="sp-xyz">
+    <div className="sp-chart-head"><span>Toolhead position</span><strong>X/Y top view · Z height</strong></div>
+    <div className="sp-xyz-body">
+      <svg viewBox="0 0 200 140" aria-label="3D printer X Y toolhead position">
+        <rect x="18" y="10" width="164" height="118" rx="8" className="sp-xyz-bed" />
+        <path d="M100 10 V128 M18 70 H182" className="sp-chart-grid" />
+        <circle cx={dotX} cy={dotY} r="6" className="sp-xyz-dot" />
+        <text x="100" y="137" textAnchor="middle" className="sp-xyz-label">X {x == null ? '—' : x.toFixed(2)} mm</text>
+        <text x="5" y="72" className="sp-xyz-label">Y {y == null ? '—' : y.toFixed(2)} mm</text>
+      </svg>
+      <div className="sp-z">
+        <div className="sp-z-track"><div className="sp-z-fill" style={{height: zPercent + '%'}} /></div>
+        <strong>Z</strong><span>{z == null ? '—' : z.toFixed(2)} mm</span>
+      </div>
+    </div>
+  </div>
 }
 
 export default function SpecializedMachineDetail() {
@@ -228,7 +303,11 @@ export default function SpecializedMachineDetail() {
     <nav className="sp-tabs">{['Overview','Components','Safety','Health','Predictions','Maintenance','Telemetry'].map(item => <button key={item} className={`sp-tab ${tab === item ? 'active' : ''}`} onClick={() => setTab(item)}>{item}</button>)}</nav>
     {notice && <div className="sp-note">{notice}</div>}
 
-    {tab === 'Overview' && <div className="sp-layout"><section className="panel"><div className="panel-header"><span className="panel-title">Live engineering telemetry</span><small>Only actual stored/realtime readings appear</small></div><div className="panel-body sp-grid">{telemetry.map(([key,label,unit]) => <div className="sp-reading" key={key}><small>{label}</small><strong>{fmt(live[canonicalReadingKey(key)]?.value, live[canonicalReadingKey(key)]?.unit || unit)}</strong><small>{live[canonicalReadingKey(key)]?.recorded_at || 'No sample yet'}</small></div>)}</div></section><section className="panel"><div className="panel-header"><span className="panel-title">Engineering hazards</span></div><div className="panel-body sp-list">{hazards.map(hazard => <div className="sp-row" key={hazard}><span>{hazard.replaceAll('_',' ')}</span><strong>Monitor / configure</strong></div>)}</div></section></div>}
+    {tab === 'Overview' && <div className="sp-layout"><section className="panel"><div className="panel-header"><span className="panel-title">Live engineering telemetry</span><small>Only actual stored/realtime readings appear</small></div><div className="panel-body sp-grid">{telemetry.map(([key,label,unit]) => <div className="sp-reading" key={key}><small>{label}</small><strong>{fmt(live[canonicalReadingKey(key)]?.value, live[canonicalReadingKey(key)]?.unit || unit)}</strong><small>{live[canonicalReadingKey(key)]?.recorded_at || 'No sample yet'}</small></div>)}</div></section><section className="panel"><div className="panel-header"><span className="panel-title">Live motion & thermal trends</span><small>Latest 60 stored/live samples</small></div><div className="panel-body">
+<LiveLine readings={readings} readingType="nozzle_temperature" unit="°C" />
+<LiveLine readings={readings} readingType="bed_temperature" unit="°C" />
+<XYZPosition readings={readings} />
+</div></section><section className="panel"><div className="panel-header"><span className="panel-title">Engineering hazards</span></div><div className="panel-body sp-list">{hazards.map(hazard => <div className="sp-row" key={hazard}><span>{hazard.replaceAll('_',' ')}</span><strong>Monitor / configure</strong></div>)}</div></section></div>}
 
     {tab === 'Components' && <section className="panel"><div className="panel-header"><span className="panel-title">{profile.name} component tree</span><small>Each part can own independent sensors and readings</small></div><div className="panel-body">{!components.length && <div className="sp-note">No components exist yet. Initialize the category model to create the engineering structure.</div>}<div className="sp-actions"><button className="btn" disabled={busy} onClick={initialize}>Initialize / reconcile engineering model</button><form className="sp-form" onSubmit={addComponent}><label>Custom component<input value={newComponent} onChange={event => setNewComponent(event.target.value)} placeholder="e.g. Gripper" /></label><button className="btn secondary" type="submit" disabled={busy}>Add</button></form></div><div className="sp-components">{components.map(component => <button key={component.id} className={`sp-component ${selectedComponent?.id === component.id ? 'active' : ''}`} onClick={() => selectComponent(component)}><strong>{component.name}</strong><small style={{display:'block',color:'var(--text-faint)',marginTop:4}}>Component #{component.id}</small></button>)}</div>{selectedComponent && <div style={{marginTop:14}}><div className="panel-header"><span className="panel-title">{selectedComponent.name} sensors</span></div><div className="sp-list">{sensors.map(sensor => <div className="sp-row" key={sensor.id}><span>{sensor.name}<small style={{display:'block',color:'var(--text-faint)'}}>{sensor.reading_type} · {sensor.unit || 'unitless'}</small></span><strong>{sensor.enabled ? 'Enabled' : 'Disabled'}</strong></div>)}</div><form className="sp-form" onSubmit={addSensor} style={{marginTop:10}}><label>Sensor name<input required value={sensorForm.name} onChange={event => setSensorForm({...sensorForm,name:event.target.value})}/></label><label>Reading type<input required value={sensorForm.reading_type} onChange={event => setSensorForm({...sensorForm,reading_type:event.target.value})}/></label><label>Unit<input value={sensorForm.unit} onChange={event => setSensorForm({...sensorForm,unit:event.target.value})}/></label><label>Min<input type="number" value={sensorForm.min_value} onChange={event => setSensorForm({...sensorForm,min_value:event.target.value})}/></label><label>Max<input type="number" value={sensorForm.max_value} onChange={event => setSensorForm({...sensorForm,max_value:event.target.value})}/></label><button className="btn" type="submit" disabled={busy}>Register sensor</button></form>{sensors.length > 0 && <form className="sp-form" onSubmit={addComponentReading} style={{marginTop:10}}><label>Sensor<select required value={componentReading.sensor_id} onChange={event => setComponentReading({...componentReading,sensor_id:event.target.value})}><option value="">Select sensor</option>{sensors.map(sensor => <option key={sensor.id} value={sensor.id}>{sensor.name} · {sensor.reading_type}</option>)}</select></label><label>Value<input required type="number" step="any" value={componentReading.value} onChange={event => setComponentReading({...componentReading,value:event.target.value})}/></label><label>Unit<input value={componentReading.unit} onChange={event => setComponentReading({...componentReading,unit:event.target.value})}/></label><button className="btn secondary" type="submit" disabled={busy}>Record reading</button></form>}<div className="sp-list" style={{marginTop:10}}>{componentReadings.map(reading => <div className="sp-row" key={reading.id}><span>{reading.reading_type}</span><strong>{fmt(reading.value,reading.unit)} · {reading.source}</strong></div>)}</div></div>}</div></section>}
 
