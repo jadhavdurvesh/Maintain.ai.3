@@ -24,4 +24,18 @@ export const SPECIALIZED_MACHINE_PROFILES = {
   other: p('other','Other Specialized Machine','Operator-defined engineering model',[],[],[],[],[]),
 }
 export const ROBOT_TYPES = Object.entries({articulated:'Articulated',scara:'SCARA',cartesian:'Cartesian / Gantry',delta:'Delta / Parallel',cylindrical:'Cylindrical',spherical:'Spherical / Polar',cobot:'Collaborative Robot',humanoid:'Humanoid'}).map(([value,label])=>({value,label}))
-export function getSpecializedMachineProfile(category) { const raw=String(category||''); if(raw.startsWith('robot_')) { const rp=getRobotProfile(raw.slice(6)); return {id:raw,name:rp.name,subtitle:rp.architecture,components:rp.components,telemetry:rp.telemetry,safety:rp.safety,predictions:rp.predictions,hazards:rp.hazards} } return SPECIALIZED_MACHINE_PROFILES[raw] || SPECIALIZED_MACHINE_PROFILES.other }
+export function normalizeSpecializedCategory(category) {
+  const raw = String(category || '').trim().toLowerCase()
+  const normalized = raw.replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+  if (normalized === '3dprinter' || normalized === '3d_printer_machine') return '3d_printer'
+  return normalized
+}
+
+export function getSpecializedMachineProfile(category) {
+  const raw = normalizeSpecializedCategory(category)
+  if (raw.startsWith('robot_')) {
+    const rp = getRobotProfile(raw.slice(6))
+    return { id: raw, name: rp.name, subtitle: rp.architecture, components: rp.components, telemetry: rp.telemetry, safety: rp.safety, predictions: rp.predictions, hazards: rp.hazards }
+  }
+  return SPECIALIZED_MACHINE_PROFILES[raw] || SPECIALIZED_MACHINE_PROFILES.other
+}
